@@ -122,6 +122,6 @@ public class JobImportExportSidebarLink implements RootAction {
         }
         
         jenkins.reload();
-        rsp.sendRedirect(".");
+        rsp.sendRedirect("/job/" + jobName.replace("/", "/job/"));
     }
 }

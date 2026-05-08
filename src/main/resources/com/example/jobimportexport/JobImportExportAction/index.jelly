@@ -55,7 +55,7 @@
                     </div>
                 </j:when>
                 <j:otherwise>
-                    <h1>更新任务: ${instance.item.fullName}</h1>
+                    <h1>任务配置管理: ${instance.item.fullName}</h1>
                     
                     <div style="margin-bottom: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
                         <h2 style="margin-top: 0;">导出当前任务配置</h2>
@@ -67,7 +67,7 @@
                         </form>
                     </div>
                     
-                    <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                    <div style="margin-bottom: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
                         <h2>更新任务配置</h2>
                         <p>上传新的 XML 配置文件来更新当前任务配置。</p>
                         <form method="post" action="import" enctype="multipart/form-data">
@@ -79,16 +79,55 @@
                                     <td>
                                         <input type="file" name="xmlFile" id="xmlFile" 
                                                accept=".xml" required="true" 
-                                               onchange="document.getElementById('fileName').textContent = this.files[0]?.name || '';" />
+                                               onchange="document.getElementById('fileName1').textContent = this.files[0]?.name || '';" />
                                         <span class="description">Jenkins 任务配置的 XML 文件</span>
-                                        <span id="fileName" style="margin-left: 10px; color: #337ab7;"></span>
+                                        <span id="fileName1" style="margin-left: 10px; color: #337ab7;"></span>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td></td>
                                     <td>
                                         <button type="submit" class="jenkins-button jenkins-button--primary">
-                                            导入配置
+                                            更新配置
+                                        </button>
+                                    </td>
+                                </tr>
+                            </table>
+                        </form>
+                    </div>
+                    
+                    <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                        <h2>创建新任务</h2>
+                        <p>在当前目录下创建一个新任务。</p>
+                        <form method="post" action="create" enctype="multipart/form-data">
+                            <table class="form">
+                                <tr>
+                                    <td class="label">
+                                        <label for="newJobName">新任务名称</label>
+                                    </td>
+                                    <td>
+                                        <input type="text" name="jobName" id="newJobName" 
+                                               class="setting-input" size="50" required="true" />
+                                        <span class="description">新任务的名称</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="label">
+                                        <label for="newXmlFile">配置文件 (XML)</label>
+                                    </td>
+                                    <td>
+                                        <input type="file" name="xmlFile" id="newXmlFile" 
+                                               accept=".xml" required="true" 
+                                               onchange="document.getElementById('fileName2').textContent = this.files[0]?.name || '';" />
+                                        <span class="description">Jenkins 任务配置的 XML 文件</span>
+                                        <span id="fileName2" style="margin-left: 10px; color: #337ab7;"></span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td></td>
+                                    <td>
+                                        <button type="submit" class="jenkins-button jenkins-button--primary">
+                                            创建任务
                                         </button>
                                     </td>
                                 </tr>

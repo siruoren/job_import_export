@@ -97,7 +97,7 @@ public class JobImportExportAction implements Action {
 
         Jenkins jenkins = Jenkins.get();
 
-        if (isJob()) {
+        if (isJob() && !isFolder()) {
             Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
             try (InputStream is = fileItem.getInputStream()) {
                 Files.copy(is, configFile, StandardCopyOption.REPLACE_EXISTING);
@@ -117,7 +117,7 @@ public class JobImportExportAction implements Action {
                 return;
             }
 
-            Path jobDir = Paths.get(item.getRootDir().getAbsolutePath(), jobName);
+            Path jobDir = Paths.get(item.getRootDir().getAbsolutePath(), "jobs", jobName);
             Files.createDirectories(jobDir);
             
             Path configFile = jobDir.resolve("config.xml");
@@ -126,10 +126,60 @@ public class JobImportExportAction implements Action {
             }
             
             jenkins.reload();
-            rsp.sendRedirect(".");
+            rsp.sendRedirect("/job/" + fullJobName.replace("/", "/job/"));
         } else {
             rsp.sendError(400, "不支持的任务类型");
         }
+    }
+
+    @RequirePOST
+    public void doCreate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+        FileItem fileItem = req.getFileItem("xmlFile");
+        if (fileItem == null || fileItem.getSize() == 0) {
+            rsp.sendError(400, "请选择要上传的XML文件");
+            return;
+        }
+
+        String jobName = req.getParameter("jobName");
+        if (jobName == null || jobName.isEmpty()) {
+            rsp.sendError(400, "任务名称不能为空");
+            return;
+        }
+
+        Jenkins jenkins = Jenkins.get();
+        
+        ItemGroup<?> parent = item.getParent();
+        String parentPath = "";
+        if (parent != null && parent instanceof AbstractItem) {
+            parentPath = ((AbstractItem) parent).getFullName();
+        }
+        
+        String fullJobName = parentPath.isEmpty() ? jobName : parentPath + "/" + jobName;
+        if (jenkins.getItemByFullName(fullJobName) != null) {
+            rsp.sendError(400, "已存在同名任务: " + fullJobName);
+            return;
+        }
+
+        Path jobDir;
+        if (parent != null) {
+            if (parent instanceof AbstractItem) {
+                jobDir = Paths.get(((AbstractItem) parent).getRootDir().getAbsolutePath(), "jobs", jobName);
+            } else {
+                jobDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs", jobName);
+            }
+        } else {
+            jobDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs", jobName);
+        }
+        
+        Files.createDirectories(jobDir);
+        
+        Path configFile = jobDir.resolve("config.xml");
+        try (InputStream is = fileItem.getInputStream()) {
+            Files.copy(is, configFile);
+        }
+        
+        jenkins.reload();
+        rsp.sendRedirect("..");
     }
 
     @Extension
