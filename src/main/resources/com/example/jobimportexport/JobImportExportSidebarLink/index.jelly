@@ -1,0 +1,73 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <l:layout title="任务导入/导出">
+        <l:main-panel>
+            <h1>Jenkins 任务配置导入/导出</h1>
+            
+            <div style="margin-bottom: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                <h2 style="margin-top: 0;">导出任务配置</h2>
+                <p>将指定任务的配置导出为 XML 文件。</p>
+                <form method="get" action="export">
+                    <table class="form">
+                        <tr>
+                            <td class="label">
+                                <label for="job">任务名称</label>
+                            </td>
+                            <td>
+                                <input type="text" name="job" id="job" 
+                                       class="setting-input" size="50" required="true" />
+                                <span class="description">任务的完整名称，包含文件夹路径（如 folder/jobname）</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td>
+                                <button type="submit" class="jenkins-button jenkins-button--primary">
+                                    导出任务配置
+                                </button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+            
+            <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                <h2>导入任务配置</h2>
+                <p>上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
+                <form method="post" action="import" enctype="multipart/form-data">
+                    <table class="form">
+                        <tr>
+                            <td class="label">
+                                <label for="jobName">任务/文件夹名称</label>
+                            </td>
+                            <td>
+                                <input type="text" name="jobName" id="jobName" 
+                                       class="setting-input" size="50" required="true" />
+                                <span class="description">新任务的名称，如果要放在文件夹下，请使用 "文件夹/任务名" 格式</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label">
+                                <label for="xmlFile">XML配置文件</label>
+                            </td>
+                            <td>
+                                <input type="file" name="xmlFile" id="xmlFile" 
+                                       accept=".xml" required="true" 
+                                       onchange="document.getElementById('fileName').textContent = this.files[0]?.name || '';" />
+                                <span class="description">Jenkins 任务配置的 XML 文件</span>
+                                <span id="fileName" style="margin-left: 10px; color: #337ab7;"></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td>
+                                <button type="submit" class="jenkins-button jenkins-button--primary">
+                                    导入任务配置
+                                </button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+        </l:main-panel>
+    </l:layout>
+</j:jelly>

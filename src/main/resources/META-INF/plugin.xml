@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin>
+    <extension name="Job Import/Export Sidebar Link" 
+               point="hudson.model.RootAction">
+        <instance class="com.example.jobimportexport.JobImportExportSidebarLink"/>
+    </extension>
+    <extension name="Job Import/Export Action Factory" 
+               point="jenkins.model.TransientActionFactory">
+        <instance class="com.example.jobimportexport.JobImportExportAction$Factory"/>
+    </extension>
+</plugin>
