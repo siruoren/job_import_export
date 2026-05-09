@@ -1,6 +1,7 @@
 package com.example.jobimportexport;
 
 import hudson.Extension;
+import hudson.Util;
 import hudson.model.AbstractItem;
 import hudson.model.Action;
 import hudson.model.Job;
@@ -142,10 +143,22 @@ public class JobImportExportAction implements Action {
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         item.checkPermission(Item.READ);
 
-        String fileName = item.getFullName().replace("/", "_") + ".xml";
+        String fileName = item.getFullName()
+                .replaceAll("[\\\\/:*?\"<>|]", "_")
+                + ".xml";
 
-        rsp.setContentType("application/xml");
-        rsp.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+        String encodedFileName = java.net.URLEncoder.encode(
+                fileName,
+                "UTF-8")
+                .replace("+", "%20");
+
+        rsp.setContentType("application/xml;charset=UTF-8");
+        rsp.setHeader("Content-Disposition", "attachment; "
+                + "filename=\""
+                + encodedFileName
+                + "\"; "
+                + "filename*=UTF-8''"
+                + encodedFileName);
 
         Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
         if (!Files.exists(configFile)) {
@@ -247,9 +260,21 @@ public class JobImportExportAction implements Action {
 
     @RequirePOST
     public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        String jobName = req.getParameter("jobName");
+        rsp.setCharacterEncoding("UTF-8");
 
-        if (jobName == null || jobName.trim().isEmpty()) {
+        String rawName = req.getParameter("jobName");
+
+        String jobName = null;
+
+        if (rawName != null) {
+            jobName = new String(
+                    rawName.getBytes("ISO-8859-1"),
+                    "UTF-8");
+
+            jobName = Util.fixEmptyAndTrim(jobName);
+        }
+
+        if (jobName == null) {
             rsp.sendError(400, "任务名称不能为空");
             return;
         }
@@ -328,7 +353,13 @@ public class JobImportExportAction implements Action {
 
         try (InputStream is = fileItem.getInputStream()) {
             TopLevelItem newItem = itemGroup.createProjectFromXML(jobName, is);
-            rsp.sendRedirect2(req.getContextPath() + "/" + newItem.getUrl());
+
+            String redirectUrl = req.getContextPath()
+                    + "/job/"
+                    + Util.rawEncode(newItem.getFullName())
+                    .replace("%2F", "/job/");
+
+            rsp.sendRedirect2(redirectUrl);
         } catch (IllegalArgumentException e) {
             rsp.sendError(400, "XML 配置非法: " + e.getMessage());
         }

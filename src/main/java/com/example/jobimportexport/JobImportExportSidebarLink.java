@@ -1,6 +1,7 @@
 package com.example.jobimportexport;
 
 import hudson.Extension;
+import hudson.Util;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
@@ -89,11 +90,23 @@ public class JobImportExportSidebarLink implements RootAction {
             return;
         }
 
-        String fileName = jobName.replace("/", "_") + ".xml";
-        
-        rsp.setContentType("application/xml");
-        rsp.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
-        
+        String fileName = item.getFullName()
+                .replaceAll("[\\\\/:*?\"<>|]", "_")
+                + ".xml";
+
+        String encodedFileName = java.net.URLEncoder.encode(
+                fileName,
+                "UTF-8")
+                .replace("+", "%20");
+
+        rsp.setContentType("application/xml;charset=UTF-8");
+        rsp.setHeader("Content-Disposition", "attachment; "
+                + "filename=\""
+                + encodedFileName
+                + "\"; "
+                + "filename*=UTF-8''"
+                + encodedFileName);
+
         try (OutputStream out = rsp.getOutputStream()) {
             Files.copy(configFile, out);
         }
@@ -101,14 +114,27 @@ public class JobImportExportSidebarLink implements RootAction {
 
     @RequirePOST
     public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+        rsp.setCharacterEncoding("UTF-8");
+
         FileItem fileItem = req.getFileItem("xmlFile");
         if (fileItem == null || fileItem.getSize() == 0) {
             rsp.sendError(400, "请选择要上传的XML文件");
             return;
         }
 
-        String jobName = req.getParameter("jobName");
-        if (jobName == null || jobName.isEmpty()) {
+        String rawName = req.getParameter("jobName");
+
+        String jobName = null;
+
+        if (rawName != null) {
+            jobName = new String(
+                    rawName.getBytes("ISO-8859-1"),
+                    "UTF-8");
+
+            jobName = Util.fixEmptyAndTrim(jobName);
+        }
+
+        if (jobName == null) {
             rsp.sendError(400, "任务名称不能为空");
             return;
         }
@@ -205,6 +231,12 @@ public class JobImportExportSidebarLink implements RootAction {
         }
         
         jenkins.reload();
-        rsp.sendRedirect("/job/" + jobName.replace("/", "/job/"));
+
+        String redirectUrl = req.getContextPath()
+                + "/job/"
+                + Util.rawEncode(jobName)
+                .replace("%2F", "/job/");
+
+        rsp.sendRedirect2(redirectUrl);
     }
 }
