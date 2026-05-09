@@ -5,8 +5,12 @@ import hudson.model.AbstractItem;
 import hudson.model.Action;
 import hudson.model.Job;
 import hudson.model.TopLevelItem;
+import hudson.model.TopLevelItemDescriptor;
 import hudson.model.ItemGroup;
 import hudson.model.Item;
+import hudson.model.Items;
+import hudson.security.AccessControlled;
+import jenkins.model.ModifiableTopLevelItemGroup;
 import jenkins.model.TransientActionFactory;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.StaplerRequest;
@@ -15,17 +19,17 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
 import org.apache.commons.fileupload.FileItem;
 
 import javax.servlet.ServletException;
+import javax.xml.transform.stream.StreamSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import org.jvnet.hudson.reactor.ReactorException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Collection;
 import java.util.Collections;
-import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 public class JobImportExportAction implements Action {
 
@@ -55,87 +59,92 @@ public class JobImportExportAction implements Action {
     }
 
     public boolean isJob() {
-        // 所有类型都可以更新配置
         return item != null;
     }
 
     public boolean isJobType() {
-        // 判断当前任务是否是 Job 类型（非文件夹类型）
         return item instanceof Job;
     }
 
     public boolean isRootLevel() {
-        // 判断当前任务是否在 Jenkins 根目录
         ItemGroup<?> parent = item.getParent();
         return parent instanceof Jenkins;
     }
 
-    private boolean isSpecialFolder(ItemGroup<?> folder) {
-        // 检查文件夹是否是特殊类型（如 OrganizationFolder、MultiBranchProject）
-        // 这些特殊文件夹的子任务不是通过文件系统目录管理的
-        if (folder == null) {
-            return false;
-        }
-        
-        Class<?> folderClass = folder.getClass();
-        String className = folderClass.getName();
-        
-        // 检查是否是特殊类型的文件夹
-        // OrganizationFolder 和 MultiBranchProject 是常见的自动管理子任务的文件夹类型
-        return className.startsWith("jenkins.branch.") ||
-               className.contains("MultiBranch") ||
-               className.contains("Organization");
-    }
-
     public boolean canImportJobs() {
-        // 判断是否可以在当前位置导入任务
-        // 只有普通文件夹类型才能导入任务
-        // Job 类型任务、特殊类型文件夹（如 OrganizationFolder、MultiBranchProject）都不能导入任务
-        
-        if (item instanceof Job) {
-            // Job 类型任务，不能导入任务
-            return false;
-        } else if (item instanceof ItemGroup) {
-            // 文件夹类型，检查是否是特殊类型
-            return !isSpecialFolder((ItemGroup<?>) item);
-        } else {
-            // 其他非文件夹类型，不能导入任务
-            return false;
-        }
+        return canCreateJob();
     }
 
     public boolean hasPermission() {
         return item != null && item.hasPermission(Item.CONFIGURE);
     }
-    
+
     public boolean canCreateJob() {
         if (item == null) {
             return false;
         }
-        
-        // 获取当前任务的父目录（创建新任务的位置）
-        ItemGroup<?> parent = item.getParent();
+
+        ItemGroup<?> parent = getCreateTarget();
+
         if (parent == null) {
             return false;
         }
-        
-        // 检查父目录的创建权限
-        // 对于文件夹，检查文件夹是否有创建子任务的权限
-        // 对于根目录，检查 Jenkins 是否有创建任务的权限
-        try {
-            // 使用 ACL 系统检查权限
-            if (parent instanceof AbstractItem) {
-                return ((AbstractItem) parent).hasPermission(Item.CREATE);
-            }
-            if (parent instanceof Jenkins) {
-                return ((Jenkins) parent).hasPermission(Item.CREATE);
-            }
-        } catch (Exception e) {
-            // 权限检查失败，返回 false
+
+        if (!(parent instanceof ModifiableTopLevelItemGroup)) {
             return false;
         }
-        
+
+        if (parent instanceof AccessControlled) {
+            if (!((AccessControlled) parent).hasPermission(Item.CREATE)) {
+                return false;
+            }
+        }
+
+        for (TopLevelItemDescriptor d : Items.all()) {
+            if (d.isApplicableIn(parent)) {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    private ItemGroup<?> getCreateTarget() {
+        if (item == null) {
+            return null;
+        }
+
+        if (item instanceof Job) {
+            return item.getParent();
+        }
+
+        if (item instanceof ItemGroup) {
+            return (ItemGroup<?>) item;
+        }
+
+        return null;
+    }
+
+    public List<TopLevelItemDescriptor> getSupportedJobTypes() {
+        List<TopLevelItemDescriptor> result = new ArrayList<>();
+
+        ItemGroup<?> parent = getCreateTarget();
+
+        if (parent == null) {
+            return result;
+        }
+
+        if (!(parent instanceof ModifiableTopLevelItemGroup)) {
+            return result;
+        }
+
+        for (TopLevelItemDescriptor d : Items.all()) {
+            if (d.isApplicableIn(parent)) {
+                result.add(d);
+            }
+        }
+
+        return result;
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
@@ -144,398 +153,125 @@ public class JobImportExportAction implements Action {
             return;
         }
 
+        item.checkPermission(Item.READ);
+
+        String fileName = item.getFullName().replace("/", "_") + ".xml";
+
+        rsp.setContentType("application/xml");
+        rsp.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+
         Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
         if (!Files.exists(configFile)) {
             rsp.sendError(404, "配置文件不存在");
             return;
         }
 
-        String fileName = item.getFullName().replace("/", "_") + ".xml";
-        
-        rsp.setContentType("application/xml");
-        rsp.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
-        
         try (OutputStream out = rsp.getOutputStream()) {
             Files.copy(configFile, out);
         }
     }
 
     @RequirePOST
-    public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
-        Jenkins jenkins = Jenkins.get();
-        
-        // 检查任务是否存在
+    public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         if (item == null) {
             rsp.sendError(404, "任务不存在");
             return;
         }
-        
-        // 检查是否有权限更新配置
-        if (!item.hasPermission(Item.CONFIGURE)) {
-            rsp.sendError(403, "没有权限更新此任务的配置");
-            return;
-        }
-        
-        // 检查文件是否上传
+
+        item.checkPermission(Item.CONFIGURE);
+
         FileItem fileItem = req.getFileItem("xmlFile");
+
         if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "请选择要上传的 XML 文件");
+            rsp.sendError(400, "请选择 XML 文件");
             return;
         }
+
+        // 获取强制替换参数
+        String forceReplace = req.getParameter("forceReplace");
         
-        // 检查根目录是否存在
-        if (item.getRootDir() == null) {
-            rsp.sendError(400, "当前任务没有配置目录");
-            return;
-        }
-        
-        // 更新配置文件
-        // 确保路径正确，支持嵌套子任务
-        // Jenkins 中嵌套子任务的路径格式: jobs/父任务名/jobs/子任务名/jobs/孙子任务名/config.xml
-        String fullName = item.getFullName();
-        String[] pathParts = fullName.split("/");
-        
-        // 构建配置文件路径
-        Path jobsDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs");
-        Path jobDir = jobsDir;
-        
-        for (String part : pathParts) {
-            if (!part.isEmpty()) {
-                jobDir = jobDir.resolve(part);
-                jobDir = jobDir.resolve("jobs");
-            }
-        }
-        
-        // 移除末尾多余的 "/jobs"，然后添加 config.xml
-        Path configFile = jobDir.getParent().resolve("config.xml");
-        
-        // 确保目录存在
-        Files.createDirectories(configFile.getParent());
-        
-        // 写入配置文件
+        // 先将文件内容读取到内存中
+        byte[] fileContent = new byte[(int) fileItem.getSize()];
         try (InputStream is = fileItem.getInputStream()) {
-            Files.copy(is, configFile, StandardCopyOption.REPLACE_EXISTING);
+            is.read(fileContent);
         }
         
-        // 尝试重新加载当前任务及其父文件夹
-        reloadItemAndParents(item);
-        
-        // 等待重新加载完成
-        Thread.sleep(2000);
-        
-        // 重定向回当前任务页面
-        rsp.sendRedirect("..");
-    }
-
-    private void reloadItemAndParents(AbstractItem item) {
-        // 尝试使用反射重新加载当前任务及其所有父文件夹
-        try {
-            // 首先尝试重新加载当前任务
-            reloadItem(item);
-            
-            // 然后递归重新加载父文件夹
-            ItemGroup<?> parent = item.getParent();
-            while (parent != null && parent instanceof AbstractItem && !(parent instanceof Jenkins)) {
-                AbstractItem parentItem = (AbstractItem) parent;
-                reloadItem(parentItem);
-                parent = parentItem.getParent();
-            }
-        } catch (Exception e) {
-            // 忽略异常
-        }
-    }
-    
-    private void reloadItem(AbstractItem item) {
-        try {
-            // 检查是否是 OrganizationFolder 类型
-            if (isOrganizationFolder(item)) {
-                // 对于 OrganizationFolder，需要特殊处理
-                reloadOrganizationFolder(item);
-                return;
-            }
-            
-            // 普通任务类型的重新加载
+        // 使用内存中的内容进行更新
+        try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(fileContent)) {
             try {
-                Method reloadMethod = item.getClass().getMethod("reload");
-                reloadMethod.invoke(item);
-            } catch (NoSuchMethodException e) {
-                try {
-                    Method doReloadMethod = item.getClass().getMethod("doReload");
-                    doReloadMethod.invoke(item);
-                } catch (NoSuchMethodException e2) {
-                    // 尝试其他可能的方法
-                    try {
-                        Method onLoadMethod = item.getClass().getMethod("onLoad", ItemGroup.class, String.class);
-                        onLoadMethod.invoke(item, item.getParent(), item.getName());
-                    } catch (NoSuchMethodException e3) {
-                        // 忽略
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // 忽略异常
-        }
-    }
-    
-    private boolean isOrganizationFolder(AbstractItem item) {
-        // 检查是否是 OrganizationFolder 类型
-        try {
-            Class<?> orgFolderClass = Class.forName("jenkins.branch.OrganizationFolder");
-            return orgFolderClass.isInstance(item);
-        } catch (ClassNotFoundException e) {
-            // OrganizationFolder 类不存在，说明没有安装相关插件
-            return false;
-        }
-    }
-    
-    private void reloadOrganizationFolder(AbstractItem item) {
-        // 对于 OrganizationFolder 的特殊重新加载逻辑
-        try {
-            // 尝试调用 OrganizationFolder 的 reload 方法
-            try {
-                Method reloadMethod = item.getClass().getMethod("reload");
-                reloadMethod.invoke(item);
-            } catch (NoSuchMethodException e) {
-                // 尝试调用 onLoad 方法
-                try {
-                    Method onLoadMethod = item.getClass().getMethod("onLoad", ItemGroup.class, String.class);
-                    onLoadMethod.invoke(item, item.getParent(), item.getName());
-                } catch (NoSuchMethodException e2) {
-                    // 尝试调用 initialize 方法
-                    try {
-                        Method initializeMethod = item.getClass().getMethod("initialize");
-                        initializeMethod.invoke(item);
-                    } catch (NoSuchMethodException e3) {
-                        // 尝试调用 loadChildren 方法
-                        try {
-                            Method loadChildrenMethod = item.getClass().getMethod("loadChildren");
-                            loadChildrenMethod.invoke(item);
-                        } catch (NoSuchMethodException e4) {
-                            // 忽略
-                        }
-                    }
-                }
-            }
-            
-            // 尝试清除缓存
-            try {
-                Method clearCacheMethod = item.getClass().getMethod("clearCache");
-                clearCacheMethod.invoke(item);
-            } catch (NoSuchMethodException e) {
-                // 忽略
-            }
-            
-        } catch (Exception e) {
-            // 忽略异常
-        }
-    }
-
-    private void reloadParentFolder() {
-        // 尝试使用反射重新加载父文件夹，确保子任务配置正确更新
-        try {
-            ItemGroup<?> parent = item.getParent();
-            if (parent != null && parent instanceof AbstractItem) {
-                AbstractItem parentItem = (AbstractItem) parent;
-                // 尝试调用父文件夹的 reload 方法
-                try {
-                    Method reloadMethod = parentItem.getClass().getMethod("reload");
-                    reloadMethod.invoke(parentItem);
-                } catch (NoSuchMethodException e) {
-                    // 如果没有 reload 方法，尝试调用其他可能的方法
-                    try {
-                        Method doReloadMethod = parentItem.getClass().getMethod("doReload");
-                        doReloadMethod.invoke(parentItem);
-                    } catch (NoSuchMethodException e2) {
-                        // 忽略，继续执行全局 reload
-                    }
-                }
-                // 递归重新加载更高层的父文件夹
-                reloadParentFolderRecursively(parent);
-            }
-        } catch (Exception e) {
-            // 忽略异常，继续执行全局 reload
-        }
-    }
-
-    private void reloadParentFolderRecursively(ItemGroup<?> folder) {
-        // 递归重新加载父文件夹
-        try {
-            if (folder != null && folder instanceof AbstractItem) {
-                AbstractItem parentItem = (AbstractItem) folder;
-                ItemGroup<?> grandParent = parentItem.getParent();
-                if (grandParent != null && grandParent instanceof AbstractItem && !(grandParent instanceof Jenkins)) {
-                    // 尝试调用父文件夹的 reload 方法
-                    try {
-                        Method reloadMethod = grandParent.getClass().getMethod("reload");
-                        reloadMethod.invoke(grandParent);
-                    } catch (NoSuchMethodException e) {
-                        // 如果没有 reload 方法，尝试调用其他可能的方法
-                        try {
-                            Method doReloadMethod = grandParent.getClass().getMethod("doReload");
-                            doReloadMethod.invoke(grandParent);
-                        } catch (NoSuchMethodException e2) {
-                            // 忽略
-                        }
-                    }
-                    // 继续递归
-                    reloadParentFolderRecursively(grandParent);
-                }
-            }
-        } catch (Exception e) {
-            // 忽略异常
-        }
-    }
-
-    @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
-        Jenkins jenkins = Jenkins.get();
-        
-        // 导入创建新任务
-        String jobName = null;
-        
-        if (req.getParameter("jobName") != null && !req.getParameter("jobName").trim().isEmpty()) {
-            jobName = req.getParameter("jobName").trim();
-        } else if (req.getParameterValues("jobName") != null && req.getParameterValues("jobName").length > 0) {
-            jobName = req.getParameterValues("jobName")[0].trim();
-        }
-        
-        if (jobName == null || jobName.isEmpty()) {
-            rsp.sendError(400, "Job name cannot be empty");
-            return;
-        }
-        
-        FileItem fileItem = req.getFileItem("xmlFile");
-        if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "Please select an XML file to upload");
-            return;
-        }
-
-        // 获取正确的父目录和完整任务名
-        ItemGroup<?> parent = item.getParent();
-        String parentFullName = "";
-        Path jobDir;
-        
-        // 确定实际的父容器（用于创建任务的容器）
-        ItemGroup<?> actualParent;
-        if (item instanceof Job) {
-            // 普通任务类型，在其父目录下创建新任务
-            actualParent = parent;
-        } else {
-            // 文件夹类型，在当前目录下创建新任务
-            if (item instanceof ItemGroup) {
-                actualParent = (ItemGroup<?>) item;
-            } else {
-                rsp.sendError(400, "Current item is not a valid container");
-                return;
-            }
-        }
-        
-        // 检查父容器是否是特殊类型的文件夹（如 OrganizationFolder、MultiBranchProject）
-        // 这些特殊文件夹的子任务不是通过文件系统目录管理的
-        if (actualParent != null && isSpecialFolder(actualParent)) {
-            rsp.sendError(400, "Cannot import jobs into this type of folder. This folder manages its children automatically.");
-            return;
-        }
-        
-        if (item instanceof Job) {
-            // 普通任务类型，在其父目录下创建新任务
-            if (parent != null) {
-                if (parent instanceof AbstractItem) {
-                    parentFullName = ((AbstractItem) parent).getFullName();
-                    jobDir = Paths.get(((AbstractItem) parent).getRootDir().getAbsolutePath(), "jobs", jobName);
-                } else if (parent instanceof Jenkins) {
-                    parentFullName = "";
-                    jobDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs", jobName);
-                } else {
-                    rsp.sendError(400, "Invalid parent type");
+                item.updateByXml(new StreamSource(bais));
+            } catch (IOException e) {
+                // 捕获类型不匹配错误
+                if (e.getMessage() != null && e.getMessage().contains("Expecting class") && "true".equals(forceReplace)) {
+                    // 强制替换模式：直接替换 config.xml 文件
+                    Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+                    Files.write(configFile, fileContent);
+                    rsp.sendRedirect2("../");
                     return;
                 }
-            } else {
-                rsp.sendError(400, "Parent not found");
-                return;
+                throw e;
             }
-        } else {
-            // 文件夹类型，在当前目录下创建新任务
-            if (item.getRootDir() == null) {
-                rsp.sendError(400, "Current item has no root directory");
-                return;
-            }
-            parentFullName = item.getFullName();
-            jobDir = Paths.get(item.getRootDir().getAbsolutePath(), "jobs", jobName);
-        }
-        
-        String fullJobName = parentFullName.isEmpty() ? jobName : parentFullName + "/" + jobName;
-        
-        if (jenkins.getItemByFullName(fullJobName) != null) {
-            rsp.sendError(400, "Job already exists: " + fullJobName);
-            return;
         }
 
-        Files.createDirectories(jobDir);
-        
-        Path configFile = jobDir.resolve("config.xml");
-        try (InputStream is = fileItem.getInputStream()) {
-            Files.copy(is, configFile, StandardCopyOption.REPLACE_EXISTING);
-        }
-        
-        jenkins.reload();
-        
-        // 等待 Jenkins 重新加载完成
-        Thread.sleep(1000);
-        
-        // 构建新任务的 URL
-        String redirectUrl = "/job/" + fullJobName.replace("/", "/job/");
-        rsp.sendRedirect(redirectUrl);
+        rsp.sendRedirect2("../");
     }
 
     @RequirePOST
-    public void doCreate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
-        FileItem fileItem = req.getFileItem("xmlFile");
-        if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "请选择要上传的XML文件");
-            return;
-        }
-
+    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         String jobName = req.getParameter("jobName");
-        if (jobName == null || jobName.isEmpty()) {
+
+        if (jobName == null || jobName.trim().isEmpty()) {
             rsp.sendError(400, "任务名称不能为空");
             return;
         }
 
-        Jenkins jenkins = Jenkins.get();
-        
-        ItemGroup<?> parent = item.getParent();
-        String parentPath = "";
-        if (parent != null && parent instanceof AbstractItem) {
-            parentPath = ((AbstractItem) parent).getFullName();
-        }
-        
-        String fullJobName = parentPath.isEmpty() ? jobName : parentPath + "/" + jobName;
-        if (jenkins.getItemByFullName(fullJobName) != null) {
-            rsp.sendError(400, "已存在同名任务: " + fullJobName);
+        FileItem fileItem = req.getFileItem("xmlFile");
+
+        if (fileItem == null || fileItem.getSize() == 0) {
+            rsp.sendError(400, "请选择 XML 文件");
             return;
         }
 
-        Path jobDir;
-        if (parent != null) {
-            if (parent instanceof AbstractItem) {
-                jobDir = Paths.get(((AbstractItem) parent).getRootDir().getAbsolutePath(), "jobs", jobName);
-            } else {
-                jobDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs", jobName);
-            }
-        } else {
-            jobDir = Paths.get(jenkins.getRootDir().getAbsolutePath(), "jobs", jobName);
+        ItemGroup<?> parent = getCreateTarget();
+
+        if (parent == null) {
+            rsp.sendError(400, "当前目录不支持创建任务");
+            return;
         }
-        
-        Files.createDirectories(jobDir);
-        
-        Path configFile = jobDir.resolve("config.xml");
+
+        if (!(parent instanceof ModifiableTopLevelItemGroup)) {
+            rsp.sendError(400, "当前目录不可创建任务");
+            return;
+        }
+
+        ModifiableTopLevelItemGroup group = (ModifiableTopLevelItemGroup) parent;
+
+        if (Jenkins.get().getItemByFullName(buildFullName(parent, jobName)) != null) {
+            rsp.sendError(400, "任务已存在");
+            return;
+        }
+
+        if (group instanceof AccessControlled) {
+            ((AccessControlled) group).checkPermission(Item.CREATE);
+        }
+
         try (InputStream is = fileItem.getInputStream()) {
-            Files.copy(is, configFile);
+            TopLevelItem newItem = group.createProjectFromXML(jobName, is);
+
+            rsp.sendRedirect2(req.getContextPath() + "/" + newItem.getUrl());
+
+        } catch (IllegalArgumentException e) {
+            rsp.sendError(400, "XML 配置非法: " + e.getMessage());
         }
-        
-        jenkins.reload();
-        rsp.sendRedirect("..");
+    }
+
+    private String buildFullName(ItemGroup<?> parent, String jobName) {
+        if (parent instanceof AbstractItem) {
+            String parentName = ((AbstractItem) parent).getFullName();
+            return parentName + "/" + jobName;
+        }
+
+        return jobName;
     }
 
     @Extension

@@ -33,6 +33,15 @@
                             </td>
                         </tr>
                         <tr>
+                            <td class="label">
+                                <label for="forceReplace">强制替换</label>
+                            </td>
+                            <td>
+                                <input type="checkbox" name="forceReplace" id="forceReplace" value="true" />
+                                <span class="description">当 XML 文件类型与当前任务类型不匹配时，强制替换配置文件（可能导致任务无法正常运行）</span>
+                            </td>
+                        </tr>
+                        <tr>
                             <td></td>
                             <td>
                                 <button type="submit" class="jenkins-button jenkins-button--primary">
