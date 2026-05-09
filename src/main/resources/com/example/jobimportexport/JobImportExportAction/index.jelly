@@ -3,6 +3,36 @@
         <l:main-panel>
             <h1>任务配置管理: ${it.item.fullName}</h1>
 
+            <!-- 确认弹窗 -->
+            <div id="modalOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;"></div>
+            <div id="modalBox" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:28px 32px;z-index:10000;min-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+                <h3 id="modalTitle" style="margin:0 0 8px 0;font-size:17px;color:#333;font-weight:600;"></h3>
+                <p style="margin:0;color:#666;font-size:14px;">确认后不可撤销，请谨慎操作。</p>
+                <div style="margin-top:24px;text-align:right;">
+                    <button type="button" onclick="hideModal()" class="jenkins-button" style="padding:7px 18px;margin-right:10px;">取消</button>
+                    <button type="button" onclick="confirmSubmit()" class="jenkins-button jenkins-button--primary" style="padding:7px 18px;">确认</button>
+                </div>
+            </div>
+            <script>
+                var currentFormId = null;
+                function showModal(message, formId) {
+                    currentFormId = formId;
+                    document.getElementById('modalTitle').textContent = message;
+                    document.getElementById('modalOverlay').style.display = 'block';
+                    document.getElementById('modalBox').style.display = 'block';
+                }
+                function hideModal() {
+                    document.getElementById('modalOverlay').style.display = 'none';
+                    document.getElementById('modalBox').style.display = 'none';
+                    currentFormId = null;
+                }
+                function confirmSubmit() {
+                    if (currentFormId) {
+                        document.getElementById(currentFormId).submit();
+                    }
+                }
+            </script>
+
 
             <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
                 <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导出当前配置</h2>
@@ -18,7 +48,7 @@
             <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
                 <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">更新配置</h2>
                 <p style="margin-bottom: 16px; color: #666;">上传新的 XML 配置文件来更新当前任务/文件夹配置。</p>
-                <form method="post" action="update" enctype="multipart/form-data" style="text-align: left;">
+                <form method="post" action="update" enctype="multipart/form-data" id="updateForm" style="text-align: left;">
                     <table class="form" style="width: 100%;">
                         <tr>
                             <td class="label" style="width: 180px; padding-right: 12px;">
@@ -46,8 +76,8 @@
                         <tr>
                             <td></td>
                             <td style="padding-top: 8px;">
-                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
-                                        onclick="return confirm('是否确认更新「${it.item.fullName}」的配置？')">
+                                <button type="button" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
+                                        onclick="showModal('是否确认更新「${it.item.fullName}」的配置？', 'updateForm')">
                                     更新配置
                                 </button>
                             </td>
@@ -60,7 +90,7 @@
             <div style="padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
                 <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导入新任务到当前目录</h2>
                 <p style="margin-bottom: 16px; color: #666;">上传 Jenkins 任务配置 XML 文件来在当前目录下创建新任务。</p>
-                <form method="post" action="import" enctype="multipart/form-data" style="text-align: left;">
+                <form method="post" action="import" enctype="multipart/form-data" id="importForm" style="text-align: left;">
                     <table class="form" style="width: 100%;">
                         <tr>
                             <td class="label" style="width: 180px; padding-right: 12px;">
@@ -89,8 +119,8 @@
                         <tr>
                             <td></td>
                             <td style="padding-top: 8px;">
-                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
-                                        onclick="var name=document.getElementById('jobName').value; return confirm('是否确认创建任务「' + name + '」？')">
+                                <button type="button" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
+                                        onclick="var name=document.getElementById('jobName').value; showModal('是否确认创建任务「' + name + '」？', 'importForm')">
                                     导入任务
                                 </button>
                             </td>
