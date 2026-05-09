@@ -47,6 +47,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 
 在任意 **Job** 或 **Folder** 页面，点击 **导入/导出配置** 菜单，选择 **导出配置** 按钮即可下载当前配置的 XML 文件。
 
+> **中文文件名支持**：导出的 XML 文件名会保留任务完整名称，支持中文文件名（如 `测试Pipeline.xml`、`发布-生产环境.xml`），并自动处理 Windows 文件系统非法字符。
+
 ### 2. 更新配置
 
 在任意 **Job** 或 **Folder** 页面：
@@ -74,6 +76,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 4. 点击 **导入任务**
 5. 弹窗确认：点击「确认」提交创建，点击「取消」返回页面
 
+> **中文任务名支持**：完全支持中文任务名称（如 `测试Pipeline`、`发布-生产环境`、`服务_订单中心`）。插件内部使用 RFC 5987 标准处理 URL 编码，确保中文路径在浏览器、Jenkins 内嵌 Jetty 和 Folder 嵌套场景下均能正确工作。
+>
 > **权限要求**：导入新任务需要当前用户具有 `Item.CREATE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
 >
 > **重复任务名**：如果该目录下已存在同名任务，页面会提示"任务名称已存在"，并提供「返回重新命名」和「进入任务更新配置」两个选项。
@@ -113,6 +117,20 @@ mvn clean package -Denforcer.skip=true -DskipTests
 - ✅ 只有 **Folder**（根目录和子目录）才显示 **导入新任务** 功能
 - ❌ 所有 **Job** 类型页面均不显示 **导入新任务**
 - ❌ **特殊 Folder**（Multibranch、OrganizationFolder、ComputedFolder）不显示 **导入新任务**
+
+**兼容性**：
+| 浏览器              | 中文文件名 |
+| ---------------- | ----- |
+| Chrome           | ✅     |
+| Edge             | ✅     |
+| Safari           | ✅     |
+| Firefox          | ✅     |
+| Jenkins 内嵌 Jetty | ✅     |
+| Windows          | ✅     |
+| Linux            | ✅     |
+| macOS            | ✅     |
+
+
 
 ---
 
@@ -170,6 +188,17 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 ### Q: 为什么某些页面看不到「导入新任务」？
 
 只有 **Folder** 类型的页面才会显示「导入新任务」功能。Job 页面（包括 Freestyle、Pipeline 等）仅显示导出和更新功能。这是设计上的安全限制，避免在 Job 页面误操作创建新任务。
+
+### Q: 为什么导入/导出支持中文任务名？
+
+本插件针对 Jenkins 中文场景做了专项优化：
+- **HTTP Header 编码**：导出文件名使用 RFC 5987 标准（`filename*=`），兼容现代浏览器和 IE
+- **URL 重定向编码**：导入后重定向使用 `Util.rawEncode()` 处理中文路径
+- **请求参数解码**：使用 `ISO-8859-1` → `UTF-8` 重新转码（ Stapler 默认解析问题）
+- **Windows 文件名安全**：自动替换 `\\\\/*?\"<>|` 等非法字符
+- **Jelly 页面编码**：所有表单添加 `accept-charset="UTF-8"`，Jelly 页面添加 `escape-by-default`
+
+这些修复确保在 Tomcat、Jetty、Windows Jenkins、Folder 嵌套等复杂环境下中文均能正常工作。
 
 ### Q: 更新配置时提示「任务类型不匹配」怎么办？
 
