@@ -252,25 +252,20 @@ public class JobImportExportAction implements Action {
 
         @Override
         public Collection<? extends Action> createFor(ItemGroup group) {
-            System.out.println("[JobImportExport] Factory called: " + group.getClass().getName());
-
             if (group == null) {
                 return Collections.emptyList();
             }
 
             // 排除 Jenkins 根目录
             if (group instanceof Jenkins) {
-                System.out.println("[JobImportExport] Filtered out: Jenkins root");
                 return Collections.emptyList();
             }
 
             // 排除特殊 Folder（Multibranch / Org / Computed）
             if (isSpecialFolder(group)) {
-                System.out.println("[JobImportExport] Filtered out: Special folder");
                 return Collections.emptyList();
             }
 
-            System.out.println("[JobImportExport] Creating action for: " + group.getClass().getName());
             return Collections.singleton(new JobImportExportAction(group));
         }
 
