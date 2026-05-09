@@ -44,7 +44,7 @@
                 </form>
             </div>
             
-            <j:if test="${!instance.isJobType()}">
+            <j:if test="${instance.canImportJobs()}">
             <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
                 <h2>导入新任务到当前目录</h2>
                 <p>上传 Jenkins 任务配置 XML 文件来在当前目录下创建新任务。</p>
