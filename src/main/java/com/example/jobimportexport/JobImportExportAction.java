@@ -231,6 +231,30 @@ public class JobImportExportAction implements Action {
         // 尝试使用反射重新加载当前任务及其所有父文件夹
         try {
             // 首先尝试重新加载当前任务
+            reloadItem(item);
+            
+            // 然后递归重新加载父文件夹
+            ItemGroup<?> parent = item.getParent();
+            while (parent != null && parent instanceof AbstractItem && !(parent instanceof Jenkins)) {
+                AbstractItem parentItem = (AbstractItem) parent;
+                reloadItem(parentItem);
+                parent = parentItem.getParent();
+            }
+        } catch (Exception e) {
+            // 忽略异常
+        }
+    }
+    
+    private void reloadItem(AbstractItem item) {
+        try {
+            // 检查是否是 OrganizationFolder 类型
+            if (isOrganizationFolder(item)) {
+                // 对于 OrganizationFolder，需要特殊处理
+                reloadOrganizationFolder(item);
+                return;
+            }
+            
+            // 普通任务类型的重新加载
             try {
                 Method reloadMethod = item.getClass().getMethod("reload");
                 reloadMethod.invoke(item);
@@ -239,27 +263,68 @@ public class JobImportExportAction implements Action {
                     Method doReloadMethod = item.getClass().getMethod("doReload");
                     doReloadMethod.invoke(item);
                 } catch (NoSuchMethodException e2) {
-                    // 忽略
-                }
-            }
-            
-            // 然后递归重新加载父文件夹
-            ItemGroup<?> parent = item.getParent();
-            while (parent != null && parent instanceof AbstractItem && !(parent instanceof Jenkins)) {
-                AbstractItem parentItem = (AbstractItem) parent;
-                try {
-                    Method reloadMethod = parentItem.getClass().getMethod("reload");
-                    reloadMethod.invoke(parentItem);
-                } catch (NoSuchMethodException e) {
+                    // 尝试其他可能的方法
                     try {
-                        Method doReloadMethod = parentItem.getClass().getMethod("doReload");
-                        doReloadMethod.invoke(parentItem);
-                    } catch (NoSuchMethodException e2) {
+                        Method onLoadMethod = item.getClass().getMethod("onLoad", ItemGroup.class, String.class);
+                        onLoadMethod.invoke(item, item.getParent(), item.getName());
+                    } catch (NoSuchMethodException e3) {
                         // 忽略
                     }
                 }
-                parent = parentItem.getParent();
             }
+        } catch (Exception e) {
+            // 忽略异常
+        }
+    }
+    
+    private boolean isOrganizationFolder(AbstractItem item) {
+        // 检查是否是 OrganizationFolder 类型
+        try {
+            Class<?> orgFolderClass = Class.forName("jenkins.branch.OrganizationFolder");
+            return orgFolderClass.isInstance(item);
+        } catch (ClassNotFoundException e) {
+            // OrganizationFolder 类不存在，说明没有安装相关插件
+            return false;
+        }
+    }
+    
+    private void reloadOrganizationFolder(AbstractItem item) {
+        // 对于 OrganizationFolder 的特殊重新加载逻辑
+        try {
+            // 尝试调用 OrganizationFolder 的 reload 方法
+            try {
+                Method reloadMethod = item.getClass().getMethod("reload");
+                reloadMethod.invoke(item);
+            } catch (NoSuchMethodException e) {
+                // 尝试调用 onLoad 方法
+                try {
+                    Method onLoadMethod = item.getClass().getMethod("onLoad", ItemGroup.class, String.class);
+                    onLoadMethod.invoke(item, item.getParent(), item.getName());
+                } catch (NoSuchMethodException e2) {
+                    // 尝试调用 initialize 方法
+                    try {
+                        Method initializeMethod = item.getClass().getMethod("initialize");
+                        initializeMethod.invoke(item);
+                    } catch (NoSuchMethodException e3) {
+                        // 尝试调用 loadChildren 方法
+                        try {
+                            Method loadChildrenMethod = item.getClass().getMethod("loadChildren");
+                            loadChildrenMethod.invoke(item);
+                        } catch (NoSuchMethodException e4) {
+                            // 忽略
+                        }
+                    }
+                }
+            }
+            
+            // 尝试清除缓存
+            try {
+                Method clearCacheMethod = item.getClass().getMethod("clearCache");
+                clearCacheMethod.invoke(item);
+            } catch (NoSuchMethodException e) {
+                // 忽略
+            }
+            
         } catch (Exception e) {
             // 忽略异常
         }
