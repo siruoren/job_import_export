@@ -1,9 +1,9 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
     <l:layout title="任务配置管理">
         <l:main-panel>
-            <h1>任务配置管理: ${it.group.fullName}</h1>
+            <h1>任务配置管理: ${it.item.fullName}</h1>
 
-            <j:if test="${!it.isRootLevel()}">
+
             <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
                 <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导出当前配置</h2>
                 <p style="margin-bottom: 16px; color: #666;">将当前任务/文件夹配置导出为 XML 文件。</p>
@@ -13,7 +13,7 @@
                     </button>
                 </form>
             </div>
-            </j:if>
+
 
             <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
                 <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">更新配置</h2>

@@ -33,10 +33,10 @@ import java.util.List;
 
 public class JobImportExportAction implements Action {
 
-    private final ItemGroup<?> group;
+    private final AbstractItem item;
 
-    public JobImportExportAction(ItemGroup<?> group) {
-        this.group = group;
+    public JobImportExportAction(AbstractItem item) {
+        this.item = item;
     }
 
     @Override
@@ -54,54 +54,62 @@ public class JobImportExportAction implements Action {
         return "jobImportExport";
     }
 
-    public ItemGroup<?> getGroup() {
-        return group;
+    public AbstractItem getItem() {
+        return item;
     }
 
     public boolean isJob() {
-        return group != null;
+        return item != null;
     }
 
     public boolean isJobType() {
-        return group instanceof Job;
+        return item instanceof Job;
     }
 
     public boolean isRootLevel() {
-        return group instanceof Jenkins;
+        return item.getParent() instanceof Jenkins;
     }
 
     public boolean canImportJobs() {
-        // 如果当前是文件夹（ItemGroup），允许在其内部导入创建新任务
-        if (group instanceof ItemGroup) {
-            return true;
+        // 当前对象必须是 Folder
+        if (!(item instanceof ItemGroup) || item instanceof Job) {
+            return false;
         }
-        return canCreateJob();
+
+        // 特殊 Folder 不允许
+        if (isSpecialFolder(item)) {
+            return false;
+        }
+
+        return true;
     }
 
     public boolean hasPermission() {
-        if (group instanceof AccessControlled) {
-            return ((AccessControlled) group).hasPermission(Item.CONFIGURE);
+        if (item instanceof AccessControlled) {
+            return ((AccessControlled) item).hasPermission(Item.CONFIGURE);
         }
         return false;
     }
 
     public boolean canCreateJob() {
-        if (group == null) {
+        ItemGroup<?> target = getImportTarget();
+
+        if (target == null) {
             return false;
         }
 
-        if (!(group instanceof ModifiableTopLevelItemGroup)) {
+        if (!(target instanceof ModifiableTopLevelItemGroup)) {
             return false;
         }
 
-        if (group instanceof AccessControlled) {
-            if (!((AccessControlled) group).hasPermission(Item.CREATE)) {
+        if (target instanceof AccessControlled) {
+            if (!((AccessControlled) target).hasPermission(Item.CREATE)) {
                 return false;
             }
         }
 
         for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(group)) {
+            if (d.isApplicableIn(target)) {
                 return true;
             }
         }
@@ -112,16 +120,18 @@ public class JobImportExportAction implements Action {
     public List<TopLevelItemDescriptor> getSupportedJobTypes() {
         List<TopLevelItemDescriptor> result = new ArrayList<>();
 
-        if (group == null) {
+        ItemGroup<?> target = getImportTarget();
+
+        if (target == null) {
             return result;
         }
 
-        if (!(group instanceof ModifiableTopLevelItemGroup)) {
+        if (!(target instanceof ModifiableTopLevelItemGroup)) {
             return result;
         }
 
         for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(group)) {
+            if (d.isApplicableIn(target)) {
                 result.add(d);
             }
         }
@@ -130,12 +140,6 @@ public class JobImportExportAction implements Action {
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        if (!(group instanceof AbstractItem)) {
-            rsp.sendError(404, "未找到任务");
-            return;
-        }
-
-        AbstractItem item = (AbstractItem) group;
         item.checkPermission(Item.READ);
 
         String fileName = item.getFullName().replace("/", "_") + ".xml";
@@ -156,12 +160,6 @@ public class JobImportExportAction implements Action {
 
     @RequirePOST
     public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        if (!(group instanceof AbstractItem)) {
-            rsp.sendError(404, "任务不存在");
-            return;
-        }
-
-        AbstractItem item = (AbstractItem) group;
         item.checkPermission(Item.CONFIGURE);
 
         FileItem fileItem = req.getFileItem("xmlFile");
@@ -211,12 +209,14 @@ public class JobImportExportAction implements Action {
             return;
         }
 
-        if (!(group instanceof ModifiableTopLevelItemGroup)) {
+        ItemGroup<?> target = getImportTarget();
+
+        if (!(target instanceof ModifiableTopLevelItemGroup)) {
             rsp.sendError(400, "当前目录不支持创建任务");
             return;
         }
 
-        ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) group;
+        ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
 
         if (itemGroup instanceof AccessControlled) {
             ((AccessControlled) itemGroup).checkPermission(Item.CREATE);
@@ -236,42 +236,42 @@ public class JobImportExportAction implements Action {
     }
 
     private String buildFullName(String jobName) {
-        if (group instanceof AbstractItem) {
-            String parentName = ((AbstractItem) group).getFullName();
-            return parentName + "/" + jobName;
+        ItemGroup<?> target = getImportTarget();
+
+        if (target instanceof AbstractItem) {
+            return ((AbstractItem) target).getFullName() + "/" + jobName;
         }
+
         return jobName;
     }
 
+    private ItemGroup<?> getImportTarget() {
+        if (!canImportJobs()) {
+            return null;
+        }
+
+        return (ItemGroup<?>) item;
+    }
+
+    private static boolean isSpecialFolder(AbstractItem item) {
+        String name = item.getClass().getName();
+        return name.startsWith("jenkins.branch.") || name.contains("ComputedFolder");
+    }
+
     @Extension
-    public static class Factory extends TransientActionFactory<ItemGroup> {
+    public static class Factory extends TransientActionFactory<AbstractItem> {
         @Override
-        public Class<ItemGroup> type() {
-            return ItemGroup.class;
+        public Class<AbstractItem> type() {
+            return AbstractItem.class;
         }
 
         @Override
-        public Collection<? extends Action> createFor(ItemGroup group) {
-            if (group == null) {
+        public Collection<? extends Action> createFor(AbstractItem target) {
+            if (target == null) {
                 return Collections.emptyList();
             }
 
-            // 排除 Jenkins 根目录
-            if (group instanceof Jenkins) {
-                return Collections.emptyList();
-            }
-
-            // 排除特殊 Folder（Multibranch / Org / Computed）
-            if (isSpecialFolder(group)) {
-                return Collections.emptyList();
-            }
-
-            return Collections.singleton(new JobImportExportAction(group));
-        }
-
-        private static boolean isSpecialFolder(ItemGroup group) {
-            String name = group.getClass().getName();
-            return name.startsWith("jenkins.branch.") || name.contains("ComputedFolder");
+            return Collections.singleton(new JobImportExportAction(target));
         }
     }
 }
