@@ -53,16 +53,54 @@ public class JobImportExportAction implements Action {
         return item;
     }
 
-    public boolean isFolder() {
-        return item != null && item instanceof ItemGroup<?>;
+    public boolean isJob() {
+        // 所有类型都可以更新配置
+        return item != null;
     }
 
-    public boolean isJob() {
-        return item != null;
+    public boolean isJobType() {
+        // 判断当前任务是否是 Job 类型（非文件夹类型）
+        return item instanceof Job;
+    }
+
+    public boolean isRootLevel() {
+        // 判断当前任务是否在 Jenkins 根目录
+        ItemGroup<?> parent = item.getParent();
+        return parent instanceof Jenkins;
     }
 
     public boolean hasPermission() {
         return item != null && item.hasPermission(Item.CONFIGURE);
+    }
+    
+    public boolean canCreateJob() {
+        if (item == null) {
+            return false;
+        }
+        
+        // 获取当前任务的父目录（创建新任务的位置）
+        ItemGroup<?> parent = item.getParent();
+        if (parent == null) {
+            return false;
+        }
+        
+        // 检查父目录的创建权限
+        // 对于文件夹，检查文件夹是否有创建子任务的权限
+        // 对于根目录，检查 Jenkins 是否有创建任务的权限
+        try {
+            // 使用 ACL 系统检查权限
+            if (parent instanceof AbstractItem) {
+                return ((AbstractItem) parent).hasPermission(Item.CREATE);
+            }
+            if (parent instanceof Jenkins) {
+                return ((Jenkins) parent).hasPermission(Item.CREATE);
+            }
+        } catch (Exception e) {
+            // 权限检查失败，返回 false
+            return false;
+        }
+        
+        return false;
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
@@ -88,48 +126,63 @@ public class JobImportExportAction implements Action {
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+    public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+        Jenkins jenkins = Jenkins.get();
+        
         FileItem fileItem = req.getFileItem("xmlFile");
         if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "请选择要上传的XML文件");
+            rsp.sendError(400, "Please select an XML file to upload");
+            return;
+        }
+        
+        Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+        try (InputStream is = fileItem.getInputStream()) {
+            Files.copy(is, configFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+        jenkins.reload();
+        rsp.sendRedirect("..");
+    }
+
+    @RequirePOST
+    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+        Jenkins jenkins = Jenkins.get();
+        
+        // 导入创建新任务（在当前目录下）
+        String jobName = null;
+        
+        if (req.getParameter("jobName") != null && !req.getParameter("jobName").trim().isEmpty()) {
+            jobName = req.getParameter("jobName").trim();
+        } else if (req.getParameterValues("jobName") != null && req.getParameterValues("jobName").length > 0) {
+            jobName = req.getParameterValues("jobName")[0].trim();
+        }
+        
+        if (jobName == null || jobName.isEmpty()) {
+            rsp.sendError(400, "Job name cannot be empty");
+            return;
+        }
+        
+        FileItem fileItem = req.getFileItem("xmlFile");
+        if (fileItem == null || fileItem.getSize() == 0) {
+            rsp.sendError(400, "Please select an XML file to upload");
             return;
         }
 
-        Jenkins jenkins = Jenkins.get();
-
-        if (isJob() && !isFolder()) {
-            Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-            try (InputStream is = fileItem.getInputStream()) {
-                Files.copy(is, configFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-            jenkins.reload();
-            rsp.sendRedirect("..");
-        } else if (isFolder()) {
-            String jobName = req.getParameter("jobName");
-            if (jobName == null || jobName.isEmpty()) {
-                rsp.sendError(400, "任务名称不能为空");
-                return;
-            }
-
-            String fullJobName = item.getFullName() + "/" + jobName;
-            if (jenkins.getItemByFullName(fullJobName) != null) {
-                rsp.sendError(400, "已存在同名任务: " + fullJobName);
-                return;
-            }
-
-            Path jobDir = Paths.get(item.getRootDir().getAbsolutePath(), "jobs", jobName);
-            Files.createDirectories(jobDir);
-            
-            Path configFile = jobDir.resolve("config.xml");
-            try (InputStream is = fileItem.getInputStream()) {
-                Files.copy(is, configFile);
-            }
-            
-            jenkins.reload();
-            rsp.sendRedirect("/job/" + fullJobName.replace("/", "/job/"));
-        } else {
-            rsp.sendError(400, "不支持的任务类型");
+        String fullJobName = item.getFullName() + "/" + jobName;
+        if (jenkins.getItemByFullName(fullJobName) != null) {
+            rsp.sendError(400, "Job already exists: " + fullJobName);
+            return;
         }
+
+        Path jobDir = Paths.get(item.getRootDir().getAbsolutePath(), "jobs", jobName);
+        Files.createDirectories(jobDir);
+        
+        Path configFile = jobDir.resolve("config.xml");
+        try (InputStream is = fileItem.getInputStream()) {
+            Files.copy(is, configFile);
+        }
+        
+        jenkins.reload();
+        rsp.sendRedirect("/job/" + fullJobName.replace("/", "/job/"));
     }
 
     @RequirePOST

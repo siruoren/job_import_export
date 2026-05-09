@@ -24,7 +24,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
     @Override
     public String getIconFileName() {
-        return "document.png";
+        return "gear2.png";
     }
 
     @Override
@@ -35,6 +35,10 @@ public class JobImportExportSidebarLink implements RootAction {
     @Override
     public String getUrlName() {
         return "jobImportExport";
+    }
+    
+    public boolean isVisible() {
+        return true;
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
