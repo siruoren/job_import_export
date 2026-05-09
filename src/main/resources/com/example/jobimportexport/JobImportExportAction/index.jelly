@@ -4,47 +4,49 @@
             <h1>任务配置管理: ${it.group.fullName}</h1>
 
             <j:if test="${!it.isRootLevel()}">
-            <div style="margin-bottom: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
-                <h2 style="margin-top: 0;">导出当前配置</h2>
-                <p>将当前任务/文件夹配置导出为 XML 文件。</p>
-                <form method="get" action="export">
-                    <button type="submit" class="jenkins-button jenkins-button--primary">
+            <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+                <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导出当前配置</h2>
+                <p style="margin-bottom: 16px; color: #666;">将当前任务/文件夹配置导出为 XML 文件。</p>
+                <form method="get" action="export" style="text-align: left;">
+                    <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
                         导出配置
                     </button>
                 </form>
             </div>
             </j:if>
 
-            <div style="margin-bottom: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
-                <h2>更新配置</h2>
-                <p>上传新的 XML 配置文件来更新当前任务/文件夹配置。</p>
-                <form method="post" action="update" enctype="multipart/form-data">
-                    <table class="form">
+            <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+                <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">更新配置</h2>
+                <p style="margin-bottom: 16px; color: #666;">上传新的 XML 配置文件来更新当前任务/文件夹配置。</p>
+                <form method="post" action="update" enctype="multipart/form-data" style="text-align: left;">
+                    <table class="form" style="width: 100%;">
                         <tr>
-                            <td class="label">
-                                <label for="xmlFile">配置文件 (XML)</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="xmlFile" style="font-weight: 500; color: #333;">配置文件 (XML)</label>
                             </td>
-                            <td>
+                            <td style="padding-bottom: 12px;">
                                 <input type="file" name="xmlFile" id="xmlFile"
                                        accept=".xml" required="true"
+                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;"
                                        onchange="document.getElementById('fileName1').textContent = this.files[0]?.name || '';" />
-                                <span class="description">Jenkins 任务配置的 XML 文件</span>
-                                <span id="fileName1" style="margin-left: 10px; color: #337ab7;"></span>
+                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">Jenkins 任务配置的 XML 文件</span>
+                                <span id="fileName1" style="margin-left: 10px; color: #337ab7; font-size: 13px;"></span>
                             </td>
                         </tr>
                         <tr>
-                            <td class="label">
-                                <label for="forceReplace">强制替换</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="forceReplace" style="font-weight: 500; color: #333;">强制替换</label>
                             </td>
-                            <td>
-                                <input type="checkbox" name="forceReplace" id="forceReplace" value="true" />
-                                <span class="description">当 XML 文件类型与当前任务类型不匹配时，强制替换配置文件（可能导致任务无法正常运行）</span>
+                            <td style="padding-bottom: 12px;">
+                                <input type="checkbox" name="forceReplace" id="forceReplace" value="true"
+                                       style="margin-right: 8px;" />
+                                <span class="description" style="color: #666; font-size: 13px;">当 XML 文件类型与当前任务类型不匹配时，强制替换配置文件（可能导致任务无法正常运行）</span>
                             </td>
                         </tr>
                         <tr>
                             <td></td>
-                            <td>
-                                <button type="submit" class="jenkins-button jenkins-button--primary">
+                            <td style="padding-top: 8px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
                                     更新配置
                                 </button>
                             </td>
@@ -54,37 +56,39 @@
             </div>
 
             <j:if test="${it.canImportJobs()}">
-            <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
-                <h2>导入新任务到当前目录</h2>
-                <p>上传 Jenkins 任务配置 XML 文件来在当前目录下创建新任务。</p>
-                <form method="post" action="import" enctype="multipart/form-data">
-                    <table class="form">
+            <div style="padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+                <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导入新任务到当前目录</h2>
+                <p style="margin-bottom: 16px; color: #666;">上传 Jenkins 任务配置 XML 文件来在当前目录下创建新任务。</p>
+                <form method="post" action="import" enctype="multipart/form-data" style="text-align: left;">
+                    <table class="form" style="width: 100%;">
                         <tr>
-                            <td class="label">
-                                <label for="jobName">任务/子文件夹名称</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="jobName" style="font-weight: 500; color: #333;">任务/子文件夹名称</label>
                             </td>
-                            <td>
+                            <td style="padding-bottom: 12px;">
                                 <input type="text" name="jobName" id="jobName"
-                                       class="setting-input" size="50" required="true" />
-                                <span class="description">新任务或子文件夹的名称</span>
+                                       class="setting-input" required="true"
+                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;" />
+                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">新任务或子文件夹的名称</span>
                             </td>
                         </tr>
                         <tr>
-                            <td class="label">
-                                <label for="importXmlFile">配置文件 (XML)</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="importXmlFile" style="font-weight: 500; color: #333;">配置文件 (XML)</label>
                             </td>
-                            <td>
+                            <td style="padding-bottom: 12px;">
                                 <input type="file" name="xmlFile" id="importXmlFile"
                                        accept=".xml" required="true"
+                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;"
                                        onchange="document.getElementById('fileName2').textContent = this.files[0]?.name || '';" />
-                                <span class="description">Jenkins 任务配置的 XML 文件</span>
-                                <span id="fileName2" style="margin-left: 10px; color: #337ab7;"></span>
+                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">Jenkins 任务配置的 XML 文件</span>
+                                <span id="fileName2" style="margin-left: 10px; color: #337ab7; font-size: 13px;"></span>
                             </td>
                         </tr>
                         <tr>
                             <td></td>
-                            <td>
-                                <button type="submit" class="jenkins-button jenkins-button--primary">
+                            <td style="padding-top: 8px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
                                     导入任务
                                 </button>
                             </td>

@@ -2,38 +2,40 @@
     <l:layout title="任务导入/导出">
         <l:main-panel>
             <h1>Jenkins 任务配置导入/导出</h1>
-                        
-            <div style="padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
-                <h2>导入任务配置</h2>
-                <p>上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
-                <form method="post" action="import" enctype="multipart/form-data">
-                    <table class="form">
+
+            <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+                <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导入任务配置</h2>
+                <p style="margin-bottom: 16px; color: #666;">上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
+                <form method="post" action="import" enctype="multipart/form-data" style="text-align: left;">
+                    <table class="form" style="width: 100%;">
                         <tr>
-                            <td class="label">
-                                <label for="jobName">任务/文件夹名称</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="jobName" style="font-weight: 500; color: #333;">任务/文件夹名称</label>
                             </td>
-                            <td>
-                                <input type="text" name="jobName" id="jobName" 
-                                       class="setting-input" size="50" required="true" />
-                                <span class="description">新任务的名称，如果要放在文件夹下，请使用 "文件夹/任务名" 格式</span>
+                            <td style="padding-bottom: 12px;">
+                                <input type="text" name="jobName" id="jobName"
+                                       class="setting-input" required="true"
+                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;" />
+                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">新任务的名称，如果要放在文件夹下，请使用 "文件夹/任务名" 格式</span>
                             </td>
                         </tr>
                         <tr>
-                            <td class="label">
-                                <label for="xmlFile">XML配置文件</label>
+                            <td class="label" style="width: 180px; padding-right: 12px;">
+                                <label for="xmlFile" style="font-weight: 500; color: #333;">XML配置文件</label>
                             </td>
-                            <td>
-                                <input type="file" name="xmlFile" id="xmlFile" 
-                                       accept=".xml" required="true" 
+                            <td style="padding-bottom: 12px;">
+                                <input type="file" name="xmlFile" id="xmlFile"
+                                       accept=".xml" required="true"
+                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;"
                                        onchange="document.getElementById('fileName').textContent = this.files[0]?.name || '';" />
-                                <span class="description">Jenkins 任务配置的 XML 文件</span>
-                                <span id="fileName" style="margin-left: 10px; color: #337ab7;"></span>
+                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">Jenkins 任务配置的 XML 文件</span>
+                                <span id="fileName" style="margin-left: 10px; color: #337ab7; font-size: 13px;"></span>
                             </td>
                         </tr>
                         <tr>
                             <td></td>
-                            <td>
-                                <button type="submit" class="jenkins-button jenkins-button--primary">
+                            <td style="padding-top: 8px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
                                     导入任务配置
                                 </button>
                             </td>
