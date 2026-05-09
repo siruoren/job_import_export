@@ -180,10 +180,38 @@ public class JobImportExportAction implements Action {
             try {
                 item.updateByXml(new StreamSource(bais));
             } catch (IOException e) {
-                if (e.getMessage() != null && e.getMessage().contains("Expecting class") && "true".equals(forceReplace)) {
-                    Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-                    Files.write(configFile, fileContent);
-                    rsp.sendRedirect2("../");
+                if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
+                    if ("true".equals(forceReplace)) {
+                        Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+                        Files.write(configFile, fileContent);
+                        rsp.sendRedirect2("../");
+                        return;
+                    }
+                    rsp.setContentType("text/html;charset=UTF-8");
+                    rsp.setStatus(400);
+                    try (java.io.PrintWriter writer = rsp.getWriter()) {
+                        writer.println("<!DOCTYPE html>");
+                        writer.println("<html><head><title>配置更新失败</title>");
+                        writer.println("<style>");
+                        writer.println("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:40px;}");
+                        writer.println(".card{max-width:600px;margin:0 auto;background:#fff;border:1px solid #dee2e6;border-radius:6px;padding:24px;}");
+                        writer.println("h2{color:#d9534f;margin-top:0;}");
+                        writer.println(".info{background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;padding:12px;margin:16px 0;font-family:monospace;font-size:13px;}");
+                        writer.println(".btn{display:inline-block;padding:8px 16px;background:#337ab7;color:#fff;text-decoration:none;border-radius:4px;}");
+                        writer.println(".btn:hover{background:#286090;}");
+                        writer.println(".hint{color:#666;font-size:14px;margin-top:16px;}");
+                        writer.println("</style></head><body>");
+                        writer.println("<div class='card'>");
+                        writer.println("<h2>配置更新失败：任务类型不匹配</h2>");
+                        writer.println("<p>当前任务的类型与导入的 XML 配置文件不匹配。</p>");
+                        writer.println("<div class='info'>");
+                        writer.println("当前任务类型：" + item.getClass().getName() + "<br/>");
+                        writer.println("错误详情：" + e.getMessage());
+                        writer.println("</div>");
+                        writer.println("<p><a href='javascript:history.back()' class='btn'>返回重新选择</a></p>");
+                        writer.println("<p class='hint'>提示：如果确认要强制替换配置文件，请勾选「强制替换」选项后重试。</p>");
+                        writer.println("</div></body></html>");
+                    }
                     return;
                 }
                 throw e;
