@@ -46,7 +46,8 @@
                         <tr>
                             <td></td>
                             <td style="padding-top: 8px;">
-                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
+                                        onclick="return confirm('是否确认更新「${it.item.fullName}」的配置？')">
                                     更新配置
                                 </button>
                             </td>
@@ -88,7 +89,8 @@
                         <tr>
                             <td></td>
                             <td style="padding-top: 8px;">
-                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
+                                        onclick="var name=document.getElementById('jobName').value; return confirm('是否确认创建任务「' + name + '」？')">
                                     导入任务
                                 </button>
                             </td>

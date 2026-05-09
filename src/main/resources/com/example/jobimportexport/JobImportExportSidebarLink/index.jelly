@@ -35,7 +35,8 @@
                         <tr>
                             <td></td>
                             <td style="padding-top: 8px;">
-                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;">
+                                <button type="submit" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
+                                        onclick="var name=document.getElementById('jobName').value; return confirm('是否确认创建任务「' + name + '」？')">
                                     导入任务配置
                                 </button>
                             </td>
