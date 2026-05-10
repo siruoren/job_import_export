@@ -275,7 +275,7 @@ public class JobImportExportAction implements Action {
 
         if (Jenkins.get().getItemByFullName(buildFullName(jobName)) != null) {
             String fullPath = req.getContextPath() + "/job/" + buildFullName(jobName).replace("/", "/job/") + "/jobImportExport";
-            writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 返回重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
+            writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
             return;
         }
 
