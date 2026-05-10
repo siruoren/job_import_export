@@ -155,7 +155,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 {
   "success": true,
   "message": "操作成功",
-  "redirect": "/job/myjob/jobImportExport"
+  "redirect": "/job/myjob"
 }
 ```
 
