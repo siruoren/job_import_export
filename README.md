@@ -131,6 +131,18 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | macOS            | ✅     |
 
 
+**行为规则**：
+| 场景            | 行为             |
+| ------------- | -------------- |
+| 更新普通 Job      | 自动 reload + 跳转 |
+| 更新 Folder     | 自动 reload + 跳转 |
+| 强制替换类型        | 自动 reload + 跳转 |
+| 更新后 rename    | 自动进入新名称页面      |
+| 中文任务名         | 正常             |
+| Folder 内 Job  | 正常             |
+| Pipeline Job  | 正常             |
+| Freestyle Job | 正常             |
+
 ---
 
 ## 技术架构
