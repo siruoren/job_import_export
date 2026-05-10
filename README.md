@@ -198,12 +198,11 @@ async function safePost(form) {
 
 ### 任务创建后的安全流程
 
-创建任务后执行以下四步确保 Jenkins 完全就绪：
+创建任务后执行以下三步确保 Jenkins 完全就绪：
 
-1. **Reload Item** - 调用 `onLoad()` 重新加载任务实例
-2. **Save** - 确保配置持久化到磁盘
-3. **Refresh Index** - 调用 `rebuildDependencyGraphAsync()` 更新 Jenkins 注册表
-4. **Safe Redirect** - 使用 `newItem.getUrl()` 生成安全的重定向 URL
+1. **Save** - 确保配置持久化到磁盘
+2. **Sync Reload** - 调用 `Jenkins.get().reload()` 同步重新加载（确保路由注册完成）
+3. **Safe Redirect** - 使用 `newItem.getUrl()` 生成安全的重定向 URL（确保绝对路径）
 
 ---
 
@@ -299,13 +298,12 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 
 ### Q: 为什么导入后有时会出现 404？
 
-Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现安全流程：
-1. 创建任务后自动调用 `onLoad()` 重新加载
-2. 调用 `save()` 确保持久化
-3. 调用 `rebuildDependencyGraphAsync()` 刷新注册表
-4. 使用 `newItem.getUrl()` 生成安全重定向 URL
+Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现企业级安全流程：
+1. 创建任务后调用 `save()` 确保持久化
+2. 调用 `Jenkins.get().reload()` 同步重新加载（确保 Jenkins 完全注册新任务路由）
+3. 使用 `newItem.getUrl()` 生成安全重定向 URL（确保绝对路径，避免路径叠加）
 
-如果仍然偶发 404，前端会自动延迟 300ms 后再跳转。
+前端收到重定向后会延迟 300ms 再跳转，确保 Jenkins 完全就绪。
 
 ---
 

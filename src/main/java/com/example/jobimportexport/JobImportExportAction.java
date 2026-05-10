@@ -286,9 +286,11 @@ public class JobImportExportAction implements Action {
 
             Jenkins.get().reload();
 
-            String redirectUrl = req.getContextPath()
-                    + newItem.getUrl()
-                    + "jobImportExport";
+            String url = newItem.getUrl();
+            if (!url.startsWith("/")) {
+                url = "/" + url;
+            }
+            String redirectUrl = url;
 
             writeJson(rsp, true, "任务创建成功", redirectUrl);
         } catch (IllegalArgumentException e) {
