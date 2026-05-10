@@ -83,7 +83,7 @@
                     }, 250);
                 }
 
-                function showToast(type, message, duration = 3000) {
+                function showToast(type, message, duration = 10000) {
                     const containerId = 'toast-container';
 
                     let container = document.getElementById(containerId);
