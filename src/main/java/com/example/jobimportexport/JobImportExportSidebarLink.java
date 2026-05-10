@@ -46,6 +46,10 @@ public class JobImportExportSidebarLink implements RootAction {
         return true;
     }
 
+    public boolean canCreateJob() {
+        return Jenkins.get().hasPermission(Item.CREATE);
+    }
+
     public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         String jobName = req.getParameter("job");
         if (jobName == null || jobName.isEmpty()) {

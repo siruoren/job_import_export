@@ -198,6 +198,7 @@
                 <div style="flex:1;">
                 </div>
 
+                <j:if test="${it.canCreateJob()}">
                 <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">导入任务配置</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
@@ -242,6 +243,11 @@
                         </table>
                     </form>
                 </div>
+                </j:if>
+                <j:if test="${!it.canCreateJob()}">
+                <div style="flex:1;">
+                </div>
+                </j:if>
 
                 <div style="flex:1;">
                 </div>
