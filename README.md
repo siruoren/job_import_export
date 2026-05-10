@@ -23,9 +23,9 @@
    ```bash
    mvn clean package -Denforcer.skip=true -DskipTests
    ```
-2. 生成的插件文件位于：`target/job-import-export.hpi`
+2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-1.0.2.hpi`）
 3. 进入 Jenkins **Manage Jenkins** → **Plugins** → **Advanced settings**
-4. 点击 **Deploy Plugin**，上传 `job-import-export.hpi` 文件
+4. 点击 **Deploy Plugin**，上传 `job-import-export-{version}.hpi` 文件
 5. 重启 Jenkins 使插件生效
 
 ### 方式二：手动构建
@@ -37,7 +37,7 @@ source ~/.bashrc  # 加载 Maven 环境变量
 mvn clean package -Denforcer.skip=true -DskipTests
 ```
 
-构建产物：`target/job-import-export.hpi`
+构建产物：`target/job-import-export-{version}.hpi`（带版本号）
 
 ---
 
@@ -208,6 +208,25 @@ async function safePost(form) {
 - ✅ 平滑动画过渡
 - ✅ 支持成功/错误/普通三种类型
 
+### 页面布局
+
+采用横向三栏布局设计：
+
+**任务/文件夹页面**（JobImportExportAction）：
+- 第一栏：导出当前配置
+- 第二栏：更新当前配置  
+- 第三栏：导入新任务（仅 Folder 显示，Job 页面显示空白）
+
+**侧边栏全局页面**（JobImportExportSidebarLink）：
+- 第一栏：空白
+- 第二栏：导入任务配置（居中显示）
+- 第三栏：空白
+
+布局特性：
+- 使用 Flexbox 布局，三栏等宽分配
+- 有功能显示内容，无功能显示空白占位
+- 自适应容器宽度，响应式设计
+
 ### 任务创建后的安全流程
 
 创建任务后执行以下三步确保 Jenkins 完全就绪：
@@ -343,4 +362,4 @@ MIT License
 ## 维护者
 
 - 项目归属：`com.example:job-import-export`
-- 版本：`1.0.1`
+- 版本：`1.0.2`
