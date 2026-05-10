@@ -11,7 +11,7 @@
 
     <groupId>com.example</groupId>
     <artifactId>job-import-export</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>hpi</packaging>
     <name>Job Import/Export Plugin</name>
     <description>Jenkins plugin for importing and exporting job configurations as XML files</description>
@@ -39,6 +39,7 @@
     </pluginRepositories>
 
     <build>
+        <finalName>${project.artifactId}-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.jenkins-ci.tools</groupId>

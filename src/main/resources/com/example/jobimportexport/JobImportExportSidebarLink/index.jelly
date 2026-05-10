@@ -4,32 +4,192 @@
         <l:main-panel>
             <h1>Jenkins 任务配置导入/导出</h1>
 
-            <!-- 确认弹窗 -->
-            <div id="modalOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;"></div>
-            <div id="modalBox" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:28px 32px;z-index:10000;min-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-                <h3 id="modalTitle" style="margin:0 0 8px 0;font-size:17px;color:#333;font-weight:600;"></h3>
-                <p style="margin:0;color:#666;font-size:14px;">确认后不可撤销，请谨慎操作。</p>
+            <div id="modalOverlay"
+                 style="display:none;
+                        position:fixed;
+                        inset:0;
+                        background:rgba(0,0,0,.45);
+                        z-index:9999;"></div>
+
+            <div id="modalBox"
+                 style="display:none;
+                        position:fixed;
+                        top:50%;
+                        left:50%;
+                        transform:translate(-50%,-50%);
+                        background:#fff;
+                        border-radius:10px;
+                        width:420px;
+                        padding:28px;
+                        z-index:10000;
+                        box-shadow:0 10px 40px rgba(0,0,0,.25);">
+
+                <h3 id="modalTitle"
+                    style="margin:0 0 10px;
+                           font-size:18px;
+                           color:#222;">
+                </h3>
+
+                <div id="modalContent"
+                     style="color:#666;
+                            line-height:1.7;
+                            font-size:14px;">
+                </div>
+
                 <div style="margin-top:24px;text-align:right;">
-                    <button type="button" onclick="hideModal()" class="jenkins-button" style="padding:7px 18px;margin-right:10px;">取消</button>
-                    <button type="button" onclick="confirmSubmit()" class="jenkins-button jenkins-button--primary" style="padding:7px 18px;">确认</button>
+                    <button type="button"
+                            class="jenkins-button"
+                            onclick="hideModal()">
+                        取消
+                    </button>
+
+                    <button type="button"
+                            class="jenkins-button jenkins-button--primary"
+                            onclick="confirmSubmit()">
+                        确认
+                    </button>
                 </div>
             </div>
+
             <script>
-                var currentFormId = null;
-                function showModal(message, formId) {
+                let currentFormId = null;
+
+                function setLoading(loading) {
+                    document.querySelectorAll('button').forEach(btn => {
+                        btn.disabled = loading;
+                    });
+
+                    if (loading) {
+                        document.body.style.cursor = 'wait';
+                    } else {
+                        document.body.style.cursor = '';
+                    }
+                }
+
+                function removeToast(toast) {
+                    if (!toast) return;
+
+                    if (toast._timer) {
+                        clearTimeout(toast._timer);
+                    }
+
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(-10px)';
+
+                    setTimeout(() => {
+                        if (toast.parentNode) {
+                            toast.parentNode.removeChild(toast);
+                        }
+                    }, 250);
+                }
+
+                function showToast(type, message, duration = 10000) {
+                    const containerId = 'toast-container';
+
+                    let container = document.getElementById(containerId);
+
+                    if (!container) {
+                        container = document.createElement('div');
+                        container.id = containerId;
+                        container.style.position = 'fixed';
+                        container.style.top = '24px';
+                        container.style.right = '24px';
+                        container.style.zIndex = '99999';
+                        document.body.appendChild(container);
+                    }
+
+                    const toast = document.createElement('div');
+
+                    toast.innerText = message;
+
+                    toast.style.marginBottom = '10px';
+                    toast.style.padding = '10px 14px';
+                    toast.style.borderRadius = '6px';
+                    toast.style.color = '#fff';
+                    toast.style.fontSize = '13px';
+                    toast.style.boxShadow = '0 6px 18px rgba(0,0,0,.15)';
+                    toast.style.cursor = 'pointer';
+                    toast.style.transition = 'all .3s ease';
+                    toast.style.opacity = '1';
+
+                    toast.style.background =
+                        type === 'success' ? '#28a745' :
+                        type === 'error' ? '#dc3545' :
+                        '#333';
+
+                    toast.onclick = () => removeToast(toast);
+
+                    container.appendChild(toast);
+
+                    toast._timer = setTimeout(() => {
+                        removeToast(toast);
+                    }, duration);
+                }
+
+                function showModal(title, content, formId) {
                     currentFormId = formId;
-                    document.getElementById('modalTitle').textContent = message;
+
+                    document.getElementById('modalTitle').innerText = title;
+                    document.getElementById('modalContent').innerHTML = content;
+
                     document.getElementById('modalOverlay').style.display = 'block';
                     document.getElementById('modalBox').style.display = 'block';
                 }
+
                 function hideModal() {
                     document.getElementById('modalOverlay').style.display = 'none';
                     document.getElementById('modalBox').style.display = 'none';
+
                     currentFormId = null;
                 }
-                function confirmSubmit() {
-                    if (currentFormId) {
-                        document.getElementById(currentFormId).submit();
+
+                async function confirmSubmit() {
+                    if (!currentFormId) {
+                        return;
+                    }
+
+                    const form = document.getElementById(currentFormId);
+
+                    const formData = new FormData(form);
+
+                    setLoading(true);
+
+                    try {
+                        const response = await fetch(form.action, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const text = await response.text();
+                        let result;
+
+                        try {
+                            result = JSON.parse(text);
+                        } catch (e) {
+                            hideModal();
+                            showToast('error', '服务器返回非JSON格式');
+                            return;
+                        }
+
+                        hideModal();
+
+                        if (result.success) {
+                            showToast('success', result.message);
+
+                            if (result.redirect) {
+                                setTimeout(() => {
+                                    window.location.href = result.redirect;
+                                }, 1200);
+                            }
+                        } else {
+                            showToast('error', result.message);
+                        }
+
+                    } catch (e) {
+                        hideModal();
+                        showToast('error', '请求失败：' + e);
+                    } finally {
+                        setLoading(false);
                     }
                 }
             </script>
@@ -67,7 +227,7 @@
                             <td></td>
                             <td style="padding-top: 8px;">
                                 <button type="button" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
-                                        onclick="var name=document.getElementById('jobName').value; showModal('是否确认创建任务「' + name + '」？', 'importForm')">
+                                        onclick="var name=document.getElementById('jobName').value; showModal('确认创建任务', '是否确认创建任务「' + name + '」？', 'importForm')">
                                     导入任务配置
                                 </button>
                             </td>

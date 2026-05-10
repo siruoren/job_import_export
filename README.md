@@ -131,6 +131,90 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | macOS            | ✅     |
 
 
+**行为规则**：
+| 场景            | 行为             |
+| ------------- | -------------- |
+| 更新普通 Job      | 自动 reload + 跳转 |
+| 更新 Folder     | 自动 reload + 跳转 |
+| 强制替换类型        | 自动 reload + 跳转 |
+| 更新后 rename    | 自动进入新名称页面      |
+| 中文任务名         | 正常             |
+| Folder 内 Job  | 正常             |
+| Pipeline Job  | 正常             |
+| Freestyle Job | 正常             |
+
+---
+
+## 技术架构
+
+### 后端统一 JSON 协议
+
+本插件采用统一的 JSON 响应协议，确保前后端通信一致：
+
+```json
+{
+  "success": true,
+  "message": "操作成功",
+  "redirect": "/job/myjob/jobImportExport"
+}
+```
+
+**响应字段说明**：
+- `success` - 操作是否成功（布尔值）
+- `message` - 提示信息（字符串）
+- `redirect` - 重定向 URL（成功时返回，失败时为 null）
+
+**后端实现原则**：
+- 禁止使用 `sendError()`、`sendRedirect2()`、直接 HTML 写入
+- 所有接口统一返回 JSON 格式
+- 使用 `writeJson()` 方法封装响应
+
+### 前端防御性解析
+
+前端采用防御性 JSON 解析策略，确保即使后端返回非 JSON 内容也能优雅处理：
+
+```javascript
+async function safePost(form) {
+    const res = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form)
+    });
+    
+    const text = await res.text();
+    
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        showToast('error', '服务器返回非JSON：' + text);
+        return;
+    }
+    
+    showToast(data.success ? 'success' : 'error', data.message);
+    
+    if (data.success && data.redirect) {
+        setTimeout(() => {
+            window.location.href = data.redirect;
+        }, 300);
+    }
+}
+```
+
+### Toast 组件
+
+采用标准可控生命周期的悬浮提示组件：
+- ✅ 自动消失（默认 10 秒）
+- ✅ 可点击手动关闭
+- ✅ 平滑动画过渡
+- ✅ 支持成功/错误/普通三种类型
+
+### 任务创建后的安全流程
+
+创建任务后执行以下三步确保 Jenkins 完全就绪：
+
+1. **Save** - 确保配置持久化到磁盘
+2. **Sync Reload** - 调用 `Jenkins.get().reload()` 同步重新加载（确保路由注册完成）
+3. **Safe Redirect** - 使用 `newItem.getUrl()` 生成安全的重定向 URL（确保绝对路径）
 
 ---
 
@@ -174,12 +258,14 @@ job_import_export/
 - `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示
 - `doImport()` — 在父目录下创建新任务
 - `canImportJobs()` — 控制「导入新任务」区域的显示
+- `writeJson()` — 统一 JSON 响应封装
 
 ### `JobImportExportSidebarLink`
 
 Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
-- 支持直接导入任务到指定路径（如 `folder/subfolder/job`）
-- 导入后自动触发 Jenkins 重载
+- `doExport()` — 全局导出任务配置
+- `doImport()` — 全局导入任务，支持指定路径
+- `writeJson()` — 统一 JSON 响应封装
 
 ---
 
@@ -195,7 +281,7 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - **HTTP Header 编码**：导出文件名使用 RFC 5987 标准（`filename*=`），兼容现代浏览器和 IE
 - **URL 重定向编码**：导入后重定向使用 `Util.rawEncode()` 处理中文路径
 - **请求参数解码**：使用 `ISO-8859-1` → `UTF-8` 重新转码（ Stapler 默认解析问题）
-- **Windows 文件名安全**：自动替换 `\\\\/*?\"<>|` 等非法字符
+- **Windows 文件名安全**：自动替换 `\\/*?"<>|` 等非法字符
 - **Jelly 页面编码**：所有表单添加 `accept-charset="UTF-8"`，Jelly 页面添加 `escape-by-default`
 
 这些修复确保在 Tomcat、Jetty、Windows Jenkins、Folder 嵌套等复杂环境下中文均能正常工作。
@@ -221,6 +307,15 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 如果目标目录下已存在同名任务，页面会显示友好提示，提供两个选项：
 - **返回重新命名** — 使用新的任务名称重新导入
 - **进入任务更新配置** — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置
+
+### Q: 为什么导入后有时会出现 404？
+
+Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现企业级安全流程：
+1. 创建任务后调用 `save()` 确保持久化
+2. 调用 `Jenkins.get().reload()` 同步重新加载（确保 Jenkins 完全注册新任务路由）
+3. 使用 `newItem.getUrl()` 生成安全重定向 URL（确保绝对路径，避免路径叠加）
+
+前端收到重定向后会延迟 300ms 再跳转，确保 Jenkins 完全就绪。
 
 ---
 
@@ -248,4 +343,4 @@ MIT License
 ## 维护者
 
 - 项目归属：`com.example:job-import-export`
-- 版本：`1.0.0-SNAPSHOT`
+- 版本：`1.0.1`
