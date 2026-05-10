@@ -28,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import org.jvnet.hudson.reactor.ReactorException;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,12 +73,10 @@ public class JobImportExportAction implements Action {
     }
 
     public boolean canImportJobs() {
-        // 当前对象必须是 Folder
         if (!(item instanceof ItemGroup) || item instanceof Job) {
             return false;
         }
 
-        // 特殊 Folder 不允许
         if (isSpecialFolder(item)) {
             return false;
         }
@@ -175,26 +174,7 @@ public class JobImportExportAction implements Action {
     public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         if (item instanceof AccessControlled) {
             if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
-                rsp.setContentType("text/html;charset=UTF-8");
-                rsp.setStatus(403);
-                try (java.io.PrintWriter writer = rsp.getWriter()) {
-                    writer.println("<!DOCTYPE html>");
-                    writer.println("<html><head><title>权限不足</title>");
-                    writer.println("<style>");
-                    writer.println("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:40px;}");
-                    writer.println(".card{max-width:600px;margin:0 auto;background:#fff;border:1px solid #dee2e6;border-radius:6px;padding:24px;}");
-                    writer.println("h2{color:#d9534f;margin-top:0;}");
-                    writer.println(".btn{display:inline-block;padding:8px 16px;background:#337ab7;color:#fff;text-decoration:none;border-radius:4px;}");
-                    writer.println(".btn:hover{background:#286090;}");
-                    writer.println(".hint{color:#666;font-size:14px;margin-top:16px;}");
-                    writer.println("</style></head><body>");
-                    writer.println("<div class='card'>");
-                    writer.println("<h2>配置更新失败：无权限</h2>");
-                    writer.println("<p>当前用户没有更新此任务配置的权限。</p>");
-                    writer.println("<p><a href='javascript:history.back()' class='btn'>返回</a></p>");
-                    writer.println("<p class='hint'>提示：请更换具有 <b>Item.CONFIGURE</b> 权限的登录用户后重试。</p>");
-                    writer.println("</div></body></html>");
-                }
+                writeJson(rsp, false, "无权限：当前用户没有更新此任务配置的权限", null);
                 return;
             }
         }
@@ -202,7 +182,7 @@ public class JobImportExportAction implements Action {
         FileItem fileItem = req.getFileItem("xmlFile");
 
         if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "请选择 XML 文件");
+            writeJson(rsp, false, "请选择 XML 文件", null);
             return;
         }
 
@@ -213,53 +193,44 @@ public class JobImportExportAction implements Action {
             is.read(fileContent);
         }
 
-        try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(fileContent)) {
-            try {
+        try {
+            try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(fileContent)) {
                 item.updateByXml(new StreamSource(bais));
-            } catch (IOException e) {
-                if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
-                    if ("true".equals(forceReplace)) {
-                        Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-                        Files.write(configFile, fileContent);
-                        rsp.sendRedirect2("../");
-                        return;
-                    }
-                    rsp.setContentType("text/html;charset=UTF-8");
-                    rsp.setStatus(400);
-                    try (java.io.PrintWriter writer = rsp.getWriter()) {
-                        writer.println("<!DOCTYPE html>");
-                        writer.println("<html><head><title>配置更新失败</title>");
-                        writer.println("<style>");
-                        writer.println("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:40px;}");
-                        writer.println(".card{max-width:600px;margin:0 auto;background:#fff;border:1px solid #dee2e6;border-radius:6px;padding:24px;}");
-                        writer.println("h2{color:#d9534f;margin-top:0;}");
-                        writer.println(".info{background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;padding:12px;margin:16px 0;font-family:monospace;font-size:13px;}");
-                        writer.println(".btn{display:inline-block;padding:8px 16px;background:#337ab7;color:#fff;text-decoration:none;border-radius:4px;}");
-                        writer.println(".btn:hover{background:#286090;}");
-                        writer.println(".hint{color:#666;font-size:14px;margin-top:16px;}");
-                        writer.println("</style></head><body>");
-                        writer.println("<div class='card'>");
-                        writer.println("<h2>配置更新失败：任务类型不匹配</h2>");
-                        writer.println("<p>当前任务的类型与导入的 XML 配置文件不匹配。</p>");
-                        writer.println("<div class='info'>");
-                        writer.println("当前任务类型：" + item.getClass().getName() + "<br/>");
-                        writer.println("错误详情：" + e.getMessage());
-                        writer.println("</div>");
-                        writer.println("<p><a href='javascript:history.back()' class='btn'>返回重新选择</a></p>");
-                        writer.println("<p class='hint'>提示：如果确认要强制替换配置文件，请勾选「强制替换」选项后重试。</p>");
-                        writer.println("</div></body></html>");
-                    }
+            }
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
+                if ("true".equals(forceReplace)) {
+                    Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+                    Files.write(configFile, fileContent);
+                } else {
+                    writeJson(rsp, false, "任务类型不匹配：" + e.getMessage(), null);
                     return;
                 }
-                throw e;
+            } else {
+                writeJson(rsp, false, "XML解析失败：" + e.getMessage(), null);
+                return;
             }
         }
 
-        rsp.sendRedirect2("../");
+        item.doReload();
+
+        AbstractItem refreshedItem =
+                (AbstractItem) Jenkins.get()
+                        .getItemByFullName(item.getFullName());
+
+        String redirectUrl = null;
+        if (refreshedItem != null) {
+            redirectUrl = req.getContextPath()
+                    + "/job/"
+                    + Util.rawEncode(refreshedItem.getFullName())
+                    .replace("%2F", "/job/");
+        }
+
+        writeJson(rsp, true, "更新成功", redirectUrl);
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
         rsp.setCharacterEncoding("UTF-8");
 
         String rawName = req.getParameter("jobName");
@@ -275,21 +246,21 @@ public class JobImportExportAction implements Action {
         }
 
         if (jobName == null) {
-            rsp.sendError(400, "任务名称不能为空");
+            writeJson(rsp, false, "任务名称不能为空", null);
             return;
         }
 
         FileItem fileItem = req.getFileItem("xmlFile");
 
         if (fileItem == null || fileItem.getSize() == 0) {
-            rsp.sendError(400, "请选择 XML 文件");
+            writeJson(rsp, false, "请选择 XML 文件", null);
             return;
         }
 
         ItemGroup<?> target = getImportTarget();
 
         if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            rsp.sendError(400, "当前目录不支持创建任务");
+            writeJson(rsp, false, "当前目录不支持创建任务", null);
             return;
         }
 
@@ -297,72 +268,64 @@ public class JobImportExportAction implements Action {
 
         if (itemGroup instanceof AccessControlled) {
             if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
-                rsp.setContentType("text/html;charset=UTF-8");
-                rsp.setStatus(403);
-                try (java.io.PrintWriter writer = rsp.getWriter()) {
-                    writer.println("<!DOCTYPE html>");
-                    writer.println("<html><head><title>权限不足</title>");
-                    writer.println("<style>");
-                    writer.println("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:40px;}");
-                    writer.println(".card{max-width:600px;margin:0 auto;background:#fff;border:1px solid #dee2e6;border-radius:6px;padding:24px;}");
-                    writer.println("h2{color:#d9534f;margin-top:0;}");
-                    writer.println(".btn{display:inline-block;padding:8px 16px;background:#337ab7;color:#fff;text-decoration:none;border-radius:4px;}");
-                    writer.println(".btn:hover{background:#286090;}");
-                    writer.println(".hint{color:#666;font-size:14px;margin-top:16px;}");
-                    writer.println("</style></head><body>");
-                    writer.println("<div class='card'>");
-                    writer.println("<h2>任务创建失败：无权限</h2>");
-                    writer.println("<p>当前用户没有在该目录创建任务的权限。</p>");
-                    writer.println("<p><a href='javascript:history.back()' class='btn'>返回</a></p>");
-                    writer.println("<p class='hint'>提示：请更换具有 <b>Item.CREATE</b> 权限的登录用户后重试。</p>");
-                    writer.println("</div></body></html>");
-                }
+                writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
                 return;
             }
         }
 
         if (Jenkins.get().getItemByFullName(buildFullName(jobName)) != null) {
-            rsp.setContentType("text/html;charset=UTF-8");
-            rsp.setStatus(400);
-            try (java.io.PrintWriter writer = rsp.getWriter()) {
-                writer.println("<!DOCTYPE html>");
-                writer.println("<html><head><title>任务创建失败</title>");
-                writer.println("<style>");
-                writer.println("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:40px;}");
-                writer.println(".card{max-width:600px;margin:0 auto;background:#fff;border:1px solid #dee2e6;border-radius:6px;padding:24px;}");
-                writer.println("h2{color:#d9534f;margin-top:0;}");
-                writer.println(".info{background:#f8f9fa;border:1px solid #e9ecef;border-radius:4px;padding:12px;margin:16px 0;font-family:monospace;font-size:13px;}");
-                writer.println(".btn{display:inline-block;padding:8px 16px;background:#337ab7;color:#fff;text-decoration:none;border-radius:4px;margin-right:8px;}");
-                writer.println(".btn:hover{background:#286090;}");
-                writer.println(".hint{color:#666;font-size:14px;margin-top:16px;}");
-                writer.println("</style></head><body>");
-                writer.println("<div class='card'>");
-                writer.println("<h2>任务创建失败：任务名称已存在</h2>");
-                writer.println("<p>在该目录下已存在同名任务。</p>");
-                writer.println("<div class='info'>");
-                writer.println("任务名称：" + jobName + "<br/>");
-                writer.println("所属目录：" + (target instanceof AbstractItem ? ((AbstractItem) target).getFullName() : "根目录") + "<br/>");
-                writer.println("全路径：" + buildFullName(jobName));
-                writer.println("</div>");
-                writer.println("<p><a href='javascript:history.back()' class='btn'>返回重新命名</a><a href='" + req.getContextPath() + "/job/" + buildFullName(jobName).replace("/", "/job/") + "/jobImportExport' class='btn'>进入任务更新配置</a></p>");
-                writer.println("<p class='hint'>提示：您可以使用新名称重新导入，或者进入已有任务页面更新其配置。</p>");
-                writer.println("</div></body></html>");
-            }
+            String fullPath = req.getContextPath() + "/job/" + buildFullName(jobName).replace("/", "/job/");
+            writeJson(rsp, false, "任务名称已存在：" + jobName, fullPath);
             return;
         }
 
         try (InputStream is = fileItem.getInputStream()) {
             TopLevelItem newItem = itemGroup.createProjectFromXML(jobName, is);
 
-            String redirectUrl = req.getContextPath()
-                    + "/job/"
-                    + Util.rawEncode(newItem.getFullName())
-                    .replace("%2F", "/job/");
+            newItem.save();
 
-            rsp.sendRedirect2(redirectUrl);
+            Jenkins.get().reload();
+
+            String redirectUrl = req.getContextPath()
+                    + newItem.getUrl()
+                    + "jobImportExport";
+
+            writeJson(rsp, true, "任务创建成功", redirectUrl);
         } catch (IllegalArgumentException e) {
-            rsp.sendError(400, "XML 配置非法: " + e.getMessage());
+            writeJson(rsp, false, "XML 配置非法：" + e.getMessage(), null);
         }
+    }
+
+    private void writeJson(
+            StaplerResponse rsp,
+            boolean success,
+            String message,
+            String redirect) throws IOException {
+
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        String json = "{"
+                + "\"success\":" + success + ","
+                + "\"message\":\"" + escapeJson(message) + "\","
+                + "\"redirect\":"
+                + (redirect == null
+                    ? "null"
+                    : "\"" + escapeJson(redirect) + "\"")
+                + "}";
+
+        rsp.getWriter().write(json);
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) {
+            return "";
+        }
+
+        return s
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "");
     }
 
     private String buildFullName(String jobName) {
@@ -386,6 +349,21 @@ public class JobImportExportAction implements Action {
     private static boolean isSpecialFolder(AbstractItem item) {
         String name = item.getClass().getName();
         return name.startsWith("jenkins.branch.") || name.contains("ComputedFolder");
+    }
+
+    private void reloadItem(AbstractItem target) throws IOException {
+        try {
+            target.onLoad(
+                    target.getParent(),
+                    target.getName()
+            );
+        } catch (Exception e) {
+            throw new IOException(
+                    "任务 Reload 失败: "
+                            + e.getMessage(),
+                    e
+            );
+        }
     }
 
     @Extension
