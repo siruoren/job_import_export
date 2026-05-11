@@ -61,8 +61,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 > **注意**：如果 XML 配置的类型与当前任务类型不匹配（例如尝试用 Freestyle 的配置覆盖 Pipeline 任务），系统会显示友好提示信息引导用户处理。
 >
 > **权限要求**：更新配置需要当前用户具有 `Item.CONFIGURE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
->
-> **重复任务名**：如果导入的任务名称已存在，页面会提示"任务名称已存在"，并提供「返回重新命名」和「进入任务更新配置」两个选项。
+
 
 ### 3. 导入新任务到当前目录
 
@@ -81,7 +80,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 >
 > **权限要求**：导入新任务需要当前用户具有 `Item.CREATE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
 >
-> **重复任务名**：如果该目录下已存在同名任务，页面会提示"任务名称已存在"，并提供「返回重新命名」和「进入任务更新配置」两个选项。
+> **重复任务名**：如果该目录下已存在同名任务，页面会提示"任务名称已存在"，并提示用户需要重新命名和进入任务更新配置。
 
 ### 4. 全局导入任务（侧边栏）
 
@@ -94,7 +93,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 >
 > **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
 >
-> **重复任务名**：如果指定路径已存在同名任务，会显示友好提示并提供「返回重新命名」和「进入任务更新配置」选项。
+> **重复任务名**：如果指定路径已存在同名任务，会显示友好提示用户需要重新命名和进入任务更新配置。
 
 ---
 
@@ -283,11 +282,11 @@ job_import_export/
 ├── README.md                                  # 本文档
 └── src/
     └── main/
-        ├── java/com/example/jobimportexport/
+        ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action（页面级）
         │   └── JobImportExportSidebarLink.java # 侧边栏全局入口
         └── resources/
-            └── com/example/jobimportexport/
+            └── com/siruoren/jobimportexport/
                 ├── JobImportExportAction/
                 │   └── index.jelly             # 任务/文件夹页面 UI
                 └── JobImportExportSidebarLink/
