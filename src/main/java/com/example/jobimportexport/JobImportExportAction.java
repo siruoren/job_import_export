@@ -139,8 +139,9 @@ public class JobImportExportAction implements Action {
         return result;
     }
 
-    public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        item.checkPermission(Item.READ);
+    public void doExport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            item.checkPermission(Item.READ);
 
         String fileName = item.getFullName()
                 .replaceAll("[\\\\/:*?\"<>|]", "_")
@@ -161,18 +162,33 @@ public class JobImportExportAction implements Action {
 
         Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
         if (!Files.exists(configFile)) {
-            rsp.sendError(404, "配置文件不存在");
+            writeJson(rsp, false, "配置文件不存在", null);
             return;
         }
 
-        try (OutputStream out = rsp.getOutputStream()) {
-            Files.copy(configFile, out);
+            try (OutputStream out = rsp.getOutputStream()) {
+                Files.copy(configFile, out);
+            }
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
     @RequirePOST
-    public void doUpdate(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        if (item instanceof AccessControlled) {
+    public void doUpdate(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            if (item instanceof AccessControlled) {
             if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
                 writeJson(rsp, false, "无权限：当前用户没有更新此任务配置的权限", null);
                 return;
@@ -223,27 +239,50 @@ public class JobImportExportAction implements Action {
             redirectUrl = Jenkins.get().getRootUrl() + refreshedItem.getUrl();
         }
 
-        writeJson(rsp, true, "更新成功", redirectUrl);
+            writeJson(rsp, true, "更新成功", redirectUrl);
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("更新失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
-        rsp.setCharacterEncoding("UTF-8");
+    public void doImport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            req.setCharacterEncoding("UTF-8");
+            rsp.setCharacterEncoding("UTF-8");
 
-        String rawName = req.getParameter("jobName");
-
-        String jobName = null;
-
-        if (rawName != null) {
-            jobName = new String(
-                    rawName.getBytes("ISO-8859-1"),
-                    "UTF-8");
-
-            jobName = Util.fixEmptyAndTrim(jobName);
-        }
+            String jobName = req.getParameter("jobName");
+            
+            if (jobName != null) {
+                try {
+                    byte[] bytes = jobName.getBytes("ISO-8859-1");
+                    jobName = new String(bytes, "UTF-8");
+                } catch (Exception e) {
+                }
+            }
+            
+            jobName = sanitizeJobName(jobName);
 
         if (jobName == null) {
             writeJson(rsp, false, "任务名称不能为空", null);
+            return;
+        }
+
+        try {
+            validateJobName(jobName);
+        } catch (IllegalArgumentException e) {
+            writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
             return;
         }
 
@@ -290,6 +329,20 @@ public class JobImportExportAction implements Action {
         } catch (IllegalArgumentException e) {
             writeJson(rsp, false, "XML 配置非法：" + e.getMessage(), null);
         }
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     private void writeJson(
@@ -298,6 +351,7 @@ public class JobImportExportAction implements Action {
             String message,
             String redirect) throws IOException {
 
+        rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
 
         String json = "{"
@@ -359,6 +413,50 @@ public class JobImportExportAction implements Action {
                             + e.getMessage(),
                     e
             );
+        }
+    }
+
+    private String sanitizeJobName(String name) {
+        if (name == null) {
+            return null;
+        }
+        name = name
+                .replace('\u00A0', ' ')
+                .replace('\u3000', ' ')
+                .trim();
+        return Util.fixEmptyAndTrim(name);
+    }
+
+    private void validateJobName(String jobName) {
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new IllegalArgumentException("任务名称不能为空");
+        }
+        
+        jobName = jobName.trim().replace('\u3000', ' ');
+        
+        if (!isValidUtf8(jobName)) {
+            throw new IllegalArgumentException("任务名称包含无效字符（可能是编码问题，请检查输入）");
+        }
+        
+        if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
+            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+        }
+        
+        if (jobName.length() > 200) {
+            throw new IllegalArgumentException("任务名称过长");
+        }
+    }
+
+    private boolean isValidUtf8(String str) {
+        if (str == null) {
+            return false;
+        }
+        try {
+            byte[] bytes = str.getBytes("UTF-8");
+            String decoded = new String(bytes, "UTF-8");
+            return str.equals(decoded);
+        } catch (Exception e) {
+            return false;
         }
     }
 

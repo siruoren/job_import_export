@@ -50,8 +50,9 @@ public class JobImportExportSidebarLink implements RootAction {
         return Jenkins.get().hasPermission(Item.CREATE);
     }
 
-    public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        String jobName = req.getParameter("job");
+    public void doExport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            String jobName = req.getParameter("job");
         if (jobName == null || jobName.isEmpty()) {
             writeJson(rsp, false, "任务名称不能为空", null);
             return;
@@ -94,13 +95,29 @@ public class JobImportExportSidebarLink implements RootAction {
                 + "filename*=UTF-8''"
                 + encodedFileName);
 
-        try (OutputStream out = rsp.getOutputStream()) {
-            Files.copy(configFile, out);
+            try (OutputStream out = rsp.getOutputStream()) {
+                Files.copy(configFile, out);
+            }
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+    public void doImport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            req.setCharacterEncoding("UTF-8");
         rsp.setCharacterEncoding("UTF-8");
 
         FileItem fileItem = req.getFileItem("xmlFile");
@@ -109,20 +126,27 @@ public class JobImportExportSidebarLink implements RootAction {
             return;
         }
 
-        String rawName = req.getParameter("jobName");
-
-        String jobName = null;
-
-        if (rawName != null) {
-            jobName = new String(
-                    rawName.getBytes("ISO-8859-1"),
-                    "UTF-8");
-
-            jobName = Util.fixEmptyAndTrim(jobName);
+        String jobName = req.getParameter("jobName");
+        
+        if (jobName != null) {
+            try {
+                byte[] bytes = jobName.getBytes("ISO-8859-1");
+                jobName = new String(bytes, "UTF-8");
+            } catch (Exception e) {
+            }
         }
+        
+        jobName = sanitizeJobName(jobName);
 
         if (jobName == null) {
             writeJson(rsp, false, "任务名称不能为空", null);
+            return;
+        }
+
+        try {
+            validateJobName(jobName);
+        } catch (IllegalArgumentException e) {
+            writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
             return;
         }
 
@@ -178,7 +202,21 @@ public class JobImportExportSidebarLink implements RootAction {
 
         String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
 
-        writeJson(rsp, true, "任务创建成功", redirectUrl);
+            writeJson(rsp, true, "任务创建成功", redirectUrl);
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     private void writeJson(
@@ -187,6 +225,7 @@ public class JobImportExportSidebarLink implements RootAction {
             String message,
             String redirect) throws IOException {
 
+        rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
 
         String json = "{"
@@ -211,5 +250,62 @@ public class JobImportExportSidebarLink implements RootAction {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "");
+    }
+
+    private String sanitizeJobName(String name) {
+        if (name == null) {
+            return null;
+        }
+        name = name
+                .replace('\u00A0', ' ')
+                .replace('\u3000', ' ')
+                .trim();
+        return Util.fixEmptyAndTrim(name);
+    }
+
+    private void validateJobName(String jobName) {
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new IllegalArgumentException("任务名称不能为空");
+        }
+        
+        jobName = jobName.trim().replace('\u3000', ' ');
+        
+        if (!isValidUtf8(jobName)) {
+            throw new IllegalArgumentException("任务名称包含无效字符（可能是编码问题，请检查输入）");
+        }
+        
+        if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
+            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+        }
+        
+        if (jobName.length() > 200) {
+            throw new IllegalArgumentException("任务名称过长");
+        }
+    }
+
+    private boolean isValidUtf8(String str) {
+        if (str == null) {
+            return false;
+        }
+        try {
+            byte[] bytes = str.getBytes("UTF-8");
+            String decoded = new String(bytes, "UTF-8");
+            return str.equals(decoded);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean containsControlCharacters(byte[] content) {
+        if (content == null) {
+            return false;
+        }
+        for (byte b : content) {
+            int value = b & 0xFF;
+            if (value >= 0 && value <= 31 && value != 9 && value != 10 && value != 13) {
+                return true;
+            }
+        }
+        return false;
     }
 }
