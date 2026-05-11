@@ -202,7 +202,6 @@ public class JobImportExportAction implements Action {
             return;
         }
 
-        String forceReplace = req.getParameter("forceReplace");
 
         byte[] fileContent = new byte[(int) fileItem.getSize()];
         try (InputStream is = fileItem.getInputStream()) {
@@ -215,13 +214,10 @@ public class JobImportExportAction implements Action {
             }
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
-                if ("true".equals(forceReplace)) {
-                    Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-                    Files.write(configFile, fileContent);
-                } else {
-                    writeJson(rsp, false, "任务类型不匹配：" + e.getMessage(), null);
-                    return;
-                }
+   
+                writeJson(rsp, false, "任务类型不匹配：" + e.getMessage() + "\n\n请确认任务类型是否匹配后重试。", null);
+                return;
+
             } else {
                 writeJson(rsp, false, "XML解析失败：" + e.getMessage(), null);
                 return;

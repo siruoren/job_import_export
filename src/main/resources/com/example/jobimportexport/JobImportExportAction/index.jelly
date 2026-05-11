@@ -228,11 +228,6 @@
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <label style="font-weight:500; color:#333; font-size:14px;">
-                                        <input type="checkbox" name="forceReplace" id="forceReplace" value="true"
-                                               style="margin-right:8px;" />
-                                        强制替换
-                                    </label>
                                     <p class="description" style="margin-top:8px; color:#666; font-size:12px;">当 XML 文件类型与当前任务类型不匹配时，强制替换配置文件（可能导致任务无法正常运行）</p>
                                 </td>
                             </tr>
