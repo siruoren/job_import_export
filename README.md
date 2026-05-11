@@ -251,16 +251,45 @@ async function safePost(form) {
 
 ### 中文任务名处理机制
 
-插件对中文任务名采用特殊处理，确保正确传递到 Jenkins：
+插件对中文任务名采用标准 UTF-8 处理，确保正确传递到 Jenkins：
 
-1. **编码转换**：获取任务名后强制进行 ISO-8859-1 → UTF-8 转换，解决 Servlet 默认解码问题
-2. **有效性验证**：通过 UTF-8 编码往返验证确保任务名编码正确
-3. **兼容性处理**：兼容浏览器发送 UTF-8 但 Servlet 默认用 ISO-8859-1 解码的场景
+1. **标准编码**：通过 `req.setCharacterEncoding("UTF-8")` 显式设置请求编码，直接从 Stapler 获取 UTF-8 参数
+2. **控制字符检测**：使用 `Character.isISOControl()` 准确检测真正的控制字符（ASCII 0-31, 127-159），不会误伤中文、emoji 或其他 Unicode 字符
+3. **XML 清理**：导入前自动清理 XML 文件中的非法控制字符（\x00-\x08, \x0B, \x0C, \x0E-\x1F），保留合法的换行符和制表符
 
 **处理流程**：
 ```
-浏览器输入中文 → UTF-8 编码发送 → Servlet 用 ISO-8859-1 解码（乱码）→ 强制 ISO-8859-1→UTF-8 转换 → 恢复正确中文 → Jenkins 创建任务
+浏览器输入中文 → UTF-8 编码发送 → req.setCharacterEncoding("UTF-8") → 正确获取中文 → 控制字符检测（不误伤中文） → XML 清理 → Jenkins 创建任务
 ```
+
+### XML 控制字符清理机制
+
+插件在导入 XML 配置时会自动清理非法控制字符，确保 Jenkins 能够正确解析：
+
+**清理规则**：
+- 移除非法控制字符：`\x00-\x08`、`\x0B`、`\x0C`、`\x0E-\x1F`
+- 保留合法字符：换行符（`\x0A`）、制表符（`\x09`）、回车符（`\x0D`）
+- 使用 UTF-8 编码处理，避免编码转换问题
+
+**技术实现**：
+```java
+private InputStream cleanXml(InputStream is) throws IOException {
+    String xml = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
+    return new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+}
+```
+
+**问题根源**：
+- XML 文件可能包含不可见的控制字符（来自 Windows 复制、Notepad++ 错误编码、API 拼接等）
+- Jenkins 内部在解析 XML 时遇到控制字符会抛出异常
+- 这些控制字符与中文无关，是 XML 文件本身的问题
+
+**效果**：
+- ✅ 中文、emoji 等合法 Unicode 字符不会被误伤
+- ✅ XML 中的非法控制字符会被自动清理
+- ✅ 不再有 UTF-8/ISO-8859-1 的混乱转换
+- ✅ 使用标准库方法进行准确的字符检测
 
 ---
 
@@ -361,11 +390,16 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 
 插件在导入新任务时会自动清洗和校验任务名称：
 - **自动去除**：前后普通空格、全角空格（中文输入法空格）、不间断空格（`&nbsp;`）
-- **合法性校验**：使用插件内置安全规则校验，**完全支持中文任务名**，仅禁止以下危险字符和模式：
+- **合法性校验**：使用 Java 标准库 `Character.isISOControl()` 进行安全校验，**完全支持中文任务名**，仅禁止以下危险字符和模式：
   - 文件系统危险字符：`\`、`/`、`*`、`?`、`"`、`>`、`<`、`|`、`:`
-  - 控制字符（ASCII 0-31）
+  - 控制字符（ASCII 0-31 和 127-159，使用 `Character.isISOControl()` 准确检测）
   - 长度超过 200 个字符
   - 空字符串或纯空格
+
+**技术说明**：
+- 使用 `Character.isISOControl()` 方法准确检测真正的控制字符，不会误伤中文、emoji 或其他 Unicode 字符
+- 不再使用正则表达式 `\x00-\x1F` 进行检测，避免误伤 UTF-16 代理字符和非 BMP 字符
+- 中文、英文、数字、emoji、下划线、连字符、点号等均为安全字符，可正常使用
 
 **解决方法**：使用符合常规文件命名规范的任务名称。中文、字母、数字、下划线、连字符、点号等均为安全字符，可正常使用。
 

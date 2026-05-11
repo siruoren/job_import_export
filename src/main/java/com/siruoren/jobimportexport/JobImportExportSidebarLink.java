@@ -19,6 +19,7 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -193,7 +194,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         TopLevelItem newItem;
         try (InputStream is = fileItem.getInputStream()) {
-            newItem = itemGroup.createProjectFromXML(actualJobName, is);
+            newItem = itemGroup.createProjectFromXML(actualJobName, cleanXml(is));
         }
 
         newItem.save();
@@ -270,8 +271,12 @@ public class JobImportExportSidebarLink implements RootAction {
         
         jobName = jobName.trim().replace('\u3000', ' ');
         
-        if (!isValidUtf8(jobName)) {
-            throw new IllegalArgumentException("任务名称包含无效字符（可能是编码问题，请检查输入）");
+        for (int i = 0; i < jobName.length(); i++) {
+            char c = jobName.charAt(i);
+            
+            if (Character.isISOControl(c)) {
+                throw new IllegalArgumentException("任务名称包含非法控制字符");
+            }
         }
         
         if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
@@ -280,19 +285,6 @@ public class JobImportExportSidebarLink implements RootAction {
         
         if (jobName.length() > 200) {
             throw new IllegalArgumentException("任务名称过长");
-        }
-    }
-
-    private boolean isValidUtf8(String str) {
-        if (str == null) {
-            return false;
-        }
-        try {
-            byte[] bytes = str.getBytes("UTF-8");
-            String decoded = new String(bytes, "UTF-8");
-            return str.equals(decoded);
-        } catch (Exception e) {
-            return false;
         }
     }
 
@@ -307,5 +299,13 @@ public class JobImportExportSidebarLink implements RootAction {
             }
         }
         return false;
+    }
+
+    private InputStream cleanXml(InputStream is) throws IOException {
+        String xml = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        
+        xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
+        
+        return new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
     }
 }
