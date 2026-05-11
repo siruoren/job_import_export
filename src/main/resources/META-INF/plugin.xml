@@ -2,10 +2,10 @@
 <plugin>
     <extension name="Job Import/Export Sidebar Link" 
                point="hudson.model.RootAction">
-        <instance class="com.example.jobimportexport.JobImportExportSidebarLink"/>
+        <instance class="com.siruoren.jobimportexport.JobImportExportSidebarLink"/>
     </extension>
     <extension name="Job Import/Export Action Factory" 
                point="jenkins.model.TransientActionFactory">
-        <instance class="com.example.jobimportexport.JobImportExportAction$Factory"/>
+        <instance class="com.siruoren.jobimportexport.JobImportExportAction$Factory"/>
     </extension>
 </plugin>

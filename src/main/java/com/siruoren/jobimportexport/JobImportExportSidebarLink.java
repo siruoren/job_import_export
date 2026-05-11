@@ -1,4 +1,4 @@
-package com.example.jobimportexport;
+package com.siruoren.jobimportexport;
 
 import hudson.Extension;
 import hudson.Util;
@@ -19,6 +19,7 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -46,8 +47,13 @@ public class JobImportExportSidebarLink implements RootAction {
         return true;
     }
 
-    public void doExport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        String jobName = req.getParameter("job");
+    public boolean canCreateJob() {
+        return Jenkins.get().hasPermission(Item.CREATE);
+    }
+
+    public void doExport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            String jobName = req.getParameter("job");
         if (jobName == null || jobName.isEmpty()) {
             writeJson(rsp, false, "任务名称不能为空", null);
             return;
@@ -90,13 +96,29 @@ public class JobImportExportSidebarLink implements RootAction {
                 + "filename*=UTF-8''"
                 + encodedFileName);
 
-        try (OutputStream out = rsp.getOutputStream()) {
-            Files.copy(configFile, out);
+            try (OutputStream out = rsp.getOutputStream()) {
+                Files.copy(configFile, out);
+            }
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException, InterruptedException, ReactorException {
+    public void doImport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            req.setCharacterEncoding("UTF-8");
         rsp.setCharacterEncoding("UTF-8");
 
         FileItem fileItem = req.getFileItem("xmlFile");
@@ -105,20 +127,42 @@ public class JobImportExportSidebarLink implements RootAction {
             return;
         }
 
-        String rawName = req.getParameter("jobName");
-
-        String jobName = null;
-
-        if (rawName != null) {
-            jobName = new String(
-                    rawName.getBytes("ISO-8859-1"),
-                    "UTF-8");
-
-            jobName = Util.fixEmptyAndTrim(jobName);
+        String jobName = req.getParameter("jobName");
+        
+        if (jobName != null) {
+            try {
+                byte[] bytes = jobName.getBytes("ISO-8859-1");
+                jobName = new String(bytes, "UTF-8");
+            } catch (Exception e) {
+            }
         }
+        
+        jobName = sanitizeJobName(jobName);
 
         if (jobName == null) {
             writeJson(rsp, false, "任务名称不能为空", null);
+            return;
+        }
+
+        try {
+            validateJobName(jobName);
+        } catch (Exception e) {
+
+            String msg = e.getMessage();
+
+            if (msg == null || msg.trim().isEmpty()) {
+                msg = e.getClass().getSimpleName();
+            }
+
+            msg = msg.replaceAll("[\\r\\n]", " ");
+
+            writeJson(
+                    rsp,
+                    false,
+                    "导入失败：" + msg,
+                    null
+            );
+
             return;
         }
 
@@ -133,10 +177,10 @@ public class JobImportExportSidebarLink implements RootAction {
             actualJobName = jobName.substring(idx + 1);
         }
 
-        String fullJobName = jobName;
-        if (jenkins.getItemByFullName(fullJobName) != null) {
-            String fullPath = req.getContextPath() + "/job/" + fullJobName.replace("/", "/job/") + "/jobImportExport";
-            writeJson(rsp, false, "任务名称已存在：" + jobName, fullPath);
+        Item existingItem = jenkins.getItemByFullName(jobName);
+        if (existingItem != null) {
+            String fullPath = Jenkins.get().getRootUrl() + existingItem.getUrl() + "jobImportExport";
+            writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
             return;
         }
 
@@ -165,20 +209,30 @@ public class JobImportExportSidebarLink implements RootAction {
 
         TopLevelItem newItem;
         try (InputStream is = fileItem.getInputStream()) {
-            newItem = itemGroup.createProjectFromXML(actualJobName, is);
+            newItem = itemGroup.createProjectFromXML(actualJobName, cleanXml(is));
         }
 
         newItem.save();
 
         Jenkins.get().reload();
 
-        String url = newItem.getUrl();
-        if (!url.startsWith("/")) {
-            url = "/" + url;
-        }
-        String redirectUrl = url;
+        String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
 
-        writeJson(rsp, true, "任务创建成功", redirectUrl);
+            writeJson(rsp, true, "任务创建成功", redirectUrl);
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     private void writeJson(
@@ -187,6 +241,7 @@ public class JobImportExportSidebarLink implements RootAction {
             String message,
             String redirect) throws IOException {
 
+        rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
 
         String json = "{"
@@ -211,5 +266,61 @@ public class JobImportExportSidebarLink implements RootAction {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "");
+    }
+
+    private String sanitizeJobName(String name) {
+        if (name == null) {
+            return null;
+        }
+        name = name
+                .replace('\u00A0', ' ')
+                .replace('\u3000', ' ')
+                .trim();
+        return Util.fixEmptyAndTrim(name);
+    }
+
+    private void validateJobName(String jobName) {
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new IllegalArgumentException("任务名称不能为空");
+        }
+        
+        jobName = jobName.trim().replace('\u3000', ' ');
+        
+        for (int i = 0; i < jobName.length(); i++) {
+            char c = jobName.charAt(i);
+            
+            if (Character.isISOControl(c)) {
+                throw new IllegalArgumentException("任务名称包含非法控制字符");
+            }
+        }
+        
+        if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
+            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+        }
+        
+        if (jobName.length() > 200) {
+            throw new IllegalArgumentException("任务名称过长");
+        }
+    }
+
+    private boolean containsControlCharacters(byte[] content) {
+        if (content == null) {
+            return false;
+        }
+        for (byte b : content) {
+            int value = b & 0xFF;
+            if (value >= 0 && value <= 31 && value != 9 && value != 10 && value != 13) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private InputStream cleanXml(InputStream is) throws IOException {
+        String xml = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        
+        xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
+        
+        return new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
     }
 }

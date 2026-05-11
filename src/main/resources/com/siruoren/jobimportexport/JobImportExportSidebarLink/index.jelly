@@ -194,46 +194,63 @@
                 }
             </script>
 
-            <div style="margin-bottom: 24px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
-                <h2 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #333;">导入任务配置</h2>
-                <p style="margin-bottom: 16px; color: #666;">上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
-                <form method="post" action="import" enctype="multipart/form-data" accept-charset="UTF-8" id="importForm" style="text-align: left;">
-                    <table class="form" style="width: 100%;">
-                        <tr>
-                            <td class="label" style="width: 180px; padding-right: 12px;">
-                                <label for="jobName" style="font-weight: 500; color: #333;">任务/文件夹名称</label>
-                            </td>
-                            <td style="padding-bottom: 12px;">
-                                <input type="text" name="jobName" id="jobName"
-                                       class="setting-input" required="true"
-                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;" />
-                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">新任务的名称，如果要放在文件夹下，请使用 "文件夹/任务名" 格式</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label" style="width: 180px; padding-right: 12px;">
-                                <label for="xmlFile" style="font-weight: 500; color: #333;">XML配置文件</label>
-                            </td>
-                            <td style="padding-bottom: 12px;">
-                                <input type="file" name="xmlFile" id="xmlFile"
-                                       accept=".xml" required="true"
-                                       style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 400px;"
-                                       onchange="document.getElementById('fileName').textContent = this.files[0]?.name || '';" />
-                                <span class="description" style="margin-left: 10px; color: #666; font-size: 13px;">Jenkins 任务配置的 XML 文件</span>
-                                <span id="fileName" style="margin-left: 10px; color: #337ab7; font-size: 13px;"></span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td></td>
-                            <td style="padding-top: 8px;">
-                                <button type="button" class="jenkins-button jenkins-button--primary" style="padding: 8px 16px;"
-                                        onclick="var name=document.getElementById('jobName').value; showModal('确认创建任务', '是否确认创建任务「' + name + '」？', 'importForm')">
-                                    导入任务配置
-                                </button>
-                            </td>
-                        </tr>
-                    </table>
-                </form>
+            <div style="display:flex; gap:24px; width:100%;">
+                <div style="flex:1;">
+                </div>
+
+                <j:if test="${it.canCreateJob()}">
+                <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">导入任务配置</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">上传 Jenkins 任务配置 XML 文件来创建新任务。</p>
+                    <form method="post" action="import" enctype="multipart/form-data" accept-charset="UTF-8" id="importForm" style="text-align:left;">
+                        <table class="form" style="width:100%;">
+                            <tr>
+                                <td class="label" style="width:100%; padding-bottom:12px;">
+                                    <label for="jobName" style="font-weight:500; color:#333; font-size:14px;">任务/文件夹名称</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:12px;">
+                                    <input type="text" name="jobName" id="jobName"
+                                           class="setting-input" required="true"
+                                           style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;" />
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">新任务的名称，如果要放在文件夹下，请使用 "文件夹/任务名" 格式</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:12px;">
+                                    <label for="xmlFile" style="font-weight:500; color:#333; font-size:14px;">XML配置文件</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:12px;">
+                                    <input type="file" name="xmlFile" id="xmlFile"
+                                           accept=".xml" required="true"
+                                           style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;"
+                                           onchange="document.getElementById('fileName').textContent = this.files[0]?.name || '';" />
+                                    <span id="fileName" style="margin-left:10px; color:#337ab7; font-size:13px;"></span>
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">Jenkins 任务配置的 XML 文件</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-top:8px;">
+                                    <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
+                                            onclick="var name=document.getElementById('jobName').value; showModal('确认创建任务', '是否确认创建任务「' + name + '」？', 'importForm')">
+                                        导入任务配置
+                                    </button>
+                                </td>
+                            </tr>
+                        </table>
+                    </form>
+                </div>
+                </j:if>
+                <j:if test="${!it.canCreateJob()}">
+                <div style="flex:1;">
+                </div>
+                </j:if>
+
+                <div style="flex:1;">
+                </div>
             </div>
         </l:main-panel>
     </l:layout>
