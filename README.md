@@ -129,16 +129,17 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | 导出配置 | 所有页面 | `Item.READ` | 始终显示（后端接口仍做权限校验）|
 
 **兼容性**：
-| 浏览器              | 中文文件名 |
-| ---------------- | ----- |
-| Chrome           | ✅     |
-| Edge             | ✅     |
-| Safari           | ✅     |
-| Firefox          | ✅     |
-| Jenkins 内嵌 Jetty | ✅     |
-| Windows          | ✅     |
-| Linux            | ✅     |
-| macOS            | ✅     |
+| 浏览器/部署方式       | 中文文件名 | 非 ROOT 部署 |
+| ------------------- | ----- | ----------- |
+| Chrome              | ✅     | ✅          |
+| Edge                | ✅     | ✅          |
+| Safari              | ✅     | ✅          |
+| Firefox             | ✅     | ✅          |
+| Jenkins 内嵌 Jetty  | ✅     | ✅          |
+| Tomcat 部署         | ✅     | ✅          |
+| Windows             | ✅     | ✅          |
+| Linux               | ✅     | ✅          |
+| macOS               | ✅     | ✅          |
 
 
 **行为规则**：
@@ -243,7 +244,7 @@ async function safePost(form) {
 
 1. **Save** - 确保配置持久化到磁盘
 2. **Sync Reload** - 调用 `Jenkins.get().reload()` 同步重新加载（确保路由注册完成）
-3. **Safe Redirect** - 使用 `newItem.getUrl()` 生成安全的重定向 URL（确保绝对路径）
+3. **Safe Redirect** - 使用 `newItem.getUrl()` 生成安全的重定向 URL（Jenkins 内部已处理编码和路径规则），拼接 `req.getContextPath()` 兼容 Tomcat 非 ROOT 部署
 
 ---
 
@@ -284,8 +285,8 @@ job_import_export/
 
 绑定到每个 `AbstractItem`（Job/Folder）页面的 Action，提供以下功能：
 - `doExport()` — 导出当前配置的 XML 文件
-- `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示
-- `doImport()` — 在父目录下创建新任务
+- `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示；成功后使用 `refreshedItem.getUrl()` 生成安全的重定向 URL
+- `doImport()` — 在父目录下创建新任务；成功后使用 `newItem.getUrl()` 生成安全的重定向 URL
 - `canImportJobs()` — 控制「导入新任务」区域的显示（按类型）
 - `canCreateJob()` — 控制「导入新任务」区域的显示（按 `Item.CREATE` 权限）
 - `hasPermission()` — 控制「更新配置」区域的显示（按 `Item.CONFIGURE` 权限）
@@ -295,7 +296,7 @@ job_import_export/
 
 Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `doExport()` — 全局导出任务配置
-- `doImport()` — 全局导入任务，支持指定路径
+- `doImport()` — 全局导入任务，支持指定路径；成功后使用 `newItem.getUrl()` 生成安全的重定向 URL
 - `canCreateJob()` — 控制「导入任务配置」区域的显示（按 `Item.CREATE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
 
@@ -315,12 +316,12 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 
 本插件针对 Jenkins 中文场景做了专项优化：
 - **HTTP Header 编码**：导出文件名使用 RFC 5987 标准（`filename*=`），兼容现代浏览器和 IE
-- **URL 重定向编码**：导入后重定向使用 `Util.rawEncode()` 处理中文路径
+- **URL 重定向**：导入/更新后重定向直接使用 `item.getUrl()`（Jenkins 内部已处理编码和路径规则），避免手动拼接导致的重复编码或特殊字符丢失
 - **请求参数解码**：使用 `ISO-8859-1` → `UTF-8` 重新转码（ Stapler 默认解析问题）
 - **Windows 文件名安全**：自动替换 `\\/*?"<>|` 等非法字符
 - **Jelly 页面编码**：所有表单添加 `accept-charset="UTF-8"`，Jelly 页面添加 `escape-by-default`
 
-这些修复确保在 Tomcat、Jetty、Windows Jenkins、Folder 嵌套等复杂环境下中文均能正常工作。
+这些修复确保在 Tomcat、Jetty、Windows Jenkins、Folder 嵌套、Multibranch 等复杂环境下中文均能正常工作。
 
 ### Q: 更新配置时提示「任务类型不匹配」怎么办？
 
@@ -349,9 +350,12 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现企业级安全流程：
 1. 创建任务后调用 `save()` 确保持久化
 2. 调用 `Jenkins.get().reload()` 同步重新加载（确保 Jenkins 完全注册新任务路由）
-3. 使用 `newItem.getUrl()` 生成安全重定向 URL（确保绝对路径，避免路径叠加）
+3. 使用 `newItem.getUrl()` 生成安全重定向 URL（Jenkins 内部已处理编码和路径规则）
+4. 拼接 `req.getContextPath()` 确保兼容 Tomcat 非 ROOT 部署（如 `/jenkins`）
 
 前端收到重定向后会延迟 300ms 再跳转，确保 Jenkins 完全就绪。
+
+早期版本手动拼接 `/job/xxx` 或对 URL 进行二次编码，导致中文任务名在 Tomcat 下出现 `%25` 双重编码或路径错误，现已统一修复。
 
 ---
 

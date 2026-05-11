@@ -139,7 +139,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         String fullJobName = jobName;
         if (jenkins.getItemByFullName(fullJobName) != null) {
-            String fullPath = req.getContextPath() + "/job/" + fullJobName.replace("/", "/job/") + "/jobImportExport";
+            String fullPath = req.getContextPath() + "/job/" + Util.rawEncode(fullJobName).replace("%2F", "/job/") + "/jobImportExport";
             writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
             return;
         }
@@ -180,7 +180,7 @@ public class JobImportExportSidebarLink implements RootAction {
         if (!url.startsWith("/")) {
             url = "/" + url;
         }
-        String redirectUrl = url;
+        String redirectUrl = req.getContextPath() + url;
 
         writeJson(rsp, true, "任务创建成功", redirectUrl);
     }
