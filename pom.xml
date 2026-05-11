@@ -9,7 +9,7 @@
         <relativePath />
     </parent>
 
-    <groupId>com.example</groupId>
+    <groupId>com.siruoren</groupId>
     <artifactId>job-import-export</artifactId>
     <version>1.0.2-SNAPSHOT</version>
     <packaging>hpi</packaging>

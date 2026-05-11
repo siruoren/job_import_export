@@ -1,4 +1,4 @@
-package com.example.jobimportexport;
+package com.siruoren.jobimportexport;
 
 import hudson.Extension;
 import hudson.Util;

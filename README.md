@@ -418,5 +418,5 @@ mvn test
 
 ## 维护者
 
-- 项目归属：`com.example:job-import-export`
+- 项目归属：`com.siruoren:job-import-export`
 - 版本：`1.0.2`
