@@ -146,8 +146,23 @@ public class JobImportExportSidebarLink implements RootAction {
 
         try {
             validateJobName(jobName);
-        } catch (IllegalArgumentException e) {
-            writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
+        } catch (Exception e) {
+
+            String msg = e.getMessage();
+
+            if (msg == null || msg.trim().isEmpty()) {
+                msg = e.getClass().getSimpleName();
+            }
+
+            msg = msg.replaceAll("[\\r\\n]", " ");
+
+            writeJson(
+                    rsp,
+                    false,
+                    "导入失败：" + msg,
+                    null
+            );
+
             return;
         }
 

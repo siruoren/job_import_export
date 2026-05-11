@@ -260,14 +260,13 @@ public class JobImportExportAction implements Action {
             rsp.setCharacterEncoding("UTF-8");
 
             String jobName = req.getParameter("jobName");
-            
             if (jobName != null) {
                 try {
                     byte[] bytes = jobName.getBytes("ISO-8859-1");
                     jobName = new String(bytes, "UTF-8");
                 } catch (Exception e) {
                 }
-            }
+            }            
             
             jobName = sanitizeJobName(jobName);
 
@@ -278,7 +277,7 @@ public class JobImportExportAction implements Action {
 
         try {
             validateJobName(jobName);
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
             return;
         }
@@ -323,9 +322,25 @@ public class JobImportExportAction implements Action {
             String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
 
             writeJson(rsp, true, "任务创建成功", redirectUrl);
-        } catch (IllegalArgumentException e) {
-            writeJson(rsp, false, "XML 配置非法：" + e.getMessage(), null);
-        }
+            } catch (Exception e) {
+
+                String msg = e.getMessage();
+
+                if (msg == null || msg.trim().isEmpty()) {
+                    msg = e.getClass().getSimpleName();
+                }
+
+                msg = msg.replaceAll("[\\r\\n]", " ");
+
+                writeJson(
+                        rsp,
+                        false,
+                        "导入失败：" + msg,
+                        null
+                );
+
+                return;
+            }
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
                 try {
