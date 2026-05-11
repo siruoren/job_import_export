@@ -228,7 +228,7 @@
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">当 XML 文件类型与当前任务类型不匹配时，强制替换配置文件（可能导致任务无法正常运行）</p>
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">当 XML 文件类型与当前任务类型不匹配时，会导致更新失败。</p>
                                 </td>
                             </tr>
                             <tr>
