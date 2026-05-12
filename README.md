@@ -1,6 +1,6 @@
 # Jenkins 任务导入导出插件 (Job Import/Export Plugin)
 
-一个 Jenkins 插件，用于便捷地导入、导出和更新 Jenkins 任务的 XML 配置。
+一个 Jenkins 插件，用于便捷地导入、导出和更新 Jenkins 任务的 XML 配置，支持批量导入、多层目录、dryRun 预演等企业级功能。
 
 ---
 
@@ -12,6 +12,7 @@
 | **更新配置** | 每个任务/文件夹页面 | 上传新的 XML 配置文件覆盖当前配置 | `Item.CONFIGURE` |
 | **导入新任务** | 文件夹页面 | 在当前文件夹下创建新任务（支持子文件夹） | `Item.CREATE` |
 | **全局导入任务** | 左侧边栏 | 从侧边栏直接导入任务，支持指定路径 | `Item.CREATE` |
+| **批量导入任务** | 左侧边栏 | 上传 ZIP 文件批量导入多个任务，支持多层目录结构 | `Item.CREATE` |
 
 ---
 
@@ -89,6 +90,29 @@ mvn clean package -Denforcer.skip=true -DskipTests
 - 支持自动创建父文件夹
 - 上传 XML 配置文件后 Jenkins 会自动重载
 
+### 5. 批量导入任务
+
+通过 Jenkins 左侧边栏的 **任务导入/导出** 入口，可以批量导入多个任务：
+
+1. **准备 ZIP 文件**：
+   - 支持目录结构：`folder/job1/config.xml`、`folder/subfolder/job2/config.xml`
+   - 支持扁平结构：`job1.xml`、`job2.xml`
+   - 支持中文目录和任务名
+
+2. **导入选项**：
+   - **Dry Run（预演）**：默认开启，验证任务但不实际创建；支持虚拟目录状态缓存，确保多层级路径正确传递
+   - **覆盖模式**：覆盖已存在的任务并自动备份；**安全保护**：对 Folder 仅更新配置（保留子任务），禁止删除整个目录树
+   - **重命名模式**：自动重命名冲突任务（如 `test` → `test_1` → `test_2`）；**级联传播**：父目录重命名后自动同步到所有子任务
+
+3. **导入流程**：
+   - Dry Run 预览 → 确认对话框 → 实际导入
+   - 实时进度显示（通过 SSE）
+   - 详细结果报告（成功/失败/跳过/重命名）
+
+4. **恢复导入**：
+   - 如果批量导入部分失败，可通过「恢复导入」重试失败任务
+   - 正确恢复目录层级和任务路径
+
 > **权限要求**：导出需要 `Item.READ` 权限，全局导入需要 Jenkins 根目录的 `Item.CREATE` 权限。无权限时页面不显示对应功能入口。
 >
 > **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
@@ -154,6 +178,38 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | Folder 内 Job  | 正常             |
 | Pipeline Job  | 正常             |
 | Freestyle Job | 正常             |
+
+---
+
+## 安全特性
+
+### 企业级安全保障
+
+| 安全机制 | 说明 |
+|---------|------|
+| **Folder 删除保护** | overwrite 模式下对 Folder 使用 `updateByXml` 而非 `delete`，避免递归删除子任务 |
+| **动态目录保护** | 禁止覆盖 Multibranch、ComputedFolder、OrganizationFolder 等动态生成的目录类型 |
+| **路径状态缓存** | 批量导入时维护任务存在性快照，避免状态断层导致的误判 |
+| **冲突传播机制** | 上游冲突自动阻断后续路径创建，防止级联错误 |
+| **虚拟目录状态** | dryRun 模式下模拟目录存在状态，确保多层级路径正确传递 |
+
+### 路径重命名级联
+
+批量导入时支持父目录重命名自动传播到子任务：
+
+```
+原始 ZIP 结构:
+team/backend/config.xml
+team/backend/api/config.xml
+team/backend/api/job1/config.xml
+
+如果 team/backend 已存在并选择 rename:
+
+自动变为:
+team/backend_1/config.xml
+team/backend_1/api/config.xml
+team/backend_1/api/job1/config.xml
+```
 
 ---
 
@@ -452,4 +508,4 @@ mvn test
 ## 维护者
 
 - 项目归属：`com.siruoren:job-import-export`
-- 版本：`1.0.2`
+- 版本：`1.0.3-SNAPSHOT`

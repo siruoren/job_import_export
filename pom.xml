@@ -11,7 +11,7 @@
 
     <groupId>com.siruoren</groupId>
     <artifactId>job-import-export</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3-SANPSHOT</version>
     <packaging>hpi</packaging>
     <name>Job Import/Export Plugin</name>
     <description>Jenkins plugin for importing and exporting job configurations as XML files</description>
@@ -37,6 +37,19 @@
             <url>https://repo.jenkins-ci.org/releases/</url>
         </pluginRepository>
     </pluginRepositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>cloudbees-folder</artifactId>
+            <version>6.8</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.15.2</version>
+        </dependency>
+    </dependencies>
 
     <build>
         <finalName>${project.artifactId}-${project.version}</finalName>
