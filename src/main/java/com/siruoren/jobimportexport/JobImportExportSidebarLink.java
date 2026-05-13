@@ -319,6 +319,8 @@ public class JobImportExportSidebarLink implements RootAction {
             VirtualFsState vfs = new VirtualFsState();
             RenameContext renameCtx = new RenameContext();
 
+            initializeVirtualFsState(vfs, Jenkins.get());
+
             try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
                 ZipEntry entry;
 
@@ -685,6 +687,26 @@ public class JobImportExportSidebarLink implements RootAction {
         }
     }
 
+
+
+    private void initializeVirtualFsState(VirtualFsState vfs, ItemGroup<?> baseGroup) {
+        if (vfs == null || baseGroup == null) {
+            return;
+        }
+
+        Jenkins jenkins = Jenkins.get();
+        Collection<Item> allItems = jenkins.getAllItems(Item.class);
+
+        for (Item item : allItems) {
+            if (item instanceof ItemGroup) {
+                String fullName = item.getFullName();
+                if (fullName != null && !fullName.isEmpty()) {
+                    vfs.addExistingFolder(fullName);
+                }
+            }
+        }
+    }
+
     private static class ImportContext {
         boolean blocked = false;
         String blockedReason;
@@ -728,20 +750,31 @@ public class JobImportExportSidebarLink implements RootAction {
                 return folderPath;
             }
 
-            List<String> sortedKeys = new ArrayList<>(renamedPaths.keySet());
-            sortedKeys.sort((a, b) -> b.length() - a.length());
+            String resolved = folderPath;
+            boolean changed = true;
 
-            for (String oldPath : sortedKeys) {
-                String newPath = renamedPaths.get(oldPath);
-                if (folderPath.equals(oldPath)) {
-                    return newPath;
-                }
-                if (folderPath.startsWith(oldPath + "/")) {
-                    return newPath + folderPath.substring(oldPath.length());
+            while (changed) {
+                changed = false;
+
+                List<String> sortedKeys = new ArrayList<>(renamedPaths.keySet());
+                sortedKeys.sort((a, b) -> b.length() - a.length());
+
+                for (String oldPath : sortedKeys) {
+                    String newPath = renamedPaths.get(oldPath);
+                    if (resolved.equals(oldPath)) {
+                        resolved = newPath;
+                        changed = true;
+                        break;
+                    }
+                    if (resolved.startsWith(oldPath + "/")) {
+                        resolved = newPath + resolved.substring(oldPath.length());
+                        changed = true;
+                        break;
+                    }
                 }
             }
 
-            return folderPath;
+            return resolved;
         }
     }
 
@@ -913,14 +946,31 @@ public class JobImportExportSidebarLink implements RootAction {
                         && g.getClass().getName().contains("ComputedFolder"));
     }
 
-    private boolean checkFolderExists(ItemGroup<?> base, String folderPath) {
+    private boolean checkFolderExists(ItemGroup<?> base, String folderPath, VirtualFsState vfs) {
         ItemGroup<?> current = base;
 
         if (folderPath == null || folderPath.isEmpty()) {
             return true;
         }
 
-        for (String part : folderPath.split("/")) {
+        String[] parts = folderPath.split("/");
+        StringBuilder currentPathBuilder = new StringBuilder();
+
+        for (String part : parts) {
+            if (currentPathBuilder.length() > 0) {
+                currentPathBuilder.append("/");
+            }
+            currentPathBuilder.append(part);
+            String currentPath = currentPathBuilder.toString();
+
+            if (vfs != null && vfs.existsFolder(currentPath)) {
+                Item item = Jenkins.get().getItemByFullName(currentPath);
+                if (item != null && item instanceof ItemGroup) {
+                    current = (ItemGroup<?>) item;
+                    continue;
+                }
+            }
+
             Item item = current.getItem(part);
             if (item == null) {
                 return false;
@@ -947,7 +997,7 @@ public class JobImportExportSidebarLink implements RootAction {
     }
 
     private PrecheckResult precheck(ItemGroup<?> base, String folderPath, String jobName) {
-        if (!checkFolderExists(base, folderPath)) {
+        if (!checkFolderExists(base, folderPath, null)) {
             return new PrecheckResult(false,
                     "目录不存在：" + folderPath,
                     folderPath);
@@ -1346,7 +1396,8 @@ public class JobImportExportSidebarLink implements RootAction {
                                     folderPath,
                                     jobName
                             );
-                    result.finalName = folderPath.isEmpty() ? newName : folderPath + "/" + newName;
+                    String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
+                    result.finalName = effectiveFolderPath.isEmpty() ? newName : effectiveFolderPath + "/" + newName;
                     result.renamed = true;
                     result.status = "RENAME";
                     result.message = "任务已存在，将重命名为：" + result.finalName;
@@ -1369,7 +1420,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
             String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
             
-            if (!checkFolderExists(itemGroup, effectiveFolderPath)) {
+            if (!checkFolderExists(itemGroup, effectiveFolderPath, vfs)) {
                 if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
                     vfs.createFolder(effectiveFolderPath);
                 } else if (!dryRun) {
