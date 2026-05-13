@@ -1625,6 +1625,10 @@ public class JobImportExportAction implements Action {
 
             String effectiveFolderPath = ctx != null ? ctx.applyRename(folderPath) : folderPath;
             
+            if (result.finalName == null || result.finalName.equals(jobName)) {
+                result.finalName = effectiveFolderPath.isEmpty() ? jobName : effectiveFolderPath + "/" + jobName;
+            }
+            
             if (!checkFolderExists(itemGroup, effectiveFolderPath, vfs)) {
                 if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
                     vfs.createFolder(effectiveFolderPath);

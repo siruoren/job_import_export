@@ -1420,6 +1420,10 @@ public class JobImportExportSidebarLink implements RootAction {
 
             String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
             
+            if (result.finalName == null || result.finalName.equals(jobName)) {
+                result.finalName = effectiveFolderPath.isEmpty() ? jobName : effectiveFolderPath + "/" + jobName;
+            }
+            
             if (!checkFolderExists(itemGroup, effectiveFolderPath, vfs)) {
                 if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
                     vfs.createFolder(effectiveFolderPath);
