@@ -64,11 +64,32 @@ public class TreeBuilder {
             // 🚨 config.xml 只附加 metadata
             if (isConfig) {
                 current.hasConfigXml = true;
+                // 标记为 JOB，后续会根据是否有子节点重新调整为 FOLDER_WITH_CONFIG
                 current.type = NodeType.JOB;
             }
         }
 
+        // 🚨 第二遍扫描：识别"有配置的目录类型"
+        // 如果目录本身有 config.xml，且有子节点，则为 FOLDER_WITH_CONFIG
+        propagateFolderWithConfig(root);
+
         return root;
+    }
+
+    /**
+     * 识别"有配置的目录类型"
+     * 规则：如果目录本身有 config.xml（hasConfigXml=true），且有子节点，
+     * 则该目录为 FOLDER_WITH_CONFIG 类型（作为有配置的目录创建，只创建一次）
+     */
+    private void propagateFolderWithConfig(TreeNode node) {
+        for (TreeNode child : node.children.values()) {
+            // 如果当前目录有 config.xml，且有子节点，则为有配置的目录
+            if (child.hasConfigXml && !child.children.isEmpty()) {
+                child.type = NodeType.FOLDER_WITH_CONFIG;
+            }
+            // 递归处理子节点
+            propagateFolderWithConfig(child);
+        }
     }
 
     public TreeNode buildTree(ZipInputStream zipInputStream) throws IOException {
@@ -123,12 +144,17 @@ public class TreeBuilder {
             // 🚨 config.xml 只附加 metadata
             if (isConfig) {
                 current.hasConfigXml = true;
+                // 标记为 JOB，后续会根据是否有子节点重新调整为 FOLDER_WITH_CONFIG
                 current.type = NodeType.JOB;
                 current.configXml = readAllBytes(zipInputStream);
             }
 
             zipInputStream.closeEntry();
         }
+
+        // 🚨 第二遍扫描：识别"有配置的目录类型"
+        // 如果目录本身有 config.xml，且有子节点，则为 FOLDER_WITH_CONFIG
+        propagateFolderWithConfig(root);
 
         return root;
     }

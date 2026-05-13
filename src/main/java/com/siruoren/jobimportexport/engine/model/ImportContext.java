@@ -20,6 +20,12 @@ public class ImportContext {
     
     public hudson.model.ItemGroup targetGroup;
     
+    // 类型冲突检查字段
+    public boolean blocked = false;
+    public String blockedReason;
+    public Map<String, NodeType> typeMap = new HashMap<>();
+    public Set<String> blockedPaths = new HashSet<>();
+    
     public ImportContext() {
     }
     
@@ -32,5 +38,29 @@ public class ImportContext {
     
     public void addWarning(String warning) {
         this.warnings.add(warning);
+    }
+    
+    public void block(String reason) {
+        this.blocked = true;
+        this.blockedReason = reason;
+    }
+    
+    public void reset() {
+        this.blocked = false;
+        this.blockedReason = null;
+        this.typeMap.clear();
+        this.blockedPaths.clear();
+    }
+    
+    public boolean isPathBlocked(String path) {
+        if (blockedPaths.contains(path)) {
+            return true;
+        }
+        for (String blockedPath : blockedPaths) {
+            if (path.startsWith(blockedPath + "/") || path.equals(blockedPath)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -182,16 +182,24 @@
                                     statusIcon = '✘ ';
                                     break;
                                 case 'SKIP':
+                                case 'SKIP_EXISTS':
                                     statusColor = '#ffc107';
                                     statusIcon = '⏭ ';
                                     break;
                                 case 'RENAME':
+                                case 'RENAME_JOB':
+                                case 'RENAME_FOLDER':
                                     statusColor = '#17a2b8';
                                     statusIcon = '↻ ';
                                     break;
                                 case 'OVERWRITE':
+                                case 'OVERWRITE_JOB':
                                     statusColor = '#fd7e14';
                                     statusIcon = '⚠ ';
+                                    break;
+                                case 'CREATE_FOLDER':
+                                    statusColor = '#6f42c1';
+                                    statusIcon = '📁 ';
                                     break;
                             }
 

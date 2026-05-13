@@ -26,19 +26,19 @@ public class PreviewEngine {
     }
 
     /**
-     * 分层预览：Folders 和 Jobs 分开
+     * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播）
      */
-    public DryRunResult previewWithGroups(List<String> zipPaths) {
+    public DryRunResult previewWithGroups(List<String> zipPaths, boolean autoRename) {
         TreeNode root = treeBuilder.buildTree(zipPaths);
-        return diffEngine.dryRunWithGroups(root);
+        return diffEngine.dryRunWithRenameDag(root, autoRename);
     }
 
     /**
-     * 分层预览：Folders 和 Jobs 分开
+     * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播）
      */
-    public DryRunResult previewWithGroups(ZipInputStream zipInputStream) throws IOException {
+    public DryRunResult previewWithGroups(ZipInputStream zipInputStream, boolean autoRename) throws IOException {
         TreeNode root = treeBuilder.buildTree(zipInputStream);
-        return diffEngine.dryRunWithGroups(root);
+        return diffEngine.dryRunWithRenameDag(root, autoRename);
     }
 
     public List<DiffResult> preview(List<String> zipPaths, ImportContext ctx) {

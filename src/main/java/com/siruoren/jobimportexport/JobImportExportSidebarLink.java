@@ -42,7 +42,10 @@ import java.util.Map;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
 import java.util.LinkedHashMap;
-import java.util.Map;
+import com.siruoren.jobimportexport.engine.ImportEngine;
+import com.siruoren.jobimportexport.engine.model.ImportContext;
+import com.siruoren.jobimportexport.engine.model.ImportResult;
+import com.siruoren.jobimportexport.engine.model.NodeType;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -310,127 +313,31 @@ public class JobImportExportSidebarLink implements RootAction {
                 return;
             }
 
-            List<ImportResult> results = new ArrayList<>();
+            // ✔ 使用新的 ImportEngine（Tree-based 遍历，不会丢失最后任务）
+            ImportEngine importEngine = new ImportEngine();
+            ImportContext ctx = new ImportContext();
+
+            ctx.dryRun = dryRun;
+            ctx.overwrite = overwrite;
+            ctx.autoRename = rename;
+            ctx.targetGroup = Jenkins.get();
+
+            List<ImportResult> results;
+            try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
+                results = importEngine.importZip(zis, ctx);
+            }
+
             int successCount = 0;
             int failCount = 0;
             int skipCount = 0;
 
-            ImportContext ctx = new ImportContext();
-            VirtualFsState vfs = new VirtualFsState();
-            RenameContext renameCtx = new RenameContext();
-
-            initializeVirtualFsState(vfs, Jenkins.get());
-
-            try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
-                ZipEntry entry;
-
-                while ((entry = zis.getNextEntry()) != null) {
-                    try {
-                        if (entry.isDirectory()) {
-                            continue;
-                        }
-
-                        String entryName = entry.getName();
-
-                        if (!entryName.endsWith(".xml")) {
-                            continue;
-                        }
-
-                        JobPathInfo pathInfo = parseJobPath(entryName);
-
-                        if (pathInfo == null) {
-                            continue;
-                        }
-
-                        byte[] xmlBytes = readZipEntry(zis);
-
-                        try {
-                            String actualFolderPath = renameCtx.applyRename(pathInfo.folderPath);
-
-                            ItemGroup<?> targetGroup = Jenkins.get();
-
-                            if (!dryRun) {
-                                targetGroup = ensureFolderPath(
-                                        Jenkins.get(),
-                                        actualFolderPath,
-                                        true,
-                                        vfs
-                                );
-
-                                if (!(targetGroup instanceof ModifiableTopLevelItemGroup)) {
-                                    ImportResult errorResult = new ImportResult(pathInfo.jobName);
-                                    errorResult.status = "ERROR";
-                                    errorResult.message = "当前目录不支持创建任务";
-                                    errorResult.displayPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
-                                    results.add(errorResult);
-                                    failCount++;
-                                    continue;
-                                }
-                            } else {
-                                ensureFolderPath(
-                                        Jenkins.get(),
-                                        actualFolderPath,
-                                        false,
-                                        vfs
-                                );
-                            }
-
-                            ImportResult result = checkImport(
-                                    actualFolderPath,
-                                    pathInfo.jobName,
-                                    xmlBytes,
-                                    overwrite,
-                                    rename,
-                                    dryRun,
-                                    targetGroup,
-                                    targetGroup,
-                                    ctx,
-                                    vfs,
-                                    renameCtx
-                            );
-
-                            result.zipPath = entryName;
-                            result.displayPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
-
-                            if (result.renamed) {
-                                String oldFullPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
-                                String newFullPath = result.finalName;
-                                renameCtx.addRename(oldFullPath, newFullPath);
-                            }
-
-                            if (!dryRun && result.status.equals("CONFLICT")) {
-                                ctx.block(result.message);
-                            }
-
-                            results.add(result);
-
-                            if (result.skipped) {
-                                skipCount++;
-                            } else if (result.success) {
-                                successCount++;
-                            } else {
-                                failCount++;
-                            }
-
-                            continue;
-                        } catch (IOException e) {
-                            ImportResult errorResult = new ImportResult(pathInfo.jobName);
-                            errorResult.zipPath = entryName;
-                            errorResult.status = "ERROR";
-                            errorResult.message = "创建目录失败: " + e.getMessage();
-                            errorResult.displayPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
-                            results.add(errorResult);
-                            failCount++;
-                            continue;
-                        }
-
-                    } catch (Exception e) {
-                        ImportResult errorResult = new ImportResult(entry.getName());
-                        errorResult.status = "ERROR";
-                        errorResult.message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                        results.add(errorResult);
-                        failCount++;
-                    }
+            for (ImportResult result : results) {
+                if (result.skipped) {
+                    skipCount++;
+                } else if (result.success) {
+                    successCount++;
+                } else {
+                    failCount++;
                 }
             }
 
@@ -664,11 +571,7 @@ public class JobImportExportSidebarLink implements RootAction {
         }
     }
 
-    private enum NodeType {
-        UNKNOWN,
-        FOLDER,
-        JOB
-    }
+    
 
     private static class VirtualFsState {
         Set<String> existingFolders = new HashSet<>();
@@ -707,36 +610,7 @@ public class JobImportExportSidebarLink implements RootAction {
         }
     }
 
-    private static class ImportContext {
-        boolean blocked = false;
-        String blockedReason;
-        Map<String, NodeType> typeMap = new HashMap<>();
-        Set<String> blockedPaths = new HashSet<>();
-
-        void block(String reason) {
-            this.blocked = true;
-            this.blockedReason = reason;
-        }
-
-        void reset() {
-            this.blocked = false;
-            this.blockedReason = null;
-            this.typeMap.clear();
-            this.blockedPaths.clear();
-        }
-
-        boolean isPathBlocked(String path) {
-            if (blockedPaths.contains(path)) {
-                return true;
-            }
-            for (String blockedPath : blockedPaths) {
-                if (path.startsWith(blockedPath + "/") || path.equals(blockedPath)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
+    
 
     private static class RenameContext {
         Map<String, String> renamedPaths = new HashMap<>();
@@ -1270,27 +1144,7 @@ public class JobImportExportSidebarLink implements RootAction {
         return jobName;
     }
 
-    private static class ImportResult {
-        String jobName;
-        String finalName;
-        boolean success;
-        boolean skipped;
-        boolean renamed;
-        String status;
-        String message;
-        List<String> missingPlugins;
-        String zipPath;
-        String fullPath;
-        String blockedBy;
-        String reason;
-        String displayPath;
-
-        ImportResult(String jobName) {
-            this.jobName = jobName;
-            this.finalName = jobName;
-            this.missingPlugins = new ArrayList<>();
-        }
-    }
+    
 
     private ImportResult checkImport(
             String folderPath,
