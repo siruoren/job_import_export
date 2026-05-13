@@ -1,5 +1,6 @@
 package com.siruoren.jobimportexport.engine.tree;
 
+import com.siruoren.jobimportexport.engine.model.NodeType;
 import com.siruoren.jobimportexport.engine.model.TreeNode;
 
 import java.io.ByteArrayOutputStream;
@@ -15,6 +16,7 @@ public class TreeBuilder {
 
     public TreeNode buildTree(List<String> zipEntries) {
         TreeNode root = new TreeNode();
+        root.name = "/";
         root.fullPath = "/";
 
         Map<String, TreeNode> index = new HashMap<>();
@@ -25,46 +27,53 @@ public class TreeBuilder {
                 continue;
             }
 
-            String[] parts = entry.split("/");
-            TreeNode current = root;
-            StringBuilder path = new StringBuilder();
+            String path = entry;
 
-            for (String p : parts) {
-                if (p.isEmpty()) {
-                    continue;
-                }
-
-                if (path.length() > 0) {
-                    path.append("/");
-                }
-                path.append(p);
-
-                String key = path.toString();
-
-                final TreeNode finalCurrent = current;
-                current = index.computeIfAbsent(key, k -> {
-                    TreeNode n = new TreeNode();
-                    n.name = p;
-                    n.fullPath = k;
-                    finalCurrent.children.add(n);
-                    return n;
-                });
+            // 🚨 config.xml 不作为节点
+            boolean isConfig = path.endsWith("/config.xml");
+            if (isConfig) {
+                path = path.substring(0, path.length() - "/config.xml".length());
             }
 
-            // config.xml 不创建 node，只挂载到 parent
-            if (entry.endsWith("config.xml")) {
+            String[] parts = path.split("/");
+            StringBuilder currentPath = new StringBuilder();
+            TreeNode current = root;
+
+            for (String part : parts) {
+                if (part.isEmpty()) continue;
+
+                if (currentPath.length() > 0) {
+                    currentPath.append("/");
+                }
+                currentPath.append(part);
+
+                String key = currentPath.toString();
+
+                TreeNode child = current.children.get(part);
+                if (child == null) {
+                    child = new TreeNode();
+                    child.name = part;
+                    child.fullPath = key;
+                    current.children.put(part, child);
+                    index.put(key, child);
+                }
+
+                current = child;
+            }
+
+            // 🚨 config.xml 只附加 metadata
+            if (isConfig) {
                 current.hasConfigXml = true;
+                current.type = NodeType.JOB;
             }
         }
-
-        // 解析节点类型
-        resolveTypes(root);
 
         return root;
     }
 
     public TreeNode buildTree(ZipInputStream zipInputStream) throws IOException {
         TreeNode root = new TreeNode();
+        root.name = "/";
         root.fullPath = "/";
 
         Map<String, TreeNode> index = new HashMap<>();
@@ -78,59 +87,50 @@ public class TreeBuilder {
                 continue;
             }
 
-            String[] parts = path.split("/");
-            TreeNode current = root;
-            StringBuilder fullPath = new StringBuilder();
-
-            for (String p : parts) {
-                if (p.isEmpty()) {
-                    continue;
-                }
-
-                if (fullPath.length() > 0) {
-                    fullPath.append("/");
-                }
-                fullPath.append(p);
-
-                String key = fullPath.toString();
-
-                final TreeNode finalCurrent = current;
-                current = index.computeIfAbsent(key, k -> {
-                    TreeNode n = new TreeNode();
-                    n.name = p;
-                    n.fullPath = k;
-                    finalCurrent.children.add(n);
-                    return n;
-                });
+            // 🚨 config.xml 不作为节点
+            boolean isConfig = path.endsWith("/config.xml");
+            String nodePath = path;
+            if (isConfig) {
+                nodePath = path.substring(0, path.length() - "/config.xml".length());
             }
 
-            // config.xml 不创建 node，只挂载到 parent
-            if (path.endsWith("config.xml")) {
+            String[] parts = nodePath.split("/");
+            StringBuilder currentPath = new StringBuilder();
+            TreeNode current = root;
+
+            for (String part : parts) {
+                if (part.isEmpty()) continue;
+
+                if (currentPath.length() > 0) {
+                    currentPath.append("/");
+                }
+                currentPath.append(part);
+
+                String key = currentPath.toString();
+
+                TreeNode child = current.children.get(part);
+                if (child == null) {
+                    child = new TreeNode();
+                    child.name = part;
+                    child.fullPath = key;
+                    current.children.put(part, child);
+                    index.put(key, child);
+                }
+
+                current = child;
+            }
+
+            // 🚨 config.xml 只附加 metadata
+            if (isConfig) {
                 current.hasConfigXml = true;
+                current.type = NodeType.JOB;
                 current.configXml = readAllBytes(zipInputStream);
             }
 
             zipInputStream.closeEntry();
         }
 
-        // 解析节点类型
-        resolveTypes(root);
-
         return root;
-    }
-
-    private void resolveTypes(TreeNode node) {
-        // 如果有 config.xml，标记为 JOB
-        if (node.hasConfigXml) {
-            node.type = com.siruoren.jobimportexport.engine.model.NodeType.JOB;
-        } else {
-            node.type = com.siruoren.jobimportexport.engine.model.NodeType.FOLDER;
-        }
-
-        // 递归处理子节点
-        for (TreeNode child : node.children) {
-            resolveTypes(child);
-        }
     }
 
     private byte[] readAllBytes(InputStream in) {

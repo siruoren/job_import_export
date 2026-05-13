@@ -28,8 +28,8 @@ public class ExecutionEngine {
     public List<ImportResult> execute(TreeNode root, ImportContext ctx) {
         results.clear();
 
-        if (root.name == null || root.name.isEmpty()) {
-            for (TreeNode child : root.children) {
+        if (root.name == null || root.name.isEmpty() || "/".equals(root.name)) {
+            for (TreeNode child : root.children.values()) {
                 walk(child, "", ctx);
             }
         } else {
@@ -46,21 +46,21 @@ public class ExecutionEngine {
         // ✔ Rename DAG 解析（预览和导入共用同一逻辑）
         path = renameResolver.resolvePath(path, ctx);
 
-        // ✔ 永远创建 folder（关键修复：不能跳过）
-        ensureFolder(path, ctx);
+        // ROOT 跳过
+        if (!"/".equals(node.name)) {
+            // ✔ 永远创建 folder（关键修复：不能跳过）
+            ensureFolder(path, ctx);
 
-        // ✔ 解析节点类型
-        NodeType type = typeResolver.resolve(node);
-
-        // ✔ Job 只在 hasConfigXml 时处理（只有 Job 才进入 result list）
-        if (type == NodeType.JOB && node.hasConfigXml) {
-            ImportResult result = createResult(node, path);
-            processJob(node, path, result, ctx);
-            results.add(result);
+            // ✔ 只有 node 才是 Job
+            if (node.type == NodeType.JOB && node.hasConfigXml) {
+                ImportResult result = createResult(node, path);
+                processJob(node, path, result, ctx);
+                results.add(result);
+            }
         }
 
-        // ✔ 关键：不能 return/continue，必须递归所有子节点
-        for (TreeNode child : node.children) {
+        // ✔ 关键：永远递归 children
+        for (TreeNode child : node.children.values()) {
             walk(child, path, ctx);
         }
     }

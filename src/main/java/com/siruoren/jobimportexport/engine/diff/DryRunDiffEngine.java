@@ -59,7 +59,7 @@ public class DryRunDiffEngine {
         }
 
         // 递归处理子节点
-        for (TreeNode child : node.children) {
+        for (TreeNode child : node.children.values()) {
             dryRun(child, path, result);
         }
     }
@@ -108,7 +108,7 @@ public class DryRunDiffEngine {
         }
 
         // 递归处理子节点
-        for (TreeNode child : node.children) {
+        for (TreeNode child : node.children.values()) {
             dryRunWithGroups(child, path, result);
         }
     }
