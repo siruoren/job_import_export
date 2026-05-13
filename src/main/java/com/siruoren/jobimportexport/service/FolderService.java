@@ -1,7 +1,6 @@
 package com.siruoren.jobimportexport.service;
 
 import com.cloudbees.hudson.plugins.folder.Folder;
-import com.siruoren.jobimportexport.model.VirtualFsState;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
@@ -17,7 +16,7 @@ public class FolderService {
     private static final Pattern INVALID_CHARS = Pattern.compile("[^a-zA-Z0-9_\\-]");
 
     public ItemGroup<?> ensureFolderPath(ItemGroup<?> baseGroup, String folderPath,
-                                         boolean create, VirtualFsState vfs) throws IOException {
+                                         boolean create) throws IOException {
         ItemGroup<?> current = baseGroup;
 
         if (folderPath == null || folderPath.trim().isEmpty()) {
@@ -44,16 +43,7 @@ public class FolderService {
 
             if (item == null) {
                 if (!create) {
-                    if (vfs != null) {
-                        if (!vfs.existsFolder(currentPath)) {
-                            vfs.createFolder(currentPath);
-                        }
-                    }
                     continue;
-                }
-
-                if (vfs != null) {
-                    vfs.createFolder(currentPath);
                 }
 
                 if (!hasFolderPlugin()) {
@@ -72,10 +62,6 @@ public class FolderService {
                         );
                 folder.save();
                 item = folder;
-            } else {
-                if (vfs != null) {
-                    vfs.addExistingFolder(currentPath);
-                }
             }
 
             if (!(item instanceof ItemGroup)) {

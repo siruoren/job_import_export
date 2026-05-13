@@ -1387,8 +1387,13 @@ public class JobImportExportSidebarLink implements RootAction {
 
             if (existingItem != null) {
                 if (overwrite) {
-                    result.status = "OVERWRITE";
-                    result.message = "将覆盖已存在的任务";
+                    if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
+                        result.status = "REUSE";
+                        result.message = "目录已存在，且无 config.xml，复用已有目录";
+                    } else {
+                        result.status = "OVERWRITE";
+                        result.message = "将覆盖已存在的任务";
+                    }
                 } else if (rename) {
                     String newName =
                             generateUniqueJobName(
@@ -1428,10 +1433,17 @@ public class JobImportExportSidebarLink implements RootAction {
                 if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
                     vfs.createFolder(effectiveFolderPath);
                 } else if (!dryRun) {
-                    result.status = "SKIP_FOLDER_MISSING";
-                    result.message = "目录不存在：" + effectiveFolderPath;
-                    result.skipped = true;
-                    return result;
+                    try {
+                        ensureFolderPath(itemGroup, effectiveFolderPath, true, vfs);
+                        if (vfs != null) {
+                            vfs.createFolder(effectiveFolderPath);
+                        }
+                    } catch (IOException e) {
+                        result.status = "SKIP_FOLDER_MISSING";
+                        result.message = "创建目录失败：" + effectiveFolderPath + ", " + e.getMessage();
+                        result.skipped = true;
+                        return result;
+                    }
                 }
             }
 
@@ -1443,6 +1455,13 @@ public class JobImportExportSidebarLink implements RootAction {
             if (existingItem != null && overwrite) {
                 backupConfig(existingItem);
 
+                if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
+                    result.success = true;
+                    result.status = "REUSE";
+                    result.message = "目录已存在，且无 config.xml，复用已有目录";
+                    return result;
+                }
+
                 if (existingItem instanceof AbstractItem) {
                     AbstractItem abstractItem = (AbstractItem) existingItem;
 
@@ -1452,25 +1471,37 @@ public class JobImportExportSidebarLink implements RootAction {
                         return result;
                     }
 
-                    if (isFolderConfig(xmlBytes)) {
+                    if (existingItem instanceof ItemGroup) {
+                        if (isFolderConfig(xmlBytes)) {
+                            try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
+                                abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
+                                abstractItem.save();
+                            }
+                            result.status = "OVERWRITE";
+                            result.success = true;
+                            result.message = "目录配置已覆盖（保留子任务）";
+                            return result;
+                        } else {
+                            existingItem.delete();
+                        }
+                    } else {
                         try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
                             abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                             abstractItem.save();
                         }
                         result.status = "OVERWRITE";
                         result.success = true;
-                        result.message = "目录配置已覆盖（保留子任务）";
+                        result.message = "任务配置已覆盖（保留历史记录）";
                         return result;
                     }
-
-                    try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
-                        abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
-                        abstractItem.save();
+                } else if (existingItem instanceof ItemGroup) {
+                    if (isFolderConfig(xmlBytes)) {
+                        result.status = "ERROR";
+                        result.message = "不支持覆盖此类目录类型";
+                        return result;
+                    } else {
+                        existingItem.delete();
                     }
-                    result.status = "OVERWRITE";
-                    result.success = true;
-                    result.message = "任务配置已覆盖（保留历史记录）";
-                    return result;
                 }
             }
 

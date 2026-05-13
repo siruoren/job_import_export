@@ -5,7 +5,40 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [1.0.3-SNAPSHOT] - 2026-05-12
+## [1.0.3-SNAPSHOT] - 2026-05-13
+
+### 架构重构（ImportEngine v2）
+
+将原有的 `if/else + zip遍历脚本` 模式升级为 **Tree + DAG + Execution Engine + State Machine** 架构：
+
+**新增核心组件：**
+- **ImportEngine** - 统一导入入口，协调 TreeBuilder 和 ExecutionEngine
+- **ExecutionEngine** - 核心执行引擎，深度优先遍历树节点
+- **PreviewEngine** - 预览引擎，复用同一引擎实现 `preview == import`
+- **ZipTreeBuilder** - 树形结构构建器，将 ZIP 条目转换为树形结构
+- **TypeResolver** - 类型解析器，统一判断 JOB/FOLDER 类型
+- **PathResolver** - 路径解析器，处理重命名映射和级联传播
+- **ImportStateStore** - 断点恢复状态存储
+
+**新增模型类：**
+- `Node.java` - 树节点结构（替换所有 ZipEntry 逻辑）
+- `NodeType.java` - 节点类型枚举（FOLDER/JOB）
+- `RenameRule.java` - 重命名规则
+- `DiffResult.java` - 预览差异结果
+
+**删除旧代码：**
+- `ZipImportService`
+- `JobImportExportService`
+- `PreviewService`
+- `FolderUtil`
+- 旧 model/* 文件
+
+**关键设计原则：**
+- **TreeBuilder（结构）**：将线性 ZIP 条目转换为树形结构
+- **Resolver（类型）**：统一的类型和路径解析入口
+- **Engine（执行）**：统一的递归执行引擎
+- **Context（状态）**：集中式状态管理（renameMap、createdFolders、dryRun）
+- **Preview == Import**：预览和导入复用同一引擎，通过 `dryRun` 模式区分
 
 ### 新增功能
 - **批量导入功能**

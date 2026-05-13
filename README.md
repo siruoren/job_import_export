@@ -215,6 +215,81 @@ team/backend_1/api/job1/config.xml
 
 ## 技术架构
 
+### 架构设计（ImportEngine v2）
+
+本插件采用 **Tree + DAG + Execution Engine + State Machine** 架构模式，替换了原有的 `if/else + zip遍历脚本` 模式：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ImportEngine（统一入口）                    │
+│  ┌──────────────┐    ┌──────────────────┐                      │
+│  │ ZipTreeBuilder│───▶│  ExecutionEngine │                      │
+│  │ （结构构建）   │    │   （递归执行）     │                      │
+│  └──────────────┘    └────────┬─────────┘                      │
+│                               │                                │
+│         ┌─────────────────────┼─────────────────────┐          │
+│         ▼                     ▼                     ▼          │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │ TypeResolver │    │ PathResolver │    │ ImportContext│     │
+│  │ （类型解析）   │    │ （路径解析）   │    │ （状态管理）   │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**核心组件职责：**
+
+| 组件 | 职责 | 说明 |
+|------|------|------|
+| **ImportEngine** | 统一入口 | 协调 TreeBuilder 和 ExecutionEngine |
+| **ZipTreeBuilder** | 结构构建 | 将 ZIP 条目转换为树形结构，支持索引快速查找 |
+| **ExecutionEngine** | 递归执行 | 深度优先遍历树节点，执行导入逻辑 |
+| **TypeResolver** | 类型解析 | 根据 `hasConfigXml` 判断节点是 JOB 还是 FOLDER |
+| **PathResolver** | 路径解析 | 处理重命名映射，支持级联传播 |
+| **ImportContext** | 状态管理 | 集中管理 renameMap、createdFolders、dryRun 等状态 |
+
+**关键设计原则：**
+- **TreeBuilder（结构）**：将线性 ZIP 条目转换为树形结构
+- **Resolver（类型）**：统一的类型和路径解析入口
+- **Engine（执行）**：统一的递归执行引擎
+- **Context（状态）**：集中式状态管理
+- **Preview == Import**：预览和导入复用同一引擎，通过 `dryRun` 模式区分
+
+**项目结构（v2 重构后）：**
+```
+job_import_export/
+├── pom.xml                                    # Maven 构建配置
+├── README.md                                  # 本文档
+└── src/
+    └── main/
+        ├── java/com/siruoren/jobimportexport/
+        │   ├── JobImportExportAction.java     # 任务导入导出 Action（页面级）
+        │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   └── engine/
+        │       ├── ImportEngine.java          # 统一导入入口
+        │       ├── ExecutionEngine.java       # 核心执行引擎
+        │       ├── PreviewEngine.java         # 预览引擎
+        │       ├── model/
+        │       │   ├── Node.java              # 树节点结构
+        │       │   ├── NodeType.java          # 节点类型枚举
+        │       │   ├── RenameRule.java        # 重命名规则
+        │       │   ├── ImportContext.java     # 状态上下文
+        │       │   ├── ImportResult.java      # 导入结果
+        │       │   └── DiffResult.java        # 差异结果（预览）
+        │       ├── tree/
+        │       │   └── ZipTreeBuilder.java    # 树形结构构建器
+        │       ├── resolver/
+        │       │   ├── TypeResolver.java      # 类型解析器
+        │       │   └── PathResolver.java      # 路径解析器
+        │       └── state/
+        │           └── ImportStateStore.java  # 断点恢复存储
+        └── resources/
+            └── com/siruoren/jobimportexport/
+                ├── JobImportExportAction/
+                │   └── index.jelly             # 任务/文件夹页面 UI
+                └── JobImportExportSidebarLink/
+                    └── index.jelly             # 侧边栏全局导入页面 UI
+```
+
 ### 后端统一 JSON 协议
 
 本插件采用统一的 JSON 响应协议，确保前后端通信一致：
