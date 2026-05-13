@@ -494,9 +494,9 @@ public class JobImportExportAction implements Action {
                                 ctx.block(result.message);
                             }
 
-                            if (result.renamed && !actualFolderPath.isEmpty()) {
+                            if (result.renamed) {
                                 String oldPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
-                                String newPath = actualFolderPath.isEmpty() ? result.finalName : actualFolderPath + "/" + result.finalName;
+                                String newPath = result.finalName;
                                 ctx.renameMap.put(oldPath, newPath);
                             }
 
@@ -1521,14 +1521,14 @@ public class JobImportExportAction implements Action {
                                     folderPath,
                                     jobName
                             );
-                    result.finalName = newName;
+                    result.finalName = folderPath.isEmpty() ? newName : folderPath + "/" + newName;
                     result.renamed = true;
                     result.status = "RENAME";
-                    result.message = "任务已存在，将重命名为：" + newName;
+                    result.message = "任务已存在，将重命名为：" + result.finalName;
                     
                     if (ctx != null) {
                         String oldPath = folderPath.isEmpty() ? jobName : folderPath + "/" + jobName;
-                        String newPath = folderPath.isEmpty() ? newName : folderPath + "/" + newName;
+                        String newPath = result.finalName;
                         ctx.renameMap.put(oldPath, newPath);
                     }
                 } else {
@@ -1542,11 +1542,17 @@ public class JobImportExportAction implements Action {
                 result.message = "可以导入";
             }
 
-            if (!checkFolderExists(itemGroup, folderPath)) {
-                result.status = "SKIP_FOLDER_MISSING";
-                result.message = "目录不存在：" + folderPath;
-                result.skipped = true;
-                return result;
+            String effectiveFolderPath = ctx != null ? ctx.applyRename(folderPath) : folderPath;
+            
+            if (!checkFolderExists(itemGroup, effectiveFolderPath)) {
+                if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
+                    vfs.createFolder(effectiveFolderPath);
+                } else if (!dryRun) {
+                    result.status = "SKIP_FOLDER_MISSING";
+                    result.message = "目录不存在：" + effectiveFolderPath;
+                    result.skipped = true;
+                    return result;
+                }
             }
 
             if (dryRun) {

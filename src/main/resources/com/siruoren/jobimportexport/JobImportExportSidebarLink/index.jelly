@@ -196,11 +196,11 @@
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.job) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.jobPath) + '&lt;/td&gt;';
 
                             let finalName = escapeHtml(detail.finalName);
-                            if (detail.finalName !== detail.job) {
-                                finalName = escapeHtml(detail.job) + ' → ' + escapeHtml(detail.finalName);
+                            if (detail.finalName !== detail.jobPath) {
+                                finalName = escapeHtml(detail.jobPath) + ' → ' + escapeHtml(detail.finalName);
                             }
                             content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
                             content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
@@ -314,11 +314,11 @@
                         }
                         
                         content += '&lt;tr&gt;';
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.job) + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.jobPath) + '&lt;/td&gt;';
                         
                         let finalName = escapeHtml(detail.finalName);
-                        if (detail.finalName !== detail.job) {
-                            finalName = escapeHtml(detail.job) + ' → ' + escapeHtml(detail.finalName);
+                        if (detail.finalName !== detail.jobPath) {
+                            finalName = escapeHtml(detail.jobPath) + ' → ' + escapeHtml(detail.finalName);
                         }
                         content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
                         

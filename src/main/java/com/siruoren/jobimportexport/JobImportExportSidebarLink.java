@@ -390,10 +390,10 @@ public class JobImportExportSidebarLink implements RootAction {
                             result.zipPath = entryName;
                             result.displayPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
 
-                            if (result.renamed && !pathInfo.folderPath.isEmpty()) {
-                                String oldFullPath = pathInfo.folderPath + "/" + pathInfo.jobName;
-                                String newFullPath = actualFolderPath.isEmpty() ? result.finalName : actualFolderPath + "/" + result.finalName;
-                                renameCtx.addRename(pathInfo.folderPath, actualFolderPath.isEmpty() ? result.finalName : actualFolderPath + "/" + result.finalName.replace(pathInfo.jobName, "").replaceAll("/+$", ""));
+                            if (result.renamed) {
+                                String oldFullPath = pathInfo.folderPath.isEmpty() ? pathInfo.jobName : pathInfo.folderPath + "/" + pathInfo.jobName;
+                                String newFullPath = result.finalName;
+                                renameCtx.addRename(oldFullPath, newFullPath);
                             }
 
                             if (!dryRun && result.status.equals("CONFLICT")) {
@@ -1346,14 +1346,14 @@ public class JobImportExportSidebarLink implements RootAction {
                                     folderPath,
                                     jobName
                             );
-                    result.finalName = newName;
+                    result.finalName = folderPath.isEmpty() ? newName : folderPath + "/" + newName;
                     result.renamed = true;
                     result.status = "RENAME";
-                    result.message = "任务已存在，将重命名为：" + newName;
+                    result.message = "任务已存在，将重命名为：" + result.finalName;
 
-                    if (renameCtx != null && !folderPath.isEmpty()) {
-                        String oldPath = folderPath;
-                        String newPath = folderPath.substring(0, folderPath.lastIndexOf('/') + 1) + newName;
+                    if (renameCtx != null) {
+                        String oldPath = folderPath.isEmpty() ? jobName : folderPath + "/" + jobName;
+                        String newPath = result.finalName;
                         renameCtx.addRename(oldPath, newPath);
                     }
                 } else {
@@ -1367,11 +1367,17 @@ public class JobImportExportSidebarLink implements RootAction {
                 result.message = "可以导入";
             }
 
-            if (!checkFolderExists(itemGroup, folderPath)) {
-                result.status = "SKIP_FOLDER_MISSING";
-                result.message = "目录不存在：" + folderPath;
-                result.skipped = true;
-                return result;
+            String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
+            
+            if (!checkFolderExists(itemGroup, effectiveFolderPath)) {
+                if (dryRun && vfs != null && !effectiveFolderPath.isEmpty()) {
+                    vfs.createFolder(effectiveFolderPath);
+                } else if (!dryRun) {
+                    result.status = "SKIP_FOLDER_MISSING";
+                    result.message = "目录不存在：" + effectiveFolderPath;
+                    result.skipped = true;
+                    return result;
+                }
             }
 
             if (dryRun) {

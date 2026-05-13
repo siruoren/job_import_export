@@ -206,14 +206,14 @@
                             content += '&lt;tr&gt;';
 
                             content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;'
-                                + escapeHtml(detail.job)
+                                + escapeHtml(detail.jobPath)
                                 + '&lt;/td&gt;';
 
-                            let finalName = escapeHtml(detail.finalName || detail.job);
+                            let finalName = escapeHtml(detail.finalName || detail.jobPath);
 
-                            if (detail.finalName &amp;&amp; detail.finalName !== detail.job) {
+                            if (detail.finalName &amp;&amp; detail.finalName !== detail.jobPath) {
                                 finalName =
-                                    escapeHtml(detail.job)
+                                    escapeHtml(detail.jobPath)
                                     + ' → '
                                     + escapeHtml(detail.finalName);
                             }

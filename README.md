@@ -495,13 +495,38 @@ mvn test
 
 ## 许可证
 
-本插件采用**自定义非商业许可**：
+本插件采用 **MIT License** 开源协议：
 
+```
+MIT License
+
+Copyright (c) 2026 com.siruoren:job-import-export
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+**许可范围**：
 - ✅ 允许自由使用、复制、修改和二次分发
-- ❌ **禁止用于任何商业用途**（包括但不限于产生收入、盈利或以商业目的的活动）
-- 使用本插件须保留原始版权声明
-
-如需商业使用授权，请联系项目维护者。
+- ✅ 允许用于商业用途
+- ✅ 允许作为商业产品或服务的一部分进行销售、出租或许可
+- ✅ 允许嵌入到任何软件、SaaS 平台或云服务中
+- ⚠️ 使用本插件须保留原始版权声明
 
 ---
 

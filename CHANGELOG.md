@@ -136,6 +136,8 @@
   - **动态目录保护**：禁止覆盖 Multibranch、ComputedFolder 等动态生成的目录类型
   - **根目录与子目录功能同步**：确保 `JobImportExportAction` 和 `JobImportExportSidebarLink` 使用相同的安全逻辑
 
+- **许可证变更**：将自定义非商业许可改为 MIT License，允许自由用于商业用途
+
 ## [1.0.2] - 上一版本
 
 ### 新增功能
