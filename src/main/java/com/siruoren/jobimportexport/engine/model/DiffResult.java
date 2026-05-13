@@ -9,6 +9,7 @@ public class DiffResult {
     public String targetPath;
     public String status;
     public String message;
+    public Action action;
     public List<String> missingPlugins = new ArrayList<>();
 
 }

@@ -11,6 +11,7 @@ public class ImportResult {
     public boolean skipped;
     public boolean renamed;
     public String status;
+    public Status statusEnum;
     public String message;
     public List<String> missingPlugins = new ArrayList<>();
     public String zipPath;
@@ -19,6 +20,8 @@ public class ImportResult {
     public String fullPath;
     public String blockedBy;
     public String reason;
+    public boolean isFolder;
+    public boolean isJob;
 
     public ImportResult(String jobName) {
         this.jobName = jobName;

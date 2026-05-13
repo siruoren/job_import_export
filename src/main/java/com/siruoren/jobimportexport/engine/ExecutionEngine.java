@@ -1,7 +1,7 @@
 package com.siruoren.jobimportexport.engine;
 
 import com.siruoren.jobimportexport.engine.model.*;
-import com.siruoren.jobimportexport.engine.resolver.PathResolver;
+import com.siruoren.jobimportexport.engine.resolver.RenameDAGResolver;
 import com.siruoren.jobimportexport.engine.resolver.TypeResolver;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
@@ -21,56 +21,64 @@ import java.util.List;
 public class ExecutionEngine {
 
     private final TypeResolver typeResolver = new TypeResolver();
-    private final PathResolver pathResolver = new PathResolver();
+    private final RenameDAGResolver renameResolver = new RenameDAGResolver();
 
     private List<ImportResult> results = new ArrayList<>();
 
-    public List<ImportResult> execute(Node node, String parent, ImportContext ctx) {
-        if (node.name == null || node.name.isEmpty()) {
-            for (Node child : node.children) {
-                execute(child, parent, ctx);
+    public List<ImportResult> execute(TreeNode root, ImportContext ctx) {
+        results.clear();
+
+        if (root.name == null || root.name.isEmpty()) {
+            for (TreeNode child : root.children) {
+                walk(child, "", ctx);
             }
-            return results;
-        }
-
-        String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
-
-        path = pathResolver.resolve(path, ctx);
-
-        ensureFolder(path, ctx);
-
-        NodeType type = typeResolver.resolve(node);
-
-        ImportResult result = createResult(node, path);
-
-        if (type == NodeType.JOB) {
-            processJob(node, path, result, ctx);
         } else {
-            processFolder(node, path, result, ctx);
-        }
-
-        results.add(result);
-
-        for (Node child : node.children) {
-            execute(child, path, ctx);
+            walk(root, "", ctx);
         }
 
         return results;
     }
 
-    private ImportResult createResult(Node node, String path) {
+    private void walk(TreeNode node, String parent, ImportContext ctx) {
+        // 构建当前路径
+        String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
+
+        // ✔ Rename DAG 解析（预览和导入共用同一逻辑）
+        path = renameResolver.resolvePath(path, ctx);
+
+        // ✔ 永远创建 folder（关键修复：不能跳过）
+        ensureFolder(path, ctx);
+
+        // ✔ 解析节点类型
+        NodeType type = typeResolver.resolve(node);
+
+        // ✔ Job 只在 hasConfigXml 时处理（只有 Job 才进入 result list）
+        if (type == NodeType.JOB && node.hasConfigXml) {
+            ImportResult result = createResult(node, path);
+            processJob(node, path, result, ctx);
+            results.add(result);
+        }
+
+        // ✔ 关键：不能 return/continue，必须递归所有子节点
+        for (TreeNode child : node.children) {
+            walk(child, path, ctx);
+        }
+    }
+
+    private ImportResult createResult(TreeNode node, String path) {
         String folderPath = getParentPath(path);
         String jobName = getLastPathSegment(path);
         ImportResult result = new ImportResult(jobName, folderPath);
         result.finalName = path;
         result.fullPath = path;
-        result.zipPath = node.fullPath;
         result.sourcePath = node.fullPath;
         result.displayPath = node.fullPath;
+        result.isFolder = (node.type == NodeType.FOLDER);
+        result.isJob = (node.type == NodeType.JOB);
         return result;
     }
 
-    private void processJob(Node node, String path, ImportResult result, ImportContext ctx) {
+    private void processJob(TreeNode node, String path, ImportResult result, ImportContext ctx) {
         Item existingItem = Jenkins.get().getItemByFullName(path);
 
         if (existingItem != null) {
@@ -79,6 +87,7 @@ public class ExecutionEngine {
             } else if (ctx.autoRename) {
                 handleAutoRename(node, path, result, ctx);
             } else {
+                result.statusEnum = Status.SKIP_EXISTS;
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
                 result.message = "任务已存在，已跳过";
@@ -88,7 +97,7 @@ public class ExecutionEngine {
         }
     }
 
-    private void handleOverwrite(Item existingItem, Node node, String path, ImportResult result, ImportContext ctx) {
+    private void handleOverwrite(Item existingItem, TreeNode node, String path, ImportResult result, ImportContext ctx) {
         if (!ctx.dryRun) {
             try {
                 backupConfig(existingItem);
@@ -102,31 +111,36 @@ public class ExecutionEngine {
                     createJobDirect(path, node.configXml, ctx);
                 }
             } catch (Exception e) {
+                result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.message = "覆盖失败: " + e.getMessage();
                 return;
             }
         }
-        result.status = "OVERWRITE";
+        result.statusEnum = Status.OVERWRITE_JOB;
+        result.status = "OVERWRITE_JOB";
         result.success = true;
         result.message = "已覆盖任务配置";
     }
 
-    private void handleAutoRename(Node node, String path, ImportResult result, ImportContext ctx) {
+    private void handleAutoRename(TreeNode node, String path, ImportResult result, ImportContext ctx) {
         String newName = generateUniqueJobName(ctx.targetGroup, getParentPath(path), getLastPathSegment(path));
         String newPath = getParentPath(path).isEmpty() ? newName : getParentPath(path) + "/" + newName;
-        
+
+        // 更新 renameMap，确保后续节点能正确解析
         ctx.renameMap.put(path, newPath);
-        
+
         result.finalName = newPath;
         result.renamed = true;
-        result.status = "RENAME";
+        result.statusEnum = Status.RENAME_JOB;
+        result.status = "RENAME_JOB";
         result.message = "任务已重命名为: " + newName;
 
         if (!ctx.dryRun) {
             try {
                 createJobDirect(newPath, node.configXml, ctx);
             } catch (Exception e) {
+                result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.message = "创建失败: " + e.getMessage();
                 return;
@@ -135,17 +149,19 @@ public class ExecutionEngine {
         result.success = true;
     }
 
-    private void createJob(Node node, String path, ImportResult result, ImportContext ctx) {
+    private void createJob(TreeNode node, String path, ImportResult result, ImportContext ctx) {
         if (!ctx.dryRun) {
             try {
                 createJobDirect(path, node.configXml, ctx);
             } catch (Exception e) {
+                result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.message = "创建失败: " + e.getMessage();
                 return;
             }
         }
-        result.status = "OK";
+        result.statusEnum = Status.CREATE_JOB;
+        result.status = "CREATE_JOB";
         result.success = true;
         result.message = "已创建任务";
     }
@@ -160,48 +176,6 @@ public class ExecutionEngine {
                 ((ModifiableTopLevelItemGroup) parentGroup).createProjectFromXML(jobName, xmlStream);
                 ctx.createdJobs.add(path);
             }
-        }
-    }
-
-    private void processFolder(Node node, String path, ImportResult result, ImportContext ctx) {
-        Item existingItem = Jenkins.get().getItemByFullName(path);
-
-        if (existingItem != null && existingItem instanceof ItemGroup) {
-            if (node.hasConfigXml && ctx.overwrite) {
-                if (!ctx.dryRun && existingItem instanceof AbstractItem) {
-                    try {
-                        backupConfig(existingItem);
-                        try (InputStream in = new ByteArrayInputStream(node.configXml)) {
-                            ((AbstractItem) existingItem).updateByXml(new StreamSource(in));
-                            ((AbstractItem) existingItem).save();
-                        }
-                    } catch (Exception e) {
-                        result.status = "ERROR";
-                        result.message = "覆盖文件夹配置失败: " + e.getMessage();
-                        return;
-                    }
-                }
-                result.status = "OVERWRITE";
-                result.success = true;
-                result.message = "已覆盖文件夹配置";
-            } else {
-                result.status = "REUSE";
-                result.success = true;
-                result.message = "文件夹已存在，复用";
-            }
-        } else {
-            if (!ctx.dryRun) {
-                try {
-                    ensureFolderPath(ctx.targetGroup, path, true, ctx);
-                } catch (Exception e) {
-                    result.status = "ERROR";
-                    result.message = "创建文件夹失败: " + e.getMessage();
-                    return;
-                }
-            }
-            result.status = "OK";
-            result.success = true;
-            result.message = "已创建文件夹";
         }
     }
 

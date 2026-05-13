@@ -21,34 +21,27 @@ public class ZipTreeBuilder {
         index.put("/", root);
 
         for (String path : zipPaths) {
-            String[] parts = path.split("/");
-            Node current = root;
-            StringBuilder full = new StringBuilder();
-
-            for (String p : parts) {
-                if (p.isEmpty()) continue;
-
-                if (full.length() > 0) full.append("/");
-                full.append(p);
-
-                String key = full.toString();
-
-                final Node finalCurrent = current;
-                current = index.computeIfAbsent(key, k -> {
-                    Node n = new Node();
-                    n.name = p;
-                    n.fullPath = k;
-                    finalCurrent.children.add(n);
-                    return n;
-                });
-            }
-
-            current.isLeaf = true;
-
+            // 规则：config.xml 是 metadata，不是独立节点
             if (path.endsWith("config.xml")) {
-                current.hasConfigXml = true;
+                String folderPath = getParentPath(path);
+                if (folderPath != null && !folderPath.isEmpty()) {
+                    // 确保路径树存在
+                    ensurePathTree(folderPath, root, index);
+                    // 附加 config.xml 到父目录节点
+                    Node folderNode = index.get(folderPath);
+                    if (folderNode != null) {
+                        folderNode.hasConfigXml = true;
+                        folderNode.isJob = true;
+                    }
+                }
+            } else {
+                // 非 config.xml 文件，确保路径树存在
+                ensurePathTree(path, root, index);
             }
         }
+
+        // 扫描整棵树的 config.xml 分布
+        computeHasConfig(root);
 
         return root;
     }
@@ -68,39 +61,76 @@ public class ZipTreeBuilder {
                 continue;
             }
 
-            String[] parts = path.split("/");
-            Node current = root;
-            StringBuilder full = new StringBuilder();
-
-            for (String p : parts) {
-                if (p.isEmpty()) continue;
-
-                if (full.length() > 0) full.append("/");
-                full.append(p);
-
-                String key = full.toString();
-
-                final Node finalCurrent = current;
-                current = index.computeIfAbsent(key, k -> {
-                    Node n = new Node();
-                    n.name = p;
-                    n.fullPath = k;
-                    finalCurrent.children.add(n);
-                    return n;
-                });
-            }
-
-            current.isLeaf = true;
-
+            // 规则：config.xml 是 metadata，不是独立节点
             if (path.endsWith("config.xml")) {
-                current.hasConfigXml = true;
-                current.configXml = readAllBytes(zipInputStream);
+                String folderPath = getParentPath(path);
+                if (folderPath != null && !folderPath.isEmpty()) {
+                    // 确保路径树存在
+                    ensurePathTree(folderPath, root, index);
+                    // 附加 config.xml 到父目录节点
+                    Node folderNode = index.get(folderPath);
+                    if (folderNode != null) {
+                        folderNode.hasConfigXml = true;
+                        folderNode.isJob = true;
+                        folderNode.configXml = readAllBytes(zipInputStream);
+                    }
+                }
+            } else {
+                // 非 config.xml 文件，确保路径树存在
+                ensurePathTree(path, root, index);
             }
 
             zipInputStream.closeEntry();
         }
 
+        // 扫描整棵树的 config.xml 分布
+        computeHasConfig(root);
+
         return root;
+    }
+
+    private void ensurePathTree(String path, Node root, Map<String, Node> index) {
+        String[] parts = path.split("/");
+        Node current = root;
+        StringBuilder full = new StringBuilder();
+
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+
+            if (full.length() > 0) full.append("/");
+            full.append(p);
+
+            String key = full.toString();
+
+            final Node finalCurrent = current;
+            current = index.computeIfAbsent(key, k -> {
+                Node n = new Node();
+                n.name = p;
+                n.fullPath = k;
+                n.isFolder = true;
+                n.isJob = false;
+                finalCurrent.children.add(n);
+                return n;
+            });
+        }
+    }
+
+    private boolean computeHasConfig(Node node) {
+        boolean self = node.hasConfigXml;
+        boolean child = false;
+
+        for (Node c : node.children) {
+            child |= computeHasConfig(c);
+        }
+
+        node.hasAnyConfigInSubtree = self || child;
+        return node.hasAnyConfigInSubtree;
+    }
+
+    private String getParentPath(String path) {
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash <= 0) return null;
+        return path.substring(0, lastSlash);
     }
 
     private byte[] readAllBytes(InputStream in) {
