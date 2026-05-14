@@ -16,29 +16,51 @@ public class PreviewEngine {
     private final ImportEngine importEngine = new ImportEngine();
 
     public List<Diff> previewWithDiff(ZipInputStream zipInputStream) throws IOException {
+        return previewWithDiff(zipInputStream, null);
+    }
+
+    public List<Diff> previewWithDiff(ZipInputStream zipInputStream, ImportContext ctx) throws IOException {
         TreeNode root = treeBuilder.buildTree(zipInputStream);
-        return diffEngine.dryRun(root);
+        return diffEngine.dryRun(root, ctx);
     }
 
     public List<Diff> previewWithDiff(List<String> zipPaths) {
+        return previewWithDiff(zipPaths, null);
+    }
+
+    public List<Diff> previewWithDiff(List<String> zipPaths, ImportContext ctx) {
         TreeNode root = treeBuilder.buildTree(zipPaths);
-        return diffEngine.dryRun(root);
+        return diffEngine.dryRun(root, ctx);
     }
 
     /**
      * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播）
      */
     public DryRunResult previewWithGroups(List<String> zipPaths, boolean autoRename) {
+        return previewWithGroups(zipPaths, autoRename, null);
+    }
+
+    /**
+     * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播，支持 targetGroup）
+     */
+    public DryRunResult previewWithGroups(List<String> zipPaths, boolean autoRename, ImportContext ctx) {
         TreeNode root = treeBuilder.buildTree(zipPaths);
-        return diffEngine.dryRunWithRenameDag(root, autoRename);
+        return diffEngine.dryRunWithRenameDag(root, autoRename, ctx);
     }
 
     /**
      * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播）
      */
     public DryRunResult previewWithGroups(ZipInputStream zipInputStream, boolean autoRename) throws IOException {
+        return previewWithGroups(zipInputStream, autoRename, null);
+    }
+
+    /**
+     * 分层预览：Folders 和 Jobs 分开（带 rename DAG 传播，支持 targetGroup）
+     */
+    public DryRunResult previewWithGroups(ZipInputStream zipInputStream, boolean autoRename, ImportContext ctx) throws IOException {
         TreeNode root = treeBuilder.buildTree(zipInputStream);
-        return diffEngine.dryRunWithRenameDag(root, autoRename);
+        return diffEngine.dryRunWithRenameDag(root, autoRename, ctx);
     }
 
     public List<DiffResult> preview(List<String> zipPaths, ImportContext ctx) {

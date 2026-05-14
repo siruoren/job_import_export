@@ -9,8 +9,12 @@ import java.util.*;
 public class DryRunDiffEngine {
 
     public List<Diff> dryRun(TreeNode root) {
+        return dryRun(root, null);
+    }
+
+    public List<Diff> dryRun(TreeNode root, ImportContext ctx) {
         List<Diff> result = new ArrayList<>();
-        dryRun(root, "", result);
+        dryRun(root, "", result, ctx);
         return result;
     }
 
@@ -21,6 +25,17 @@ public class DryRunDiffEngine {
      * @return DryRunResult 包含 folderActions 和 jobActions
      */
     public DryRunResult dryRunWithRenameDag(TreeNode root, boolean autoRename) {
+        return dryRunWithRenameDag(root, autoRename, null);
+    }
+
+    /**
+     * 带 rename DAG 传播的 dry-run（支持 targetGroup）
+     * @param root 树根节点
+     * @param autoRename 是否自动重命名冲突项
+     * @param ctx 导入上下文（包含 targetGroup 和 basePath）
+     * @return DryRunResult 包含 folderActions 和 jobActions
+     */
+    public DryRunResult dryRunWithRenameDag(TreeNode root, boolean autoRename, ImportContext ctx) {
         DryRunResult result = new DryRunResult();
         // 按路径长度排序，确保 parent 在 child 之前处理
         Map<String, String> renameMap = new LinkedHashMap<>();
@@ -32,14 +47,15 @@ public class DryRunDiffEngine {
             if (depthA != depthB) return depthA - depthB;
             return a.compareTo(b);
         });
-        
+
         // 按顺序处理每个路径
         for (String originalPath : orderedPaths) {
             // 应用已有的 renameMap，计算当前路径的最终位置
             String resolvedPath = resolveWithDag(originalPath, renameMap);
-            
-            // 检查 Jenkins 中是否存在
-            Item existingItem = Jenkins.get().getItemByFullName(resolvedPath);
+
+            // 检查 Jenkins 中是否存在（使用完整路径）
+            String fullPath = getFullPath(resolvedPath, ctx);
+            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
             
             // 判断节点是否有 config.xml
             boolean hasConfig = hasConfigXmlFromTree(root, originalPath);
@@ -51,12 +67,12 @@ public class DryRunDiffEngine {
                     if (autoRename) {
                         // 自动重命名：基于已解析的父路径计算新名称
                         String parentPath = getParentPath(resolvedPath);
-                        String newName = generateUniqueName(parentPath, getLastPathSegment(resolvedPath));
+                        String newName = generateUniqueName(parentPath, getLastPathSegment(resolvedPath), ctx);
                         String newPath = parentPath.isEmpty() ? newName : parentPath + "/" + newName;
-                        
+
                         // 记录 rename DAG（原始路径 -> 最终路径）
                         renameMap.put(originalPath, newPath);
-                        
+
                         result.addFolderAction(new NodeAction(originalPath, Action.RENAME, "目录已重命名为: " + newPath));
                     } else {
                         result.addFolderAction(new NodeAction(resolvedPath, Action.REUSE, "文件夹已存在，复用"));
@@ -75,12 +91,12 @@ public class DryRunDiffEngine {
                     if (autoRename) {
                         // 自动重命名：基于已解析的父路径计算新名称
                         String parentPath = getParentPath(resolvedPath);
-                        String newName = generateUniqueJobName(parentPath, getLastPathSegment(resolvedPath));
+                        String newName = generateUniqueJobName(parentPath, getLastPathSegment(resolvedPath), ctx);
                         String newPath = parentPath.isEmpty() ? newName : parentPath + "/" + newName;
-                        
+
                         // 记录 rename DAG（原始路径 -> 最终路径）
                         renameMap.put(originalPath, newPath);
-                        
+
                         result.addJobAction(new NodeAction(originalPath, Action.RENAME, "任务已重命名为: " + newPath));
                     } else {
                         result.addJobAction(new NodeAction(resolvedPath, Action.OVERWRITE, "将覆盖现有任务"));
@@ -211,40 +227,56 @@ public class DryRunDiffEngine {
         return path.substring(lastSlash + 1);
     }
     
-    private String generateUniqueJobName(String folderPath, String jobName) {
+    private String generateUniqueJobName(String folderPath, String jobName, ImportContext ctx) {
         String baseName = jobName;
         int counter = 2;
         String candidate;
-        
+        String checkPath;
+
         do {
             candidate = baseName + "_" + counter;
             counter++;
-        } while (Jenkins.get().getItemByFullName(folderPath.isEmpty() ? candidate : folderPath + "/" + candidate) != null);
-        
+            String relativePath = folderPath.isEmpty() ? candidate : folderPath + "/" + candidate;
+            checkPath = getFullPath(relativePath, ctx);
+        } while (Jenkins.get().getItemByFullName(checkPath) != null);
+
         return candidate;
     }
-    
+
     /**
      * 生成唯一的名称（支持 Folder 和 Job）
      */
-    private String generateUniqueName(String folderPath, String baseName) {
+    private String generateUniqueName(String folderPath, String baseName, ImportContext ctx) {
         int counter = 2;
         String candidate;
         String fullPath;
-        
+        String checkPath;
+
         do {
             candidate = baseName + "_" + counter;
             counter++;
             fullPath = folderPath.isEmpty() ? candidate : folderPath + "/" + candidate;
-        } while (Jenkins.get().getItemByFullName(fullPath) != null);
-        
+            checkPath = getFullPath(fullPath, ctx);
+        } while (Jenkins.get().getItemByFullName(checkPath) != null);
+
         return candidate;
     }
 
-    private void dryRun(TreeNode node, String parent, List<Diff> result) {
+    /**
+     * 获取完整路径（基于 targetGroup 的 basePath）
+     */
+    private String getFullPath(String relativePath, ImportContext ctx) {
+        if (ctx == null || ctx.basePath == null || ctx.basePath.isEmpty()) {
+            return relativePath;
+        }
+        return ctx.basePath + "/" + relativePath;
+    }
+
+    private void dryRun(TreeNode node, String parent, List<Diff> result, ImportContext ctx) {
         String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
 
-        Item existingItem = Jenkins.get().getItemByFullName(path);
+        String fullPath = getFullPath(path, ctx);
+        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
 
         // Folder 永远被处理
         if (existingItem != null && existingItem instanceof hudson.model.ItemGroup) {
@@ -286,7 +318,7 @@ public class DryRunDiffEngine {
 
         // 递归处理子节点
         for (TreeNode child : node.children.values()) {
-            dryRun(child, path, result);
+            dryRun(child, path, result, ctx);
         }
     }
 
@@ -294,15 +326,20 @@ public class DryRunDiffEngine {
      * 分层输出：Folders 和 Jobs 分开
      */
     public DryRunResult dryRunWithGroups(TreeNode root) {
+        return dryRunWithGroups(root, null);
+    }
+
+    public DryRunResult dryRunWithGroups(TreeNode root, ImportContext ctx) {
         DryRunResult result = new DryRunResult();
-        dryRunWithGroups(root, "", result);
+        dryRunWithGroups(root, "", result, ctx);
         return result;
     }
 
-    private void dryRunWithGroups(TreeNode node, String parent, DryRunResult result) {
+    private void dryRunWithGroups(TreeNode node, String parent, DryRunResult result, ImportContext ctx) {
         String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
 
-        Item existingItem = Jenkins.get().getItemByFullName(path);
+        String fullPath = getFullPath(path, ctx);
+        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
 
         // ✔ Folder 处理（添加到 folderActions）
         Action folderAction;
@@ -335,7 +372,7 @@ public class DryRunDiffEngine {
 
         // 递归处理子节点
         for (TreeNode child : node.children.values()) {
-            dryRunWithGroups(child, path, result);
+            dryRunWithGroups(child, path, result, ctx);
         }
     }
 }
