@@ -215,16 +215,16 @@
                             content += '&lt;tr&gt;';
 
                             content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;'
-                                + escapeHtml(detail.jobPath)
+                                + escapeHtml(detail.fullPath || detail.jobPath)
                                 + '&lt;/td&gt;';
 
-                            let finalName = escapeHtml(detail.finalName || detail.jobPath);
+                            let finalName = escapeHtml(detail.fullPath || detail.finalName || detail.jobPath);
 
                             if (detail.finalName &amp;&amp; detail.finalName !== detail.jobPath) {
                                 finalName =
-                                    escapeHtml(detail.jobPath)
+                                    escapeHtml(detail.fullPath || detail.jobPath)
                                     + ' → '
-                                    + escapeHtml(detail.finalName);
+                                    + escapeHtml(detail.fullPath || detail.finalName);
                             }
 
                             content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;'
@@ -530,6 +530,10 @@
                 <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
+                    <j:set var="targetName" value="${it.item.fullName}" />
+                    <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
+                        任务将导入到目录：<strong>${empty targetName ? 'Jenkins 根目录' : targetName}</strong>
+                    </div>
                     <form method="post" action="batchImport" enctype="multipart/form-data" accept-charset="UTF-8" id="batchImportForm" style="text-align:left;">
                         <table class="form" style="width:100%;">
                             <tr>

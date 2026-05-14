@@ -19,6 +19,7 @@ public class ImportContext {
     public boolean autoRename;
     
     public hudson.model.ItemGroup targetGroup;
+    public String basePath;
     
     // 类型冲突检查字段
     public boolean blocked = false;
@@ -34,6 +35,11 @@ public class ImportContext {
         this.overwrite = overwrite;
         this.autoRename = autoRename;
         this.targetGroup = targetGroup;
+        if (targetGroup instanceof hudson.model.AbstractItem) {
+            this.basePath = ((hudson.model.AbstractItem) targetGroup).getFullName();
+        } else {
+            this.basePath = "";
+        }
     }
     
     public void addWarning(String warning) {

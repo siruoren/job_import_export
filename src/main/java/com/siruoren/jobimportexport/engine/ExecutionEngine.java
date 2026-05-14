@@ -105,8 +105,8 @@ public class ExecutionEngine {
             // 应用已有的 renameMap，计算当前路径的最终位置
             String resolvedPath = resolveWithDag(originalPath, ctx.renameMap);
 
-            // 检查 Jenkins 中是否存在
-            Item existingItem = Jenkins.get().getItemByFullName(resolvedPath);
+            String fullPath = getFullPath(resolvedPath, ctx);
+            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
 
             if (existingItem != null) {
                 // 需要 rename
@@ -170,13 +170,14 @@ public class ExecutionEngine {
             boolean isFolderWithConfig = (folderNode != null);
             
             // 检查 Jenkins 中是否已存在
-            Item existingItem = Jenkins.get().getItemByFullName(resolvedPath);
+            String fullPath = getFullPath(resolvedPath, ctx);
+            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
             
             if (ctx.dryRun) {
-                ctx.virtualFolders.add(resolvedPath);
+                ctx.virtualFolders.add(fullPath);
                 
                 // dryRun 模式下，所有目录都需要记录到 results
-                ImportResult result = createFolderResult(path, resolvedPath);
+                ImportResult result = createFolderResult(path, resolvedPath, ctx);
                 
                 if (existingItem != null) {
                     // Jenkins 中已存在
@@ -238,7 +239,7 @@ public class ExecutionEngine {
                         handleOverwriteFolder(existingItem, folderNode, resolvedPath, ctx);
                     } else {
                         // 非覆盖模式：跳过，记录到 results
-                        ImportResult result = createFolderResult(path, resolvedPath);
+                        ImportResult result = createFolderResult(path, resolvedPath, ctx);
                         result.statusEnum = Status.SKIP_EXISTS;
                         result.status = "SKIP_EXISTS";
                         result.skipped = true;
@@ -257,8 +258,7 @@ public class ExecutionEngine {
                 
                 // 如果是有配置的目录且有 config.xml，需要更新配置
                 if (isFolderWithConfig && folderNode.configXml != null && folderNode.configXml.length > 0) {
-                    // 新创建的目录，获取并更新配置
-                    Item newItem = Jenkins.get().getItemByFullName(resolvedPath);
+                    Item newItem = Jenkins.get().getItemByFullName(fullPath);
                     if (newItem != null) {
                         updateFolderConfig(newItem, folderNode, resolvedPath);
                     }
@@ -276,7 +276,7 @@ public class ExecutionEngine {
      * 处理目录任务的覆盖更新
      */
     private void handleOverwriteFolder(Item existingItem, TreeNode node, String path, ImportContext ctx) {
-        ImportResult result = createFolderResult(path, path);
+        ImportResult result = createFolderResult(path, path, ctx);
         
         try {
             // 如果有新的 config.xml，更新配置
@@ -320,12 +320,12 @@ public class ExecutionEngine {
     /**
      * 创建 Folder 的 ImportResult
      */
-    private ImportResult createFolderResult(String originalPath, String resolvedPath) {
+    private ImportResult createFolderResult(String originalPath, String resolvedPath, ImportContext ctx) {
         String folderPath = getParentPath(resolvedPath);
         String folderName = getLastPathSegment(resolvedPath);
         ImportResult result = new ImportResult(folderName, folderPath);
         result.finalName = resolvedPath;
-        result.fullPath = resolvedPath;
+        result.fullPath = getFullPath(resolvedPath, ctx);
         // 移除所有前导斜杠，避免显示 "/test" 或 "//test"
         result.sourcePath = originalPath.replaceFirst("^/+", "");
         result.displayPath = result.sourcePath;
@@ -349,7 +349,7 @@ public class ExecutionEngine {
             String parentPath = getParentPath(resolvedPath);
             if (shouldSkipDueToParentFolder(originalPath, resolvedPath, ctx)) {
                 // 父目录冲突且不覆盖/不重命名，跳过此任务
-                ImportResult result = createResult(node, resolvedPath);
+                ImportResult result = createResult(node, resolvedPath, ctx);
                 result.statusEnum = Status.SKIP_EXISTS;
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
@@ -358,7 +358,7 @@ public class ExecutionEngine {
                 continue;
             }
 
-            ImportResult result = createResult(node, resolvedPath);
+            ImportResult result = createResult(node, resolvedPath, ctx);
             processJob(node, resolvedPath, result, ctx);
             results.add(result);
         }
@@ -381,7 +381,8 @@ public class ExecutionEngine {
             if (resolvedPath.startsWith(resolvedFolderPath + "/")) {
                 // dryRun 模式下，检查 virtualFolders
                 if (ctx.dryRun) {
-                    if (ctx.virtualFolders.contains(resolvedFolderPath)) {
+                    String fullFolderPath = getFullPath(resolvedFolderPath, ctx);
+                    if (ctx.virtualFolders.contains(fullFolderPath)) {
                         // 父目录在 dryRun 模式下会被创建，子任务正常创建
                         return false;
                     }
@@ -390,7 +391,8 @@ public class ExecutionEngine {
                 }
                 
                 // 非 dryRun 模式下，检查 Jenkins 中是否存在
-                Item existingItem = Jenkins.get().getItemByFullName(resolvedFolderPath);
+                String fullFolderPath = getFullPath(resolvedFolderPath, ctx);
+                Item existingItem = Jenkins.get().getItemByFullName(fullFolderPath);
                 if (existingItem != null) {
                     // 父目录存在且未覆盖/未重命名，会被跳过，所以子任务也应该跳过
                     return true;
@@ -401,12 +403,12 @@ public class ExecutionEngine {
         return false;
     }
 
-    private ImportResult createResult(TreeNode node, String path) {
+    private ImportResult createResult(TreeNode node, String path, ImportContext ctx) {
         String folderPath = getParentPath(path);
         String jobName = getLastPathSegment(path);
         ImportResult result = new ImportResult(jobName, folderPath);
         result.finalName = path;
-        result.fullPath = path;
+        result.fullPath = getFullPath(path, ctx);
         result.sourcePath = node.fullPath;
         result.displayPath = node.fullPath;
         result.isFolder = (node.type == NodeType.FOLDER);
@@ -415,7 +417,8 @@ public class ExecutionEngine {
     }
 
     private void processJob(TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        Item existingItem = Jenkins.get().getItemByFullName(path);
+        String fullPath = getFullPath(path, ctx);
+        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
 
         if (existingItem != null) {
             if (ctx.overwrite) {
@@ -703,6 +706,13 @@ public class ExecutionEngine {
         return path.substring(lastSlash + 1);
     }
 
+    private String getFullPath(String relativePath, ImportContext ctx) {
+        if (ctx.basePath == null || ctx.basePath.isEmpty()) {
+            return relativePath;
+        }
+        return ctx.basePath + "/" + relativePath;
+    }
+
     private String generateUniqueJobName(ItemGroup itemGroup, String folderPath, String jobName) {
         String baseName = jobName;
         int counter = 2;
@@ -724,16 +734,17 @@ public class ExecutionEngine {
         int counter = 2;
         String candidate;
         String fullPath;
+        String checkPath;
 
         do {
             candidate = baseName + "_" + counter;
             counter++;
             fullPath = folderPath.isEmpty() ? candidate : folderPath + "/" + candidate;
-            // 同时检查 Jenkins 中已存在的项目和当前会话中刚创建的项目
-        } while (Jenkins.get().getItemByFullName(fullPath) != null 
+            checkPath = getFullPath(fullPath, ctx);
+        } while (Jenkins.get().getItemByFullName(checkPath) != null 
                  || ctx.createdFolders.contains(fullPath)
                  || ctx.createdJobs.contains(fullPath)
-                 || ctx.virtualFolders.contains(fullPath));
+                 || ctx.virtualFolders.contains(checkPath));
 
         return candidate;
     }

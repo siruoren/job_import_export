@@ -482,6 +482,8 @@ public class JobImportExportAction implements Action {
                    .append(escapeJson(result.displayPath != null ? result.displayPath : result.jobName))
                    .append("\",\"finalName\":\"")
                    .append(escapeJson(result.finalName))
+                   .append("\",\"fullPath\":\"")
+                   .append(escapeJson(result.fullPath != null ? result.fullPath : result.finalName))
                    .append("\",\"status\":\"")
                    .append(result.status)
                    .append("\",\"message\":\"")
