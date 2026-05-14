@@ -94,6 +94,12 @@
                         const fd = new FormData(form);
                         Object.entries(extra).forEach(([k, v]) => fd.set(k, v));
 
+                        const conflictMode = document.querySelector('input[name="conflictMode"]:checked');
+                        if (conflictMode) {
+                            fd.set('overwrite', conflictMode.value === 'overwrite' ? 'true' : 'false');
+                            fd.set('rename', conflictMode.value === 'rename' ? 'true' : 'false');
+                        }
+
                         const res = await fetch(form.action, {
                             method: 'POST',
                             body: fd
@@ -147,6 +153,12 @@
                     try {
                         const fd = new FormData(form);
                         fd.set('dryRun', 'false');
+
+                        const conflictMode = document.querySelector('input[name="conflictMode"]:checked');
+                        if (conflictMode) {
+                            fd.set('overwrite', conflictMode.value === 'overwrite' ? 'true' : 'false');
+                            fd.set('rename', conflictMode.value === 'rename' ? 'true' : 'false');
+                        }
 
                         const res = await fetch(form.action, {
                             method: 'POST',
@@ -407,6 +419,12 @@
                         const fd = new FormData(form);
                         fd.set('dryRun', 'false');
 
+                        const conflictMode = document.querySelector('input[name="conflictMode"]:checked');
+                        if (conflictMode) {
+                            fd.set('overwrite', conflictMode.value === 'overwrite' ? 'true' : 'false');
+                            fd.set('rename', conflictMode.value === 'rename' ? 'true' : 'false');
+                        }
+
                         const res = await fetch(form.action, {
                             method: 'POST',
                             body: fd
@@ -463,8 +481,8 @@
                 }
             </script>
 
-            <div style="display:flex; gap:24px; width:100%;">
-                <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+            <div style="display:flex; gap:24px; width:100%; flex-wrap:wrap;">
+                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">导出当前配置</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">将当前任务/文件夹配置导出为 XML 文件。</p>
                     <form method="get" action="export" style="text-align:left;">
@@ -475,7 +493,7 @@
                 </div>
 
                 <j:if test="${it.hasPermission()}">
-                <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">更新配置</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">上传新的 XML 配置文件来更新当前任务/文件夹配置。</p>
                     <form method="post" action="update" enctype="multipart/form-data" id="updateForm" style="text-align:left;">
@@ -513,12 +531,12 @@
                 </div>
                 </j:if>
                 <j:if test="${!it.hasPermission()}">
-                <div style="flex:1;">
+                <div style="flex:1; min-width:280px;">
                 </div>
                 </j:if>
 
                 <j:if test="${it.hasPermission()}">
-                <div style="flex:1; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
                     <j:set var="targetName" value="${it.item.fullName}" />
@@ -555,17 +573,29 @@
                                 </td>
                             </tr>
                             <tr>
+                                <td style="padding-bottom:12px;">
+                                    <label style="font-weight:500; color:#333; font-size:14px;">冲突处理</label>
+                                </td>
+                            </tr>
+                            <tr>
                                 <td style="padding-bottom:8px;">
-                                    <input type="checkbox" name="overwrite" id="overwrite" value="true" style="margin-right:8px;" />
-                                    <label for="overwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则覆盖原任务（会自动备份原配置）</p>
+                                    <input type="radio" name="conflictMode" id="conflictSkip" value="skip" style="margin-right:8px;" checked="checked" />
+                                    <label for="conflictSkip" style="color:#333; font-size:13px;">不处理冲突（跳过已存在的任务）</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则跳过，不进行任何操作</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:8px;">
+                                    <input type="radio" name="conflictMode" id="conflictOverwrite" value="overwrite" style="margin-right:8px;" />
+                                    <label for="conflictOverwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则覆盖原任务（会自动备份原配置）</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <input type="checkbox" name="rename" id="rename" value="true" style="margin-right:8px;" />
-                                    <label for="rename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则自动重命名（test → test_1 → test_2）</p>
+                                    <input type="radio" name="conflictMode" id="conflictRename" value="rename" style="margin-right:8px;" />
+                                    <label for="conflictRename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则自动重命名（test → test_1 → test_2）</p>
                                 </td>
                             </tr>
                             <tr>

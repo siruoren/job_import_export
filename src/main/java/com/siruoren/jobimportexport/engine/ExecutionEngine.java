@@ -217,11 +217,19 @@ public class ExecutionEngine {
                             result.message = "目录任务已存在，已跳过";
                         }
                     } else {
-                        // 普通 Folder 已存在则复用
-                        result.statusEnum = Status.REUSE_FOLDER;
-                        result.status = "REUSE_FOLDER";
-                        result.skipped = true;
-                        result.message = "目录已存在，复用";
+                        // 普通 Folder 已存在，检查类型是否匹配
+                        if (existingItem instanceof Job) {
+                            result.statusEnum = Status.ERROR;
+                            result.status = "ERROR";
+                            result.success = false;
+                            result.message = "任务类型不同，无法作为目录导入（现有: 普通任务，导入: 目录）";
+                            ctx.parentTypeErrors.add(resolvedPath);
+                        } else {
+                            result.statusEnum = Status.REUSE_FOLDER;
+                            result.status = "REUSE_FOLDER";
+                            result.skipped = true;
+                            result.message = "目录已存在，复用";
+                        }
                     }
                 } else {
                     // Jenkins 中不存在，将创建
@@ -265,10 +273,18 @@ public class ExecutionEngine {
                     }
                 } else {
                     ImportResult result = createFolderResult(path, resolvedPath, ctx);
-                    result.statusEnum = Status.REUSE_FOLDER;
-                    result.status = "REUSE_FOLDER";
-                    result.skipped = true;
-                    result.message = "目录已存在，复用";
+                    if (existingItem instanceof Job) {
+                        result.statusEnum = Status.ERROR;
+                        result.status = "ERROR";
+                        result.success = false;
+                        result.message = "任务类型不同，无法作为目录导入（现有: 普通任务，导入: 目录）";
+                        ctx.parentTypeErrors.add(resolvedPath);
+                    } else {
+                        result.statusEnum = Status.REUSE_FOLDER;
+                        result.status = "REUSE_FOLDER";
+                        result.skipped = true;
+                        result.message = "目录已存在，复用";
+                    }
                     results.add(result);
                 }
                 ctx.createdFolders.add(fullPath);

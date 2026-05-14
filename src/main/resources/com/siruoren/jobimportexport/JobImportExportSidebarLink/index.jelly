@@ -99,6 +99,12 @@
                         const fd = new FormData(form);
                         Object.entries(extra).forEach(([k, v]) => fd.set(k, v));
 
+                        const conflictMode = document.querySelector('input[name="conflictMode"]:checked');
+                        if (conflictMode) {
+                            fd.set('overwrite', conflictMode.value === 'overwrite' ? 'true' : 'false');
+                            fd.set('rename', conflictMode.value === 'rename' ? 'true' : 'false');
+                        }
+
                         const res = await fetch(form.action, {
                             method: 'POST',
                             body: fd
@@ -390,6 +396,12 @@
                         const fd = new FormData(form);
                         fd.set('dryRun', 'false');
 
+                        const conflictMode = document.querySelector('input[name="conflictMode"]:checked');
+                        if (conflictMode) {
+                            fd.set('overwrite', conflictMode.value === 'overwrite' ? 'true' : 'false');
+                            fd.set('rename', conflictMode.value === 'rename' ? 'true' : 'false');
+                        }
+
                         const res = await fetch(form.action, {
                             method: 'POST',
                             body: fd
@@ -398,19 +410,35 @@
                         const text = await res.text();
                         const result = JSON.parse(text);
 
+                        JenkinsModal.setLoading(false);
+
+                        JenkinsModal.setContent(renderResult(result));
+
+                        const buttons = [{
+                            text: '关闭',
+                            type: 'default',
+                            onClick: () => JenkinsModal.close()
+                        }];
+
+                        if (result.redirect) {
+                            buttons.push({
+                                text: '跳转',
+                                type: 'primary',
+                                onClick: () => location.href = result.redirect
+                            });
+                        }
+
+                        JenkinsModal.setFooter(buttons);
+
                         if (result.success) {
-                            showToast('success', result.message);
-                            if (result.redirect) {
-                                setTimeout(() => location.href = result.redirect, 800);
-                            }
+                            showToast('success', result.message || '导入成功');
                         } else {
                             showToast('error', result.message || '导入失败');
                         }
 
                     } catch (e) {
-                        showToast('error', '导入失败: ' + e);
-                    } finally {
                         JenkinsModal.setLoading(false);
+                        showToast('error', '导入失败: ' + e);
                     }
                 }
 
@@ -522,31 +550,43 @@
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td style="padding-bottom:12px;">
-                                        <label style="font-weight:500; color:#333; font-size:14px;">导入选项</label>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding-bottom:8px;">
-                                        <input type="checkbox" name="dryRun" id="dryRun" value="true" style="margin-right:8px;" checked="checked" />
-                                        <label for="dryRun" style="color:#333; font-size:13px;">Dry Run（仅检查不导入）</label>
-                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后仅检查任务配置，不实际导入。推荐先使用此模式检查后再导入</p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding-bottom:8px;">
-                                        <input type="checkbox" name="overwrite" id="overwrite" value="true" style="margin-right:8px;" />
-                                        <label for="overwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
-                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则覆盖原任务（会自动备份原配置）</p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding-bottom:12px;">
-                                        <input type="checkbox" name="rename" id="rename" value="true" style="margin-right:8px;" />
-                                        <label for="rename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
-                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则自动重命名（test → test_1 → test_2）</p>
-                                    </td>
-                                </tr>
+                                <td style="padding-bottom:12px;">
+                                    <label style="font-weight:500; color:#333; font-size:14px;">导入选项</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:8px;">
+                                    <input type="checkbox" name="dryRun" id="dryRun" value="true" style="margin-right:8px;" checked="checked" />
+                                    <label for="dryRun" style="color:#333; font-size:13px;">Dry Run（仅检查不导入）</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后仅检查任务配置，不实际导入。推荐先使用此模式检查后再导入</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:12px;">
+                                    <label style="font-weight:500; color:#333; font-size:14px;">冲突处理</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:8px;">
+                                    <input type="radio" name="conflictMode" id="conflictSkip" value="skip" style="margin-right:8px;" checked="checked" />
+                                    <label for="conflictSkip" style="color:#333; font-size:13px;">不处理冲突（跳过已存在的任务）</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则跳过，不进行任何操作</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:8px;">
+                                    <input type="radio" name="conflictMode" id="conflictOverwrite" value="overwrite" style="margin-right:8px;" />
+                                    <label for="conflictOverwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则覆盖原任务（会自动备份原配置）</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding-bottom:12px;">
+                                    <input type="radio" name="conflictMode" id="conflictRename" value="rename" style="margin-right:8px;" />
+                                    <label for="conflictRename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则自动重命名（test → test_1 → test_2）</p>
+                                </td>
+                            </tr>
                                 <tr>
                                     <td style="padding-top:8px;">
                                         <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
