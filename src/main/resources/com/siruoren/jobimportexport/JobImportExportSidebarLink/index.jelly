@@ -415,19 +415,69 @@
                 }
 
                 function openBatch() {
+                    const form = document.getElementById('batchImportForm');
+                    const dryRunCheckbox = document.getElementById('dryRun');
+                    const isDryRun = dryRunCheckbox.checked;
+
                     JenkinsModal.open({
-                        title: '批量导入任务',
-                        content: '&lt;div&gt;确认执行批量导入（支持失败重试）&lt;/div&gt;'
+                        title: isDryRun ? '批量导入任务（Dry Run）' : '批量导入任务',
+                        content: '<div>' + (isDryRun ? '确认执行 Dry Run（仅检查，不实际导入）' : '确认执行批量导入') + '</div>'
                     });
                     JenkinsModal.setFooter([{
                         text: '取消',
                         type: 'default',
                         onClick: () => JenkinsModal.close()
                     }, {
-                        text: '开始导入',
+                        text: isDryRun ? '开始检查' : '开始导入',
                         type: 'primary',
-                        onClick: () => submit(document.getElementById('batchImportForm'), { retry: true })
+                        onClick: () => isDryRun ? submit(form) : submitWithoutDryRun(form)
                     }]);
+                }
+
+                async function submitWithoutDryRun(form) {
+                    JenkinsModal.setLoading(true);
+
+                    try {
+                        const fd = new FormData(form);
+                        fd.set('dryRun', 'false');
+
+                        const res = await fetch(form.action, {
+                            method: 'POST',
+                            body: fd
+                        });
+
+                        const text = await res.text();
+                        const result = JSON.parse(text);
+
+                        JenkinsModal.setLoading(false);
+
+                        JenkinsModal.setContent(renderResult(result));
+
+                        const buttons = [{
+                            text: '关闭',
+                            type: 'default',
+                            onClick: () => JenkinsModal.close()
+                        }];
+
+                        if (result.redirect) {
+                            buttons.push({
+                                text: '跳转',
+                                type: 'primary',
+                                onClick: () => location.href = result.redirect
+                            });
+                        }
+
+                        JenkinsModal.setFooter(buttons);
+
+                    } catch (e) {
+                        JenkinsModal.setLoading(false);
+                        JenkinsModal.setContent('<div style="color:#dc3545;">请求失败: ' + e + '</div>');
+                        JenkinsModal.setFooter([{
+                            text: '关闭',
+                            type: 'default',
+                            onClick: () => JenkinsModal.close()
+                        }]);
+                    }
                 }
 
                 function listenProgress(batchId) {

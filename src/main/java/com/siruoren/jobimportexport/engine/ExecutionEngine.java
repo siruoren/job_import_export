@@ -220,6 +220,7 @@ public class ExecutionEngine {
                         // 普通 Folder 已存在则复用
                         result.statusEnum = Status.REUSE_FOLDER;
                         result.status = "REUSE_FOLDER";
+                        result.skipped = true;
                         result.message = "目录已存在，复用";
                     }
                 } else {
@@ -266,7 +267,7 @@ public class ExecutionEngine {
                     ImportResult result = createFolderResult(path, resolvedPath, ctx);
                     result.statusEnum = Status.REUSE_FOLDER;
                     result.status = "REUSE_FOLDER";
-                    result.success = true;
+                    result.skipped = true;
                     result.message = "目录已存在，复用";
                     results.add(result);
                 }
@@ -330,7 +331,7 @@ public class ExecutionEngine {
             } else {
                 result.statusEnum = Status.REUSE_FOLDER;
                 result.status = "REUSE_FOLDER";
-                result.success = true;
+                result.skipped = true;
                 result.message = "目录任务已存在，复用原配置";
             }
         } catch (Exception e) {
