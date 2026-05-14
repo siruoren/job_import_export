@@ -183,7 +183,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
             for (ImportResult result : results) {
                 if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB) {
+                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB) {
                     successCount++;
                 } else if (result.statusEnum == Status.ERROR) {
                     failCount++;
