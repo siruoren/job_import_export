@@ -29,10 +29,17 @@ public class TreeBuilder {
 
             String path = entry;
 
-            // 🚨 config.xml 不作为节点
             boolean isConfig = path.endsWith("/config.xml");
+            boolean isOtherXml = !isConfig && path.endsWith(".xml");
+
             if (isConfig) {
                 path = path.substring(0, path.length() - "/config.xml".length());
+            } else if (isOtherXml) {
+                int lastSlash = path.lastIndexOf('/');
+                String parent = lastSlash > 0 ? path.substring(0, lastSlash + 1) : "";
+                String fileName = path.substring(lastSlash + 1);
+                String jobName = fileName.substring(0, fileName.length() - ".xml".length());
+                path = parent + jobName;
             }
 
             String[] parts = path.split("/");
@@ -61,10 +68,8 @@ public class TreeBuilder {
                 current = child;
             }
 
-            // 🚨 config.xml 只附加 metadata
-            if (isConfig) {
+            if (isConfig || isOtherXml) {
                 current.hasConfigXml = true;
-                // 标记为 JOB，后续会根据是否有子节点重新调整为 FOLDER_WITH_CONFIG
                 current.type = NodeType.JOB;
             }
         }
@@ -108,11 +113,18 @@ public class TreeBuilder {
                 continue;
             }
 
-            // 🚨 config.xml 不作为节点
             boolean isConfig = path.endsWith("/config.xml");
+            boolean isOtherXml = !isConfig && path.endsWith(".xml");
+
             String nodePath = path;
             if (isConfig) {
                 nodePath = path.substring(0, path.length() - "/config.xml".length());
+            } else if (isOtherXml) {
+                int lastSlash = path.lastIndexOf('/');
+                String parent = lastSlash > 0 ? path.substring(0, lastSlash + 1) : "";
+                String fileName = path.substring(lastSlash + 1);
+                String jobName = fileName.substring(0, fileName.length() - ".xml".length());
+                nodePath = parent + jobName;
             }
 
             String[] parts = nodePath.split("/");
@@ -141,10 +153,8 @@ public class TreeBuilder {
                 current = child;
             }
 
-            // 🚨 config.xml 只附加 metadata
-            if (isConfig) {
+            if (isConfig || isOtherXml) {
                 current.hasConfigXml = true;
-                // 标记为 JOB，后续会根据是否有子节点重新调整为 FOLDER_WITH_CONFIG
                 current.type = NodeType.JOB;
                 current.configXml = readAllBytes(zipInputStream);
             }

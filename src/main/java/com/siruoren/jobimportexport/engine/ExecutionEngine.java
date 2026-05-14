@@ -6,6 +6,7 @@ import com.siruoren.jobimportexport.engine.resolver.TypeResolver;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
+import hudson.model.Job;
 import jenkins.model.Jenkins;
 import jenkins.model.ModifiableTopLevelItemGroup;
 
@@ -197,9 +198,18 @@ public class ExecutionEngine {
                             result.renamed = true;
                             result.message = "目录已重命名为: " + getLastPathSegment(resolvedPath);
                         } else if (ctx.overwrite) {
-                            result.statusEnum = Status.OVERWRITE_FOLDER;
-                            result.status = "OVERWRITE_FOLDER";
-                            result.message = "将覆盖目录任务配置";
+                            if (folderNode.configXml != null && folderNode.configXml.length > 0
+                                    && !isFolderConfigXml(folderNode.configXml)) {
+                                result.statusEnum = Status.ERROR;
+                                result.status = "ERROR";
+                                result.success = false;
+                                result.message = "任务类型不同，无法覆盖（现有: 目录，导入: 普通任务）";
+                                ctx.parentTypeErrors.add(resolvedPath);
+                            } else {
+                                result.statusEnum = Status.OVERWRITE_FOLDER;
+                                result.status = "OVERWRITE_FOLDER";
+                                result.message = "将覆盖目录任务配置";
+                            }
                         } else {
                             result.statusEnum = Status.SKIP_EXISTS;
                             result.status = "SKIP_EXISTS";
@@ -242,12 +252,9 @@ public class ExecutionEngine {
             
             if (existingItem != null) {
                 if (isFolderWithConfig) {
-                    // 有配置的目录任务已存在
                     if (ctx.overwrite) {
-                        // 覆盖模式：更新目录配置
                         handleOverwriteFolder(existingItem, folderNode, resolvedPath, ctx);
                     } else {
-                        // 非覆盖模式：跳过，记录到 results
                         ImportResult result = createFolderResult(path, resolvedPath, ctx);
                         result.statusEnum = Status.SKIP_EXISTS;
                         result.status = "SKIP_EXISTS";
@@ -255,17 +262,23 @@ public class ExecutionEngine {
                         result.message = "目录任务已存在，已跳过";
                         results.add(result);
                     }
+                } else {
+                    ImportResult result = createFolderResult(path, resolvedPath, ctx);
+                    result.statusEnum = Status.REUSE_FOLDER;
+                    result.status = "REUSE_FOLDER";
+                    result.success = true;
+                    result.message = "目录已存在，复用";
+                    results.add(result);
                 }
-                // 普通 Folder 已存在则复用，不记录到 results
                 ctx.createdFolders.add(fullPath);
                 continue;
             }
 
+            ImportResult result = createFolderResult(path, resolvedPath, ctx);
             try {
                 ensureFolderPath(ctx.targetGroup, resolvedPath, true, ctx);
                 ctx.createdFolders.add(fullPath);
                 
-                // 如果是有配置的目录且有 config.xml，需要更新配置
                 if (isFolderWithConfig && folderNode.configXml != null && folderNode.configXml.length > 0) {
                     Item newItem = Jenkins.get().getItemByFullName(fullPath);
                     if (newItem != null) {
@@ -273,11 +286,19 @@ public class ExecutionEngine {
                     }
                 }
                 
-                // 刷新 Jenkins 内存状态，确保后续重命名检查能感知到刚创建的目录
+                result.statusEnum = isFolderWithConfig ? Status.CREATE_FOLDER : Status.CREATE_FOLDER;
+                result.status = "CREATE_FOLDER";
+                result.success = true;
+                result.message = isFolderWithConfig ? "已创建目录任务" : "已创建目录";
+                
                 Jenkins.get().reload();
             } catch (Exception e) {
-                // 忽略创建失败，后续 Job 创建会处理
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.message = "创建目录失败: " + e.getMessage();
             }
+            results.add(result);
         }
     }
     
@@ -286,9 +307,20 @@ public class ExecutionEngine {
      */
     private void handleOverwriteFolder(Item existingItem, TreeNode node, String path, ImportContext ctx) {
         ImportResult result = createFolderResult(path, path, ctx);
-        
+
+        if (node.configXml != null && node.configXml.length > 0) {
+            if (!isFolderConfigXml(node.configXml)) {
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.message = "任务类型不同，无法覆盖（现有: 目录，导入: 普通任务）";
+                ctx.parentTypeErrors.add(path);
+                results.add(result);
+                return;
+            }
+        }
+
         try {
-            // 如果有新的 config.xml，更新配置
             if (node.configXml != null && node.configXml.length > 0) {
                 updateFolderConfig(existingItem, node, path);
                 result.statusEnum = Status.OVERWRITE_FOLDER;
@@ -296,7 +328,6 @@ public class ExecutionEngine {
                 result.success = true;
                 result.message = "已更新目录任务配置";
             } else {
-                // 没有新配置，复用原来的
                 result.statusEnum = Status.REUSE_FOLDER;
                 result.status = "REUSE_FOLDER";
                 result.success = true;
@@ -308,7 +339,7 @@ public class ExecutionEngine {
             result.success = false;
             result.message = "更新目录任务失败: " + e.getMessage();
         }
-        
+
         results.add(result);
         ctx.createdFolders.add(getFullPath(path, ctx));
     }
@@ -363,6 +394,19 @@ public class ExecutionEngine {
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
                 result.message = "父目录任务已存在，已跳过";
+                results.add(result);
+                continue;
+            }
+
+            // 检查父任务是否有类型错误
+            if (ctx.hasParentTypeError(resolvedPath)) {
+                String parentErrorPath = ctx.getParentTypeErrorPath(resolvedPath);
+                ImportResult result = createResult(node, resolvedPath, ctx);
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.skipped = true;
+                result.message = "父类任务更新错误，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
                 results.add(result);
                 continue;
             }
@@ -459,7 +503,23 @@ public class ExecutionEngine {
     }
 
     private void handleOverwrite(Item existingItem, TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        if (!ctx.dryRun) {
+        if (ctx.dryRun) {
+            // 在 Dry Run 模式下，检查任务类型是否匹配
+            if (existingItem instanceof Job) {
+                String existingType = getJobTypeFromItemClass(existingItem.getClass());
+                String newType = getJobTypeFromXml(node.configXml);
+                
+                if (existingType != null && newType != null && !existingType.equals(newType)) {
+                    result.statusEnum = Status.ERROR;
+                    result.status = "ERROR";
+                    result.success = false;
+                    result.message = "任务类型不同，无法覆盖（现有: " + existingType + "，导入: " + newType + "）";
+                    // 标记此路径为类型错误，子任务将被跳过
+                    ctx.parentTypeErrors.add(path);
+                    return;
+                }
+            }
+        } else {
             try {
                 backupConfig(existingItem);
                 if (existingItem instanceof AbstractItem) {
@@ -481,7 +541,7 @@ public class ExecutionEngine {
         result.statusEnum = Status.OVERWRITE_JOB;
         result.status = "OVERWRITE_JOB";
         result.success = true;
-        result.message = "已覆盖任务配置";
+        result.message = ctx.dryRun ? "将覆盖任务配置" : "已覆盖任务配置";
     }
 
     private void handleAutoRename(TreeNode node, String path, ImportResult result, ImportContext ctx) {
@@ -720,6 +780,44 @@ public class ExecutionEngine {
         int lastSlash = path.lastIndexOf('/');
         if (lastSlash == -1) return path;
         return path.substring(lastSlash + 1);
+    }
+
+    private String getJobTypeFromXml(byte[] xml) {
+        try {
+            String xmlStr = new String(xml, "UTF-8");
+            if (xmlStr.contains("<project>")) {
+                if (xmlStr.contains("<hudson.model.FreeStyleProject>") || xmlStr.contains("<project>")) {
+                    return "Freestyle";
+                } else if (xmlStr.contains("<org.jenkinsci.plugins.workflow.job.WorkflowJob>")) {
+                    return "Pipeline";
+                } else if (xmlStr.contains("<hudson.maven.MavenModuleSet>")) {
+                    return "Maven";
+                } else if (xmlStr.contains("<hudson.matrix.MatrixProject>")) {
+                    return "Matrix";
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getJobTypeFromItemClass(Class<?> clazz) {
+        String name = clazz.getName();
+        if (name.contains("FreeStyleProject")) return "Freestyle";
+        if (name.contains("WorkflowJob")) return "Pipeline";
+        if (name.contains("MavenModuleSet")) return "Maven";
+        if (name.contains("MatrixProject")) return "Matrix";
+        return clazz.getSimpleName();
+    }
+
+    private boolean isFolderConfigXml(byte[] xml) {
+        try {
+            String xmlStr = new String(xml, "UTF-8");
+            return xmlStr.contains("com.cloudbees.hudson.plugins.folder.Folder");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String getFullPath(String relativePath, ImportContext ctx) {

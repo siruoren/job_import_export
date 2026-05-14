@@ -125,7 +125,7 @@
                             });
                         }
 
-                        if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0) {
+                        if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0) {
                             buttons.unshift({
                                 text: '确认导入',
                                 type: 'primary',
@@ -446,68 +446,70 @@
                 }
             </script>
 
-            <div style="width:100%;">
-                <div style="padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
-                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
-                    <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
-                    <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
-                        任务将导入到目录：<strong>Jenkins 根目录</strong>
+            <j:if test="${it.hasPermission()}">
+                <div style="width:100%;">
+                    <div style="padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                        <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
+                        <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
+                        <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
+                            任务将导入到目录：<strong>Jenkins 根目录</strong>
+                        </div>
+                        <form method="post" action="batchImport" enctype="multipart/form-data" accept-charset="UTF-8" id="batchImportForm" style="text-align:left;">
+                            <table class="form" style="width:100%;">
+                                <tr>
+                                    <td class="label" style="width:100%; padding-bottom:12px;">
+                                        <label for="zipFile" style="font-weight:500; color:#333; font-size:14px;">ZIP 文件</label>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-bottom:12px;">
+                                        <input type="file" name="zipFile" id="zipFile"
+                                               accept=".zip" required="true"
+                                               style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;"
+                                               onchange="document.getElementById('zipFileName').textContent = this.files[0]?.name || '';" />
+                                        <span id="zipFileName" style="margin-left:10px; color:#337ab7; font-size:13px;"></span>
+                                        <p class="description" style="margin-top:8px; color:#666; font-size:12px;">包含任务配置的 ZIP 文件，支持目录结构（job/config.xml）或扁平结构（job.xml）</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-bottom:12px;">
+                                        <label style="font-weight:500; color:#333; font-size:14px;">导入选项</label>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-bottom:8px;">
+                                        <input type="checkbox" name="dryRun" id="dryRun" value="true" style="margin-right:8px;" checked="checked" />
+                                        <label for="dryRun" style="color:#333; font-size:13px;">Dry Run（仅检查不导入）</label>
+                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后仅检查任务配置，不实际导入。推荐先使用此模式检查后再导入</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-bottom:8px;">
+                                        <input type="checkbox" name="overwrite" id="overwrite" value="true" style="margin-right:8px;" />
+                                        <label for="overwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
+                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则覆盖原任务（会自动备份原配置）</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-bottom:12px;">
+                                        <input type="checkbox" name="rename" id="rename" value="true" style="margin-right:8px;" />
+                                        <label for="rename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
+                                        <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则自动重命名（test → test_1 → test_2）</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding-top:8px;">
+                                        <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
+                                                onclick="openBatch()">
+                                            批量导入
+                                        </button>
+                                    </td>
+                                </tr>
+                            </table>
+                        </form>
                     </div>
-                    <form method="post" action="batchImport" enctype="multipart/form-data" accept-charset="UTF-8" id="batchImportForm" style="text-align:left;">
-                        <table class="form" style="width:100%;">
-                            <tr>
-                                <td class="label" style="width:100%; padding-bottom:12px;">
-                                    <label for="zipFile" style="font-weight:500; color:#333; font-size:14px;">ZIP 文件</label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-bottom:12px;">
-                                    <input type="file" name="zipFile" id="zipFile"
-                                           accept=".zip" required="true"
-                                           style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;"
-                                           onchange="document.getElementById('zipFileName').textContent = this.files[0]?.name || '';" />
-                                    <span id="zipFileName" style="margin-left:10px; color:#337ab7; font-size:13px;"></span>
-                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">包含任务配置的 ZIP 文件，支持目录结构（job/config.xml）或扁平结构（job.xml）</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-bottom:12px;">
-                                    <label style="font-weight:500; color:#333; font-size:14px;">导入选项</label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-bottom:8px;">
-                                    <input type="checkbox" name="dryRun" id="dryRun" value="true" style="margin-right:8px;" checked="checked" />
-                                    <label for="dryRun" style="color:#333; font-size:13px;">Dry Run（仅检查不导入）</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后仅检查任务配置，不实际导入。推荐先使用此模式检查后再导入</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-bottom:8px;">
-                                    <input type="checkbox" name="overwrite" id="overwrite" value="true" style="margin-right:8px;" />
-                                    <label for="overwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则覆盖原任务（会自动备份原配置）</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-bottom:12px;">
-                                    <input type="checkbox" name="rename" id="rename" value="true" style="margin-right:8px;" />
-                                    <label for="rename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后，如果任务已存在则自动重命名（test → test_1 → test_2）</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding-top:8px;">
-                                    <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
-                                            onclick="openBatch()">
-                                        批量导入
-                                    </button>
-                                </td>
-                            </tr>
-                        </table>
-                    </form>
                 </div>
-            </div>
+            </j:if>
         </l:main-panel>
     </l:layout>
 </j:jelly>

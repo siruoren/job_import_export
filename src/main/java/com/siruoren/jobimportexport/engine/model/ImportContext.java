@@ -27,6 +27,9 @@ public class ImportContext {
     public Map<String, NodeType> typeMap = new HashMap<>();
     public Set<String> blockedPaths = new HashSet<>();
     
+    // 父任务类型错误路径集合（用于跳过子任务）
+    public Set<String> parentTypeErrors = new HashSet<>();
+    
     public ImportContext() {
     }
     
@@ -68,5 +71,23 @@ public class ImportContext {
             }
         }
         return false;
+    }
+    
+    public boolean hasParentTypeError(String path) {
+        for (String parentError : parentTypeErrors) {
+            if (path.startsWith(parentError + "/")) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    public String getParentTypeErrorPath(String path) {
+        for (String parentError : parentTypeErrors) {
+            if (path.startsWith(parentError + "/")) {
+                return parentError;
+            }
+        }
+        return null;
     }
 }

@@ -69,6 +69,10 @@ public class JobImportExportSidebarLink implements RootAction {
         return true;
     }
 
+    public boolean hasPermission() {
+        return Jenkins.get().hasPermission(Item.CREATE);
+    }
+
     @RequirePOST
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
         try {
