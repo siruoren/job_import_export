@@ -5,7 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [1.0.3-SNAPSHOT] - 2026-05-13
+## [1.0.3-SNAPSHOT] - 2026-05-14
+
+### 新增功能
+
+- **多层级目录任务导入**：导入的目录任务下没有 config.xml 文件时，默认作为目录任务处理，并对比已存在的任务类型，防止类型不匹配（普通任务 vs 目录）
+
+### 变更
+
+- **预演结果计数逻辑优化**：只有 `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB` 状态算作成功，`SKIP_EXISTS`、`REUSE_FOLDER`、`RENAME_JOB`、`RENAME_FOLDER`、`SKIP_EMPTY` 等状态均归为跳过
+- **冲突处理选项改为单选项**：将覆盖和重命名选项从复选框改为三个互斥的单选按钮（不处理冲突/覆盖/重命名）
+- **页面功能框自适应**：使用 flex-wrap 和 min-width 实现响应式布局，功能框在小屏幕上自动换行
+- **Dry Run 确认导入后显示结果**：修复确认导入完成后弹窗不显示结果的问题，改为保持弹窗打开并显示导入结果
+
+### 修复
+
+- **确认导入后弹窗消失问题**：`confirmRealImport` 函数中移除 `JenkinsModal.close()`，改为显示加载状态，确保导入完成后弹窗正确显示结果
+- **目录类型不匹配检测**：当导入的目录（无 config.xml）与已存在的普通任务同名时，报告类型不匹配错误
 
 ### 架构重构（ImportEngine v2）
 

@@ -24,7 +24,7 @@
    ```bash
    mvn clean package -Denforcer.skip=true -DskipTests
    ```
-2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-1.0.2.hpi`）
+2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-1.0.3-SNAPSHOT.hpi`）
 3. 进入 Jenkins **Manage Jenkins** → **Plugins** → **Advanced settings**
 4. 点击 **Deploy Plugin**，上传 `job-import-export-{version}.hpi` 文件
 5. 重启 Jenkins 使插件生效
@@ -71,18 +71,27 @@ mvn clean package -Denforcer.skip=true -DskipTests
    - 支持目录结构：`folder/job1/config.xml`、`folder/subfolder/job2/config.xml`
    - 支持扁平结构：`job1.xml`、`job2.xml`
    - 支持中文目录和任务名
+   - **多层级目录支持**：导入的目录任务下没有 config.xml 文件时，默认作为目录任务处理
 
-2. **导入选项**：
+2. **导入选项**（单选项，互斥选择）：
    - **Dry Run（预演）**：默认开启，验证任务但不实际创建；支持虚拟目录状态缓存，确保多层级路径正确传递
-   - **覆盖模式**：覆盖已存在的任务并自动备份；**安全保护**：对 Folder 仅更新配置（保留子任务），禁止删除整个目录树
-   - **重命名模式**：自动重命名冲突任务（如 `test` → `test_1` → `test_2`）；**级联传播**：父目录重命名后自动同步到所有子任务
+   - **冲突处理模式**：
+     - **不处理冲突（默认）**：跳过已存在的任务
+     - **覆盖模式**：覆盖已存在的任务并自动备份；**安全保护**：对 Folder 仅更新配置（保留子任务），禁止删除整个目录树
+     - **重命名模式**：自动重命名冲突任务（如 `test` → `test_1` → `test_2`）；**级联传播**：父目录重命名后自动同步到所有子任务
 
 3. **导入流程**：
    - Dry Run 预览 → 确认对话框 → 实际导入
+   - 确认导入后保持弹窗打开，显示详细导入结果
    - 实时进度显示（通过 SSE）
    - 详细结果报告（成功/失败/跳过/重命名）
 
-4. **恢复导入**：
+4. **结果统计规则**：
+   - **成功**：仅包含 `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB`
+   - **跳过**：包含 `SKIP_EXISTS`、`REUSE_FOLDER`、`RENAME_JOB`、`RENAME_FOLDER`、`SKIP_EMPTY` 等
+   - **失败**：仅包含 `ERROR`
+
+5. **恢复导入**：
    - 如果批量导入部分失败，可通过「恢复导入」重试失败任务
    - 正确恢复目录层级和任务路径
 
@@ -91,6 +100,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 > **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
 >
 > **重复任务名**：如果指定路径已存在同名任务，会显示友好提示用户需要重新命名和进入任务更新配置。
+>
+> **类型不匹配检测**：当导入的目录（无 config.xml）与已存在的普通任务同名时，系统会报告类型不匹配错误。
 
 ---
 
@@ -127,7 +138,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | 全局导入任务 | 侧边栏页面 | `Item.CREATE` | 页面不显示「导入任务配置」区域 |
 | 导出配置 | 所有页面 | `Item.READ` | 始终显示（后端接口仍做权限校验）|
 
-**兼容性**：
+### 兼容性
+
 | 浏览器/部署方式       | 中文文件名 | 非 ROOT 部署 |
 | ------------------- | ----- | ----------- |
 | Chrome              | ✅     | ✅          |
@@ -141,7 +153,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | macOS               | ✅     | ✅          |
 
 
-**行为规则**：
+### 行为规则
+
 | 场景            | 行为             |
 | ------------- | -------------- |
 | 更新普通 Job      | 自动 reload + 跳转 |
@@ -165,6 +178,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | **路径状态缓存** | 批量导入时维护任务存在性快照，避免状态断层导致的误判 |
 | **冲突传播机制** | 上游冲突自动阻断后续路径创建，防止级联错误 |
 | **虚拟目录状态** | dryRun 模式下模拟目录存在状态，确保多层级路径正确传递 |
+| **类型不匹配检测** | 导入目录时检测与已存在任务的类型是否匹配，防止普通任务被覆盖为目录或反之 |
 
 ### 路径重命名级联
 
@@ -328,7 +342,7 @@ async function safePost(form) {
 
 ### 页面布局
 
-采用横向三栏布局设计：
+采用横向三栏布局设计，支持响应式自适应：
 
 **任务/文件夹页面**（JobImportExportAction）：
 - 第一栏：导出当前配置
@@ -340,10 +354,11 @@ async function safePost(form) {
 - 第二栏：导入任务配置（需 `Item.CREATE` 权限，无权限显示空白）
 - 第三栏：空白
 
-布局特性：
+**布局特性**：
 - 使用 Flexbox 布局，三栏等宽分配
+- 使用 `flex-wrap: wrap` 和 `min-width` 实现响应式自适应
+- 小屏幕上功能框自动换行堆叠
 - 有功能显示内容，无功能显示空白占位
-- 自适应容器宽度，响应式设计
 
 ### 任务创建后的安全流程
 
@@ -413,11 +428,32 @@ private InputStream cleanXml(InputStream is) throws IOException {
 job_import_export/
 ├── pom.xml                                    # Maven 构建配置
 ├── README.md                                  # 本文档
+├── CHANGELOG.md                              # 变更日志
 └── src/
     └── main/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action（页面级）
-        │   └── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   └── engine/
+        │       ├── ImportEngine.java          # 统一导入入口
+        │       ├── ExecutionEngine.java       # 核心执行引擎
+        │       ├── PreviewEngine.java         # 预览引擎
+        │       ├── model/
+        │       │   ├── Action.java            # 导入操作枚举
+        │       │   ├── DiffResult.java        # 差异结果（预览）
+        │       │   ├── ImportContext.java     # 状态上下文
+        │       │   ├── ImportResult.java      # 导入结果
+        │       │   ├── Node.java              # 树节点结构
+        │       │   ├── NodeType.java          # 节点类型枚举（FOLDER/JOB）
+        │       │   ├── RenameRule.java        # 重命名规则
+        │       │   └── Status.java            # 导入状态枚举
+        │       ├── tree/
+        │       │   └── ZipTreeBuilder.java    # 树形结构构建器
+        │       ├── resolver/
+        │       │   ├── TypeResolver.java      # 类型解析器
+        │       │   └── PathResolver.java      # 路径解析器
+        │       └── state/
+        │           └── ImportStateStore.java  # 断点恢复存储
         └── resources/
             └── com/siruoren/jobimportexport/
                 ├── JobImportExportAction/
@@ -444,7 +480,46 @@ job_import_export/
 Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `doExport()` — 全局导出任务配置
 - `doBatchImport()` — 全局批量导入任务；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
+- `hasPermission()` — 控制批量导入区域的显示（按 `Item.CREATE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
+
+### `ImportEngine`
+
+批量导入的核心引擎，协调 TreeBuilder 和 ExecutionEngine：
+- `importZip()` — 解析 ZIP 文件并执行导入
+- `importSingle()` — 单任务导入入口
+
+### `ExecutionEngine`
+
+递归执行引擎，深度优先遍历树节点：
+- `execute()` — 执行单个节点导入
+- `createFolder()` — 创建目录
+- `createOrUpdateJob()` — 创建或更新任务
+- `backup()` — 备份现有配置
+
+### `ZipTreeBuilder`
+
+将 ZIP 条目转换为树形结构：
+- `build()` — 构建树形结构
+- `resolveType()` — 判断节点类型（FOLDER/JOB）
+
+### `ImportContext`
+
+状态上下文，集中管理导入状态：
+- `renameMap` — 重命名映射表
+- `createdFolders` — 已创建目录集合
+- `dryRun` — 是否为预演模式
+- `parentTypeErrors` — 父任务类型错误集合
+
+### `Status`
+
+导入状态枚举：
+- `CREATE_FOLDER` / `CREATE_JOB` — 新建成功
+- `OVERWRITE_FOLDER` / `OVERWRITE_JOB` — 覆盖成功
+- `RENAME_FOLDER` / `RENAME_JOB` — 重命名成功
+- `SKIP_EXISTS` / `SKIP_EMPTY` — 跳过
+- `REUSE_FOLDER` — 目录复用
+- `ERROR` — 错误
 
 ---
 
@@ -453,6 +528,10 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 ### Q: 为什么某些页面看不到「更新配置」？
 
 「更新配置」功能需要当前用户对目标任务拥有 `Item.CONFIGURE` 权限，无权限时页面不会显示该区域。
+
+### Q: 为什么某些页面看不到「批量导入任务」？
+
+「批量导入任务」功能需要 Jenkins 根目录的 `Item.CREATE` 权限，无权限时侧边栏页面不会显示该区域。
 
 ### Q: 为什么导入/导出支持中文任务名？
 
@@ -516,6 +595,42 @@ Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现企
 前端收到重定向后会延迟 300ms 再跳转，确保 Jenkins 完全就绪。
 
 早期版本手动拼接 `/job/xxx`、使用 `req.getContextPath()` 或对 URL 进行二次编码，导致中文任务名在 Tomcat 下出现 `%25` 双重编码或路径错误，现已统一使用 `Jenkins.get().getRootUrl() + item.getUrl()` 修复。
+
+### Q: 批量导入的结果统计中，「成功」「跳过」「失败」是如何定义的？
+
+根据导入状态枚举 `Status` 进行分类：
+
+| 分类 | 包含的状态 | 说明 |
+|------|-----------|------|
+| **成功** | `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB` | 新建或覆盖操作 |
+| **跳过** | `SKIP_EXISTS`、`SKIP_EMPTY`、`REUSE_FOLDER`、`RENAME_FOLDER`、`RENAME_JOB` | 跳过或复用操作 |
+| **失败** | `ERROR` | 执行错误 |
+
+### Q: 预演（Dry Run）确认导入后为什么没有显示结果？
+
+此问题已修复。现在确认导入后弹窗会保持打开状态，显示「正在导入，请稍候...」的加载提示，导入完成后显示详细的导入结果（成功/失败/跳过数量及每个任务的状态）。
+
+### Q: 导入目录时提示「任务类型不匹配」怎么办？
+
+当导入的目录（无 config.xml 文件）与已存在的普通任务同名时，系统会报告类型不匹配错误："任务类型不同，无法作为目录导入（现有: 普通任务，导入: 目录）"。这是为了防止将普通任务误覆盖为目录，或反之。请使用不同的任务名称，或删除已存在的任务后再导入。
+
+### Q: 为什么批量导入支持多层目录结构？
+
+插件采用 Tree + ExecutionEngine 架构，将 ZIP 文件解析为树形结构后深度优先遍历执行导入：
+- 支持任意深度的嵌套目录
+- 支持父目录重命名后自动级联传播到子任务路径
+- 支持目录类型检测（有无 config.xml）
+- 支持预演模式下的虚拟目录状态缓存
+
+### Q: 覆盖已存在的任务会备份吗？
+
+是的，覆盖模式会自动备份现有配置。备份文件命名为 `config.xml.bak`，与原配置文件在同一目录下。如果覆盖后需要恢复，可以手动将备份文件重命名为 `config.xml` 恢复配置。
+
+### Q: 文件夹（Folder）也可以被覆盖吗？
+
+可以，但有安全保护机制：
+- 对 Folder 使用 `updateByXml` 更新配置，而非 `delete` 再创建，避免递归删除子任务
+- 禁止覆盖 Multibranch、ComputedFolder、OrganizationFolder 等动态生成的目录类型
 
 ---
 
