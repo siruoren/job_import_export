@@ -46,6 +46,7 @@ import com.siruoren.jobimportexport.engine.ImportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
 import com.siruoren.jobimportexport.engine.model.ImportResult;
 import com.siruoren.jobimportexport.engine.model.NodeType;
+import com.siruoren.jobimportexport.engine.model.Status;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -181,12 +182,13 @@ public class JobImportExportSidebarLink implements RootAction {
             int skipCount = 0;
 
             for (ImportResult result : results) {
-                if (result.skipped) {
-                    skipCount++;
-                } else if (result.success) {
+                if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB) {
                     successCount++;
-                } else {
+                } else if (result.statusEnum == Status.ERROR) {
                     failCount++;
+                } else {
+                    skipCount++;
                 }
             }
 

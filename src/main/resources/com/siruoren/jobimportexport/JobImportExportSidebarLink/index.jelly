@@ -389,7 +389,8 @@
                 }
 
                 async function confirmRealImport(form) {
-                    JenkinsModal.close();
+                    JenkinsModal.setContent('<div style="text-align:center; padding:20px;">正在导入，请稍候...</div>');
+                    JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(true);
 
                     try {

@@ -3,6 +3,7 @@ package com.siruoren.jobimportexport;
 import com.siruoren.jobimportexport.engine.ImportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
 import com.siruoren.jobimportexport.engine.model.ImportResult;
+import com.siruoren.jobimportexport.engine.model.Status;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractItem;
@@ -247,12 +248,13 @@ public class JobImportExportAction implements Action {
                 results = engine.importZip(zis, ctx);
 
                 for (ImportResult result : results) {
-                    if (result.skipped) {
-                        skipCount++;
-                    } else if (result.success) {
+                    if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                            || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB) {
                         successCount++;
-                    } else {
+                    } else if (result.statusEnum == Status.ERROR) {
                         failCount++;
+                    } else {
+                        skipCount++;
                     }
                 }
             } finally {
