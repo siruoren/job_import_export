@@ -87,59 +87,11 @@ public class JobImportExportAction implements Action {
         return item.getParent() instanceof Jenkins;
     }
 
-    public boolean canImportJobs() {
-        if (!(item instanceof ItemGroup) || item instanceof Job) {
-            return false;
-        }
-        if (isSpecialFolder(item)) {
-            return false;
-        }
-        return true;
-    }
-
     public boolean hasPermission() {
         if (item instanceof AccessControlled) {
             return ((AccessControlled) item).hasPermission(Item.CONFIGURE);
         }
         return false;
-    }
-
-    public boolean canCreateJob() {
-        ItemGroup<?> target = getImportTarget();
-        if (target == null) {
-            return false;
-        }
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            return false;
-        }
-        if (target instanceof AccessControlled) {
-            if (!((AccessControlled) target).hasPermission(Item.CREATE)) {
-                return false;
-            }
-        }
-        for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(target)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public List<TopLevelItemDescriptor> getSupportedJobTypes() {
-        List<TopLevelItemDescriptor> result = new ArrayList<>();
-        ItemGroup<?> target = getImportTarget();
-        if (target == null) {
-            return result;
-        }
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            return result;
-        }
-        for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(target)) {
-                result.add(d);
-            }
-        }
-        return result;
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
@@ -250,114 +202,6 @@ public class JobImportExportAction implements Action {
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) {
-        try {
-            req.setCharacterEncoding("UTF-8");
-            rsp.setCharacterEncoding("UTF-8");
-
-            String jobName = req.getParameter("jobName");
-            if (jobName != null) {
-                try {
-                    byte[] bytes = jobName.getBytes("ISO-8859-1");
-                    jobName = new String(bytes, "UTF-8");
-                } catch (Exception e) {
-                }
-            }
-
-            jobName = sanitizeJobName(jobName);
-
-            if (jobName == null) {
-                writeJson(rsp, false, "任务名称不能为空", null);
-                return;
-            }
-
-            try {
-                validateJobName(jobName);
-            } catch (Exception e) {
-                writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
-                return;
-            }
-
-            FileItem fileItem = req.getFileItem("xmlFile");
-
-            if (fileItem == null || fileItem.getSize() == 0) {
-                writeJson(rsp, false, "请选择 XML 文件", null);
-                return;
-            }
-
-            ItemGroup<?> target = getImportTarget();
-
-            if (!(target instanceof ModifiableTopLevelItemGroup)) {
-                writeJson(rsp, false, "当前目录不支持创建任务", null);
-                return;
-            }
-
-            ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
-
-            if (itemGroup instanceof AccessControlled) {
-                if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
-                    writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
-                    return;
-                }
-            }
-
-            Item existingItem = Jenkins.get().getItemByFullName(buildFullName(itemGroup, jobName));
-            if (existingItem != null) {
-                String fullPath = Jenkins.get().getRootUrl() + existingItem.getUrl() + "jobImportExport";
-                writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
-                return;
-            }
-
-            byte[] xmlBytes = readAll(fileItem.getInputStream());
-
-            String xml = new String(xmlBytes, StandardCharsets.UTF_8);
-
-            List<String> missingPlugins = checkMissingPlugins(xml);
-
-            if (!missingPlugins.isEmpty()) {
-                writeJson(rsp, false, "缺少插件依赖：" + String.join(", ", missingPlugins), null);
-                return;
-            }
-
-            try {
-                TopLevelItem newItem = ((ModifiableTopLevelItemGroup) target).createProjectFromXML(
-                        jobName,
-                        safeXml(xmlBytes)
-                );
-                newItem.save();
-
-                safeReload();
-
-                String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
-
-                writeJson(rsp, true, "任务创建成功", redirectUrl);
-            } catch (Exception e) {
-                String msg = e.getMessage();
-                if (msg == null || msg.trim().isEmpty()) {
-                    msg = e.getClass().getSimpleName();
-                }
-                msg = msg.replaceAll("[\\r\\n]", " ");
-
-                writeJson(rsp, false, "导入失败：" + msg, null);
-                return;
-            }
-        } catch (Exception e) {
-            if (!rsp.isCommitted()) {
-                try {
-                    rsp.reset();
-                    rsp.setCharacterEncoding("UTF-8");
-                    rsp.setContentType("application/json;charset=UTF-8");
-                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                    rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
-                    );
-                } catch (Exception ignored) {
-                }
-            }
-        }
-    }
-
-    @RequirePOST
     public void doBatchImport(StaplerRequest req, StaplerResponse rsp) {
         try {
             req.setCharacterEncoding("UTF-8");
@@ -374,7 +218,7 @@ public class JobImportExportAction implements Action {
             boolean rename = Boolean.parseBoolean(req.getParameter("rename"));
             boolean dryRun = Boolean.parseBoolean(req.getParameter("dryRun"));
 
-            ItemGroup<?> target = getImportTarget();
+            ItemGroup<?> target = (item instanceof ItemGroup) ? (ItemGroup<?>) item : item.getParent();
 
             if (!(target instanceof ModifiableTopLevelItemGroup)) {
                 writeJson(rsp, false, "当前目录不支持创建任务", null);
@@ -551,16 +395,6 @@ public class JobImportExportAction implements Action {
         }
 
         return parentPath + "/" + name;
-    }
-
-    private ItemGroup<?> getImportTarget() {
-        if (!canImportJobs()) {
-            return null;
-        }
-
-        return item instanceof ItemGroup
-                ? (ItemGroup<?>) item
-                : item.getParent();
     }
 
     private static boolean isSpecialFolder(AbstractItem item) {

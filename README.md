@@ -63,34 +63,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 >
 > **权限要求**：更新配置需要当前用户具有 `Item.CONFIGURE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
 
-
-### 3. 导入新任务到当前目录
-
-仅在 **Folder 页面** 显示此功能：
-1. 进入目标文件夹
-2. 点击 **导入/导出配置**
-3. 在 **导入新任务到当前目录** 区域：
-   - 输入新任务的名称
-   - 上传 XML 配置文件
-4. 点击 **导入任务**
-5. 弹窗确认：点击「确认」提交创建，点击「取消」返回页面
-
-> **中文任务名支持**：完全支持中文任务名称（如 `测试Pipeline`、`发布-生产环境`、`服务_订单中心`）。插件内部使用 RFC 5987 标准处理 URL 编码，确保中文路径在浏览器、Jenkins 内嵌 Jetty 和 Folder 嵌套场景下均能正确工作。
->
-> **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格（`\u3000`）和不间断空格（`\u00A0`），并进行合法性校验（仅禁止文件系统危险字符和控制字符，**完全支持中文任务名**）。不合法字符会提示"任务名称不合法"。
->
-> **权限要求**：导入新任务需要当前用户具有 `Item.CREATE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
->
-> **重复任务名**：如果该目录下已存在同名任务，页面会提示"任务名称已存在"，并提示用户需要重新命名和进入任务更新配置。
-
-### 4. 全局导入任务（侧边栏）
-
-通过 Jenkins 左侧边栏的 **任务导入/导出** 入口，可以在任意页面直接导入新任务：
-- 支持使用 `"folder/job"` 格式指定目标路径
-- 支持自动创建父文件夹
-- 上传 XML 配置文件后 Jenkins 会自动重载
-
-### 5. 批量导入任务
+### 3. 批量导入任务
 
 通过 Jenkins 左侧边栏的 **任务导入/导出** 入口，可以批量导入多个任务：
 
@@ -462,9 +435,7 @@ job_import_export/
 绑定到每个 `AbstractItem`（Job/Folder）页面的 Action，提供以下功能：
 - `doExport()` — 导出当前配置的 XML 文件
 - `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示；成功后使用 `Jenkins.get().getRootUrl() + refreshedItem.getUrl()` 生成安全的重定向 URL
-- `doImport()` — 在父目录下创建新任务；成功后使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成安全的重定向 URL
-- `canImportJobs()` — 控制「导入新任务」区域的显示（按类型）
-- `canCreateJob()` — 控制「导入新任务」区域的显示（按 `Item.CREATE` 权限）
+- `doBatchImport()` — 批量导入任务，支持 ZIP 文件；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
 - `hasPermission()` — 控制「更新配置」区域的显示（按 `Item.CONFIGURE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
 
@@ -472,28 +443,23 @@ job_import_export/
 
 Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `doExport()` — 全局导出任务配置
-- `doImport()` — 全局导入任务，支持指定路径；成功后使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成安全的重定向 URL
-- `canCreateJob()` — 控制「导入任务配置」区域的显示（按 `Item.CREATE` 权限）
+- `doBatchImport()` — 全局批量导入任务；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
 - `writeJson()` — 统一 JSON 响应封装
 
 ---
 
 ## 常见问题
 
-### Q: 为什么某些页面看不到「导入新任务」？
+### Q: 为什么某些页面看不到「更新配置」？
 
-「导入新任务」的显示受两个条件限制：
-1. **页面类型**：只有 **Folder** 类型的页面才会显示此功能。Job 页面（包括 Freestyle、Pipeline 等）不显示。
-2. **用户权限**：当前用户必须拥有目标目录的 `Item.CREATE` 权限。权限不足时，即使 Folder 页面也不会显示该功能入口。
-
-同理，「更新配置」功能需要当前用户对目标任务拥有 `Item.CONFIGURE` 权限，无权限时页面不会显示该区域。
+「更新配置」功能需要当前用户对目标任务拥有 `Item.CONFIGURE` 权限，无权限时页面不会显示该区域。
 
 ### Q: 为什么导入/导出支持中文任务名？
 
 本插件针对 Jenkins 中文场景做了专项优化：
 - **HTTP Header 编码**：导出文件名使用 RFC 5987 标准（`filename*=`），兼容现代浏览器和 IE
 - **URL 重定向**：导入/更新后重定向统一使用 `Jenkins.get().getRootUrl() + item.getUrl()` 生成完整绝对 URL（Jenkins 内部已处理编码、路径规则、context path 和反向代理），避免手动拼接导致的重复编码或特殊字符丢失
-- **请求参数编码**：`doImport` 显式调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数，不再进行 ISO-8859-1 → UTF-8 中转码
+- **请求参数编码**：所有 Action 方法显式调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数，不再进行 ISO-8859-1 → UTF-8 中转码
 - **响应编码安全**：`writeJson()` 封装响应前显式调用 `rsp.setCharacterEncoding("UTF-8")`，确保 `getWriter()` 使用 UTF-8 而非容器默认的 ISO-8859-1，彻底避免中文乱码
 - **HTTP Header 中文隔离**：所有错误提示统一通过 JSON Body 返回，**绝不往 HTTP Header 写入中文**，避免 Tomcat 因 Header 仅支持 ISO-8859-1 而抛出 `Unicode字符无法编码` 异常
 - **Windows 文件名安全**：自动替换 `\\/*?"<>|` 等非法字符
