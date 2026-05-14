@@ -403,8 +403,13 @@ public class ExecutionEngine {
                 String fullFolderPath = getFullPath(resolvedFolderPath, ctx);
                 Item existingItem = Jenkins.get().getItemByFullName(fullFolderPath);
                 if (existingItem != null) {
-                    // 父目录存在且未覆盖/未重命名，会被跳过，所以子任务也应该跳过
-                    return true;
+                    // 检查父目录是否在本次导入中已经被创建或复用
+                    if (ctx.createdFolders.contains(fullFolderPath)) {
+                        // 父目录在本次导入中已经被创建或复用，子任务正常创建
+                        return false;
+                    }
+                    // 父目录存在但不在本次导入中，说明是已存在的目录，子任务正常创建
+                    return false;
                 }
             }
         }
