@@ -161,7 +161,16 @@ public class ExecutionEngine {
      * 阶段1：创建所有 Folder
      */
     private void createAllFolders(ImportContext ctx) {
-        for (String path : folderPathsToCreate) {
+        // 按路径深度排序，确保父文件夹先于子文件夹创建
+        List<String> sortedPaths = new ArrayList<>(folderPathsToCreate);
+        sortedPaths.sort((a, b) -> {
+            int depthA = a.split("/").length;
+            int depthB = b.split("/").length;
+            if (depthA != depthB) return depthA - depthB;
+            return a.compareTo(b);
+        });
+
+        for (String path : sortedPaths) {
             // ✔ 使用 Rename DAG 解析最终路径
             String resolvedPath = renameResolver.resolvePath(path, ctx);
             
@@ -227,7 +236,7 @@ public class ExecutionEngine {
                 continue;
             }
 
-            if (ctx.createdFolders.contains(resolvedPath)) {
+            if (ctx.createdFolders.contains(fullPath)) {
                 continue;
             }
             
@@ -248,13 +257,13 @@ public class ExecutionEngine {
                     }
                 }
                 // 普通 Folder 已存在则复用，不记录到 results
-                ctx.createdFolders.add(resolvedPath);
+                ctx.createdFolders.add(fullPath);
                 continue;
             }
 
             try {
                 ensureFolderPath(ctx.targetGroup, resolvedPath, true, ctx);
-                ctx.createdFolders.add(resolvedPath);
+                ctx.createdFolders.add(fullPath);
                 
                 // 如果是有配置的目录且有 config.xml，需要更新配置
                 if (isFolderWithConfig && folderNode.configXml != null && folderNode.configXml.length > 0) {
@@ -301,7 +310,7 @@ public class ExecutionEngine {
         }
         
         results.add(result);
-        ctx.createdFolders.add(path);
+        ctx.createdFolders.add(getFullPath(path, ctx));
     }
     
     /**
@@ -504,7 +513,7 @@ public class ExecutionEngine {
             if (!ctx.dryRun) {
                 try {
                     ensureFolderPath(ctx.targetGroup, newPath, true, ctx);
-                    ctx.createdFolders.add(newPath);
+                    ctx.createdFolders.add(getFullPath(newPath, ctx));
                 } catch (Exception e) {
                     result.statusEnum = Status.ERROR;
                     result.status = "ERROR";
@@ -568,7 +577,7 @@ public class ExecutionEngine {
         if (parentGroup instanceof ModifiableTopLevelItemGroup) {
             try (InputStream xmlStream = new ByteArrayInputStream(configXml)) {
                 ((ModifiableTopLevelItemGroup) parentGroup).createProjectFromXML(jobName, xmlStream);
-                ctx.createdJobs.add(path);
+                ctx.createdJobs.add(getFullPath(path, ctx));
                 
                 // 刷新 Jenkins 内存状态，确保后续重命名检查能感知到刚创建的任务
                 Jenkins.get().reload();
@@ -593,10 +602,11 @@ public class ExecutionEngine {
             }
             currentPath.append(part);
             String fullPath = currentPath.toString();
+            String fullJenkinsPath = getFullPath(fullPath, ctx);
 
             // 检查是否是当前会话中刚创建的目录
-            if (ctx.createdFolders.contains(fullPath)) {
-                Item item = Jenkins.get().getItemByFullName(fullPath);
+            if (ctx.createdFolders.contains(fullJenkinsPath)) {
+                Item item = Jenkins.get().getItemByFullName(fullJenkinsPath);
                 if (item instanceof ItemGroup) {
                     current = (ItemGroup) item;
                     continue;
@@ -612,7 +622,7 @@ public class ExecutionEngine {
                             com.cloudbees.hudson.plugins.folder.Folder.DescriptorImpl.class);
                         hudson.model.TopLevelItem folder = ((ModifiableTopLevelItemGroup) current).createProject(folderDescriptor, part, false);
                         current = (ItemGroup) folder;
-                        ctx.createdFolders.add(fullPath);
+                        ctx.createdFolders.add(fullJenkinsPath);
                     } catch (ClassNotFoundException e) {
                         throw new Exception("Folder plugin not available", e);
                     }
@@ -660,11 +670,12 @@ public class ExecutionEngine {
             }
             currentPath.append(part);
             String fullPath = currentPath.toString();
+            String fullJenkinsPath = getFullPath(fullPath, ctx);
 
             // 检查是否是当前会话中刚创建的目录
             Item item = null;
-            if (ctx != null && ctx.createdFolders.contains(fullPath)) {
-                item = Jenkins.get().getItemByFullName(fullPath);
+            if (ctx != null && ctx.createdFolders.contains(fullJenkinsPath)) {
+                item = Jenkins.get().getItemByFullName(fullJenkinsPath);
             }
             
             if (item == null) {
@@ -741,9 +752,9 @@ public class ExecutionEngine {
             counter++;
             fullPath = folderPath.isEmpty() ? candidate : folderPath + "/" + candidate;
             checkPath = getFullPath(fullPath, ctx);
-        } while (Jenkins.get().getItemByFullName(checkPath) != null 
-                 || ctx.createdFolders.contains(fullPath)
-                 || ctx.createdJobs.contains(fullPath)
+        } while (Jenkins.get().getItemByFullName(checkPath) != null
+                 || ctx.createdFolders.contains(checkPath)
+                 || ctx.createdJobs.contains(checkPath)
                  || ctx.virtualFolders.contains(checkPath));
 
         return candidate;
