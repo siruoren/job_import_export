@@ -50,6 +50,8 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipInputStream;
 import java.util.Collections;
 import java.util.Collection;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class JobImportExportAction implements Action {
 
@@ -102,13 +104,29 @@ public class JobImportExportAction implements Action {
         return item instanceof ItemGroup;
     }
 
+    public boolean canImportJobs() {
+        return isFolder();
+    }
+
+    public boolean canCreateJob() {
+        if (item instanceof AccessControlled) {
+            return ((AccessControlled) item).hasPermission(Item.CREATE);
+        }
+        return false;
+    }
+
+    public boolean hasAdminPermission() {
+        return Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+    }
+
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
         try {
             item.checkPermission(Item.READ);
 
-            String fileName = item.getFullName()
-                    .replaceAll("[\\\\/:*?\"<>|]", "_")
-                    + ".xml";
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            String baseName = item.getFullName()
+                    .replaceAll("[\\\\/:*?\"<>|]", "_");
+            String fileName = baseName + "_" + timestamp + ".xml";
 
             String encodedFileName = java.net.URLEncoder.encode(
                     fileName,
@@ -175,7 +193,8 @@ public class JobImportExportAction implements Action {
             byte[] zipData = baos.toByteArray();
             String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
-            String zipFileName = item.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + ".zip";
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            String zipFileName = item.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + "_" + timestamp + ".zip";
 
             writeExportJson(rsp, true, summary.message, base64Zip, results, zipFileName);
 

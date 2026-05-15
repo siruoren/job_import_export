@@ -5,10 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [2.0.0] - 2026-05-15
+## [2.0.0] - 2026-05-16
 
 ### 新增功能
 
+- **国际化支持（i18n）**：页面语言兼容英语与中文，根据浏览器语言自动适配当前页面语言显示
+  - 新增 `index.properties` / `index_zh_CN.properties` 页面资源文件
+  - 新增 `Messages.properties` / `Messages_zh_CN.properties` Java 代码资源文件
+  - 前端 JavaScript i18n 对象支持动态语言切换
+- **导入进度条显示**：导入任务弹窗中加入动画进度条，实时显示导入进度
+- **导出时间戳**：自动获取当前页面时区及时间，导出文件名后追加导出时间（格式：`任务名_yyyy-MM-dd_HH-mm-ss_时区.zip`）
 - **子目录批量导出优化**：导出的 ZIP 包名为当前任务名，当前任务的配置导出为 `config.xml` 文件存放在 ZIP 包中当前任务的目录名下
 - **批量导入功能增强**：
   - 根目录下批量导入：如果 ZIP 包根目录有 `config.xml` 直接丢弃

@@ -28,6 +28,8 @@ import java.util.Collections;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import org.jvnet.hudson.reactor.ReactorException;
 import hudson.PluginWrapper;
 import hudson.PluginManager;
@@ -96,7 +98,8 @@ public class JobImportExportSidebarLink implements RootAction {
 
             ExportEngine exportEngine = new ExportEngine();
 
-            String fileName = "jenkins-all-jobs.zip";
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            String fileName = "jenkins-all-jobs_" + timestamp + ".zip";
             String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replace("+", "%20");
 
             rsp.setContentType("application/zip");
@@ -140,7 +143,8 @@ public class JobImportExportSidebarLink implements RootAction {
             byte[] zipData = baos.toByteArray();
             String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
-            writeExportJson(rsp, true, summary.message, base64Zip, results, "jenkins-all-jobs.zip");
+            String exportTimestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            writeExportJson(rsp, true, summary.message, base64Zip, results, "jenkins-all-jobs_" + exportTimestamp + ".zip");
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {

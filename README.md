@@ -18,6 +18,33 @@
 | 导出全部任务 | 导出 Jenkins 根目录下所有任务（仅管理员） | 左侧边栏 |
 | 批量导出任务 | 导出当前目录及所有子任务配置 | 文件夹页面 |
 
+### 国际化支持
+
+插件支持英语和中文两种语言，根据浏览器语言自动适配：
+
+| 浏览器语言 | 显示语言 |
+|-----------|---------|
+| 中文（zh-CN, zh） | 简体中文 |
+| 其他语言 | 英语 |
+
+- 页面文本、按钮、提示信息均支持双语切换
+- JavaScript 前端提示也通过 i18n 对象实现动态语言切换
+- Java 后端消息通过 `Messages` 资源文件实现国际化
+
+### 导入进度条
+
+批量导入任务时，弹窗中显示动画进度条：
+- 进度条从 0% 平滑动画过渡到 90%（等待服务器响应）
+- 收到服务器 SSE 进度事件后跳转到实际进度
+- 导入完成后进度条跳转到 100%
+
+### 导出时间戳
+
+导出文件名自动追加导出时间，格式为 `任务名_yyyy-MM-dd_HH-mm-ss_时区.zip`：
+- 自动获取浏览器所在时区（如 `Asia/Shanghai`、`America/New_York`）
+- 时间格式使用本地时间，便于识别
+- 适用于单个任务导出和批量导出
+
 ### 批量导入/导出增强功能
 
 #### 批量导入
@@ -384,10 +411,19 @@ job_import_export/
         └── resources/
             ├── index.jelly
             └── com/siruoren/jobimportexport/
+                ├── Messages.properties              # Java 代码英文资源
+                ├── Messages_zh_CN.properties        # Java 代码中文资源
                 ├── JobImportExportAction/
-                │   └── index.jelly
-                └── JobImportExportSidebarLink/
-                    └── index.jelly
+                │   ├── index.jelly
+                │   ├── index.properties             # 页面英文资源
+                │   └── index_zh_CN.properties       # 页面中文资源
+                ├── JobImportExportSidebarLink/
+                │   ├── index.jelly
+                │   ├── index.properties             # 页面英文资源
+                │   └── index_zh_CN.properties       # 页面中文资源
+                └── engine/
+                    ├── Messages.properties          # 引擎英文资源
+                    └── Messages_zh_CN.properties    # 引擎中文资源
 ```
 
 ---

@@ -60,19 +60,20 @@
                     exportError: '${%export.error}',
                     requestFailed: '${%result.requestFailed}',
                     nonJson: '${%result.nonJson}',
-                    dryRunMode: '🔍 Dry Run mode (check only, no actual import)',
-                    total: 'Total',
-                    success: 'Success',
-                    skipped: 'Skipped',
-                    failed: 'Failed',
-                    jobs: 'jobs',
-                    job: 'Job',
-                    finalName: 'Final Name',
-                    status: 'Status',
-                    message: 'Message',
-                    jobPath: 'Job Path',
-                    exported: 'Exported',
-                    missingPlugins: 'Missing plugins',
+                    dryRunMode: '${%import.dryRun.mode}',
+                    total: '${%result.label.total}',
+                    success: '${%result.label.success}',
+                    skipped: '${%result.label.skipped}',
+                    failed: '${%result.label.failed}',
+                    jobs: '${%result.label.jobs}',
+                    job: '${%result.table.job}',
+                    finalName: '${%result.table.finalName}',
+                    status: '${%result.table.status}',
+                    message: '${%result.table.message}',
+                    jobPath: '${%result.table.path}',
+                    exported: '${%result.label.exported}',
+                    missingPlugins: '${%result.label.missingPlugins}',
+                    progressStatus: '${%progress.status}',
                     batchImportDryRunTitle: '${%import.modal.title.dryrun}',
                     batchImportTitle: '${%import.modal.title}',
                     batchImportDryRunContent: '${%import.modal.content.dryrun}',
@@ -428,9 +429,27 @@
                 }
 
                 async function confirmRealImport(form) {
-                    JenkinsModal.setContent('<div style="text-align:center; padding:20px;">' + i18n.importing + '</div>');
+                    JenkinsModal.setContent(
+                        '<div style="text-align:center; padding:20px;">' +
+                        '<p style="margin-bottom:16px; font-size:14px; color:#333;">' + i18n.importing + '</p>' +
+                        '<div style="width:100%; height:6px; background:#e9ecef; border-radius:3px; overflow:hidden;">' +
+                        '<div id="importProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #2196F3, #4CAF50); border-radius:3px; transition: width 0.3s ease;"></div>' +
+                        '</div>' +
+                        '<p id="importProgressText" style="margin-top:10px; font-size:12px; color:#666;"></p>' +
+                        '</div>'
+                    );
                     JenkinsModal.setFooter([]);
-                    JenkinsModal.setLoading(true);
+                    JenkinsModal.setLoading(false);
+
+                    var progressBar = document.getElementById('importProgressBar');
+                    var progressText = document.getElementById('importProgressText');
+                    var progressInterval = setInterval(function() {
+                        var currentWidth = parseFloat(progressBar.style.width) || 0;
+                        if (currentWidth &lt; 90) {
+                            var increment = (90 - currentWidth) * 0.08 + 0.5;
+                            progressBar.style.width = Math.min(currentWidth + increment, 90) + '%';
+                        }
+                    }, 300);
 
                     try {
                         const fd = new FormData(form);
@@ -447,10 +466,11 @@
                             body: fd
                         });
 
+                        clearInterval(progressInterval);
+                        progressBar.style.width = '100%';
+
                         const text = await res.text();
                         const result = JSON.parse(text);
-
-                        JenkinsModal.setLoading(false);
 
                         JenkinsModal.setContent(renderResult(result));
 
@@ -477,6 +497,7 @@
                         }
 
                     } catch (e) {
+                        clearInterval(progressInterval);
                         JenkinsModal.setLoading(false);
                         showToast('error', i18n.importError.replace('{0}', e));
                     }
@@ -503,7 +524,27 @@
                 }
 
                 async function submitWithoutDryRun(form) {
-                    JenkinsModal.setLoading(true);
+                    JenkinsModal.setContent(
+                        '<div style="text-align:center; padding:20px;">' +
+                        '<p style="margin-bottom:16px; font-size:14px; color:#333;">' + i18n.importing + '</p>' +
+                        '<div style="width:100%; height:6px; background:#e9ecef; border-radius:3px; overflow:hidden;">' +
+                        '<div id="importProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #2196F3, #4CAF50); border-radius:3px; transition: width 0.3s ease;"></div>' +
+                        '</div>' +
+                        '<p id="importProgressText" style="margin-top:10px; font-size:12px; color:#666;"></p>' +
+                        '</div>'
+                    );
+                    JenkinsModal.setFooter([]);
+                    JenkinsModal.setLoading(false);
+
+                    var progressBar = document.getElementById('importProgressBar');
+                    var progressText = document.getElementById('importProgressText');
+                    var progressInterval = setInterval(function() {
+                        var currentWidth = parseFloat(progressBar.style.width) || 0;
+                        if (currentWidth &lt; 90) {
+                            var increment = (90 - currentWidth) * 0.08 + 0.5;
+                            progressBar.style.width = Math.min(currentWidth + increment, 90) + '%';
+                        }
+                    }, 300);
 
                     try {
                         const fd = new FormData(form);
@@ -514,10 +555,11 @@
                             body: fd
                         });
 
+                        clearInterval(progressInterval);
+                        progressBar.style.width = '100%';
+
                         const text = await res.text();
                         const result = JSON.parse(text);
-
-                        JenkinsModal.setLoading(false);
 
                         JenkinsModal.setContent(renderResult(result));
 
@@ -538,6 +580,7 @@
                         JenkinsModal.setFooter(buttons);
 
                     } catch (e) {
+                        clearInterval(progressInterval);
                         JenkinsModal.setLoading(false);
                         JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;' + i18n.requestFailed.replace('{0}', e) + '&lt;/div&gt;');
                         JenkinsModal.setFooter([{
@@ -553,7 +596,7 @@
 
                     es.onmessage = e => {
                         const data = JSON.parse(e.data);
-                        showToast('info', '进度 ' + data.overallProgress + '% - ' + data.currentJob);
+                        showToast('info', i18n.progressStatus.replace('{0}', data.overallProgress).replace('{1}', data.currentJob));
 
                         if (data.status === 'DONE') {
                             es.close();
@@ -618,6 +661,15 @@
                     return '&lt;div style="color:' + color + '; padding:10px;"&gt;' + escapeHtml(r.message) + '&lt;/div&gt;';
                 }
 
+                function getExportTimestamp() {
+                    const now = new Date();
+                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const pad = n => String(n).padStart(2, '0');
+                    return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+                        '_' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds()) +
+                        '_' + tz.replace(/\//g, '-');
+                }
+
                 async function getCrumb() {
                     try {
                         const res = await fetch(rootURL + '/crumbIssuer/api/json');
@@ -664,7 +716,7 @@
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = 'jenkins-all-jobs.zip';
+                            a.download = 'jenkins-all-jobs_' + getExportTimestamp() + '.zip';
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
