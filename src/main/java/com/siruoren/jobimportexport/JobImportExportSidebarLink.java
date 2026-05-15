@@ -123,7 +123,7 @@ public class JobImportExportSidebarLink implements RootAction {
         try {
             Jenkins jenkins = Jenkins.get();
             if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
-                writeExportJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null, null);
+                writeExportJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null, null, null);
                 return;
             }
 
@@ -135,7 +135,7 @@ public class JobImportExportSidebarLink implements RootAction {
             byte[] zipData = baos.toByteArray();
             String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
-            writeExportJson(rsp, true, summary.message, base64Zip, results);
+            writeExportJson(rsp, true, summary.message, base64Zip, results, "jenkins-all-jobs.zip");
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -262,7 +262,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
             for (ImportResult result : results) {
                 if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB) {
+                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
                     successCount++;
                 } else if (result.statusEnum == Status.ERROR) {
                     failCount++;
@@ -384,7 +384,8 @@ public class JobImportExportSidebarLink implements RootAction {
             boolean success,
             String message,
             String zipData,
-            List<ExportResult> results) throws IOException {
+            List<ExportResult> results,
+            String zipFileName) throws IOException {
 
         rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
@@ -429,6 +430,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 + "\"skipCount\":" + skipped + ","
                 + "\"failCount\":" + errors + ","
                 + "\"zipData\":\"" + (zipData != null ? zipData : "") + "\","
+                + "\"zipFileName\":\"" + escapeJson(zipFileName != null ? zipFileName : "jenkins-jobs-export.zip") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 

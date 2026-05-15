@@ -11,6 +11,7 @@ public class TreeNode {
     public NodeType type = NodeType.FOLDER;
     public Map<String, TreeNode> children = new LinkedHashMap<>();
     public byte[] configXml;
+    public byte[] rootConfigXml;
 
     public TreeNode() {
     }

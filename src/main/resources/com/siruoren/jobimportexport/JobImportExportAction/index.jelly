@@ -268,6 +268,11 @@
                                     statusColor = '#6f42c1';
                                     statusIcon = '📁 ';
                                     break;
+                                    
+                                case 'UPDATE_CONFIG':
+                                    statusColor = '#17a2b8';
+                                    statusIcon = '🔄 ';
+                                    break;
                             }
 
                             content += '&lt;tr&gt;';
@@ -595,7 +600,7 @@
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = 'jenkins-jobs-export.zip';
+                            a.download = result.zipFileName || 'jenkins-jobs-export.zip';
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);

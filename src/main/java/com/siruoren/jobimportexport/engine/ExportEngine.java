@@ -65,8 +65,13 @@ public class ExportEngine {
             zos = new ZipOutputStream(baos);
 
             String basePath = "";
+            boolean isRoot = (group instanceof Jenkins);
             if (group instanceof AbstractItem) {
                 basePath = ((AbstractItem) group).getFullName();
+            }
+
+            if (!isRoot && group instanceof AbstractItem) {
+                addCurrentFolderConfigToZipRoot((AbstractItem) group);
             }
 
             collectItems(group, basePath, group);
@@ -87,6 +92,18 @@ public class ExportEngine {
                 if (baos != null) baos.close();
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    private void addCurrentFolderConfigToZipRoot(AbstractItem folderItem) throws Exception {
+        Path configFile = Paths.get(folderItem.getRootDir().getAbsolutePath(), "config.xml");
+        if (Files.exists(configFile)) {
+            byte[] configBytes = Files.readAllBytes(configFile);
+            String entryPath = folderItem.getName() + "/config.xml";
+            ZipEntry entry = new ZipEntry(entryPath);
+            zos.putNextEntry(entry);
+            zos.write(configBytes);
+            zos.closeEntry();
         }
     }
 

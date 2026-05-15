@@ -37,6 +37,8 @@ public class ExecutionEngine {
         jobNodesToCreate.clear();
         folderWithConfigToCreate.clear();
 
+        prepareRootConfigFromMatchingFolder(root, ctx);
+
         // ✔ 阶段0：收集所有路径（用于后续 rename 计算）
         collectPaths(root, "", ctx);
 
@@ -51,7 +53,92 @@ public class ExecutionEngine {
         // ✔ 阶段2：最后统一创建 Job
         createAllJobs(ctx);
 
+        // ✔ 阶段3：处理根目录 config.xml（更新当前目录任务配置）
+        handleRootConfigXml(root, ctx);
+
         return results;
+    }
+
+    /**
+     * 准备根配置：从匹配当前目录名的节点中提取 config.xml
+     * 子目录导入时，zip 中 folderName/config.xml 对应的是当前目录自身，
+     * 需要提取配置用于更新，并将子节点重挂到根节点
+     */
+    private void prepareRootConfigFromMatchingFolder(TreeNode root, ImportContext ctx) {
+        if (!ctx.applyRootConfigToCurrentFolder || ctx.currentFolderItem == null) {
+            return;
+        }
+
+        String folderName = ctx.currentFolderItem.getName();
+        TreeNode matchingChild = root.children.get(folderName);
+        if (matchingChild == null || matchingChild.configXml == null || matchingChild.configXml.length == 0) {
+            return;
+        }
+
+        root.rootConfigXml = matchingChild.configXml;
+
+        for (TreeNode child : matchingChild.children.values()) {
+            root.children.put(child.name, child);
+        }
+
+        root.children.remove(folderName);
+    }
+
+    /**
+     * 阶段3：处理根目录 config.xml
+     * 如果 zip 根目录有 config.xml，且当前是子目录导入，则更新当前目录任务配置
+     */
+    private void handleRootConfigXml(TreeNode root, ImportContext ctx) {
+        if (root.rootConfigXml == null || root.rootConfigXml.length == 0) {
+            return;
+        }
+
+        if (!ctx.applyRootConfigToCurrentFolder || ctx.currentFolderItem == null) {
+            return;
+        }
+
+        Item folderItem = ctx.currentFolderItem;
+        String folderName = folderItem.getName();
+        String folderFullName = (folderItem instanceof AbstractItem)
+                ? ((AbstractItem) folderItem).getFullName()
+                : folderName;
+
+        ImportResult result = new ImportResult(folderName, "");
+        result.finalName = folderName;
+        result.fullPath = folderFullName;
+        result.sourcePath = folderName;
+        result.displayPath = folderName;
+        result.isFolder = true;
+        result.isJob = false;
+
+        if (ctx.dryRun) {
+            result.statusEnum = Status.UPDATE_CONFIG;
+            result.status = "UPDATE_CONFIG";
+            result.success = true;
+            result.message = "将更新当前目录任务配置";
+        } else {
+            try {
+                if (folderItem instanceof AbstractItem) {
+                    AbstractItem abstractItem = (AbstractItem) folderItem;
+                    try (InputStream in = new ByteArrayInputStream(root.rootConfigXml)) {
+                        abstractItem.updateByXml(new StreamSource(in));
+                        abstractItem.save();
+                    }
+                }
+                result.statusEnum = Status.UPDATE_CONFIG;
+                result.status = "UPDATE_CONFIG";
+                result.success = true;
+                result.message = "已更新当前目录任务配置";
+            } catch (Exception e) {
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.message = "更新目录任务配置失败: " + e.getMessage();
+            }
+        }
+
+        results.add(result);
+        ctx.rootConfigResults.add(result);
     }
 
     /**

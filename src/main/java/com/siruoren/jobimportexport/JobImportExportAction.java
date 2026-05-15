@@ -174,7 +174,9 @@ public class JobImportExportAction implements Action {
             byte[] zipData = baos.toByteArray();
             String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
-            writeExportJson(rsp, true, summary.message, base64Zip, results);
+            String zipFileName = item.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + ".zip";
+
+            writeExportJson(rsp, true, summary.message, base64Zip, results, zipFileName);
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -295,12 +297,17 @@ public class JobImportExportAction implements Action {
 
             try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
                 ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
+
+                boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
+                ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
+                ctx.currentFolderItem = isSubDirectoryImport ? item : null;
+
                 ImportEngine engine = new ImportEngine();
                 results = engine.importZip(zis, ctx);
 
                 for (ImportResult result : results) {
                     if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                            || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB) {
+                            || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
                         successCount++;
                     } else if (result.statusEnum == Status.ERROR) {
                         failCount++;
@@ -425,7 +432,8 @@ public class JobImportExportAction implements Action {
             boolean success,
             String message,
             String zipData,
-            List<ExportResult> results) throws IOException {
+            List<ExportResult> results,
+            String zipFileName) throws IOException {
 
         rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
@@ -470,6 +478,7 @@ public class JobImportExportAction implements Action {
                 + "\"skipCount\":" + skipped + ","
                 + "\"failCount\":" + errors + ","
                 + "\"zipData\":\"" + (zipData != null ? zipData : "") + "\","
+                + "\"zipFileName\":\"" + escapeJson(zipFileName != null ? zipFileName : "jenkins-jobs-export.zip") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 

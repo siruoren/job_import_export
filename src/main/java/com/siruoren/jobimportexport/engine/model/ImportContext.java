@@ -21,6 +21,11 @@ public class ImportContext {
     public hudson.model.ItemGroup targetGroup;
     public String basePath;
     
+    public boolean applyRootConfigToCurrentFolder;
+    public hudson.model.Item currentFolderItem;
+    
+    public List<ImportResult> rootConfigResults = new ArrayList<>();
+    
     // 类型冲突检查字段
     public boolean blocked = false;
     public String blockedReason;

@@ -7,5 +7,6 @@ public enum Action {
     SKIP_EMPTY_TREE,
     OVERWRITE,
     RENAME,
-    REUSE
+    REUSE,
+    UPDATE_CONFIG
 }

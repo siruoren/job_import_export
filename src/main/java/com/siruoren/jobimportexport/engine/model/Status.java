@@ -10,5 +10,6 @@ public enum Status {
     SKIP_EMPTY,
     RENAME_JOB,
     RENAME_FOLDER,
+    UPDATE_CONFIG,
     ERROR
 }

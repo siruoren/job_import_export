@@ -108,6 +108,9 @@ public class PreviewEngine {
                     case SKIP_EMPTY:
                         diff.action = Action.SKIP_NO_CONFIG;
                         break;
+                    case UPDATE_CONFIG:
+                        diff.action = Action.UPDATE_CONFIG;
+                        break;
                     default:
                         diff.action = Action.CREATE_FOLDER;
                 }
