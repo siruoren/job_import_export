@@ -43,8 +43,10 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
 import java.util.LinkedHashMap;
 import com.siruoren.jobimportexport.engine.ImportEngine;
+import com.siruoren.jobimportexport.engine.ExportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
 import com.siruoren.jobimportexport.engine.model.ImportResult;
+import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.NodeType;
 import com.siruoren.jobimportexport.engine.model.Status;
 
@@ -72,6 +74,83 @@ public class JobImportExportSidebarLink implements RootAction {
 
     public boolean hasPermission() {
         return Jenkins.get().hasPermission(Item.CREATE);
+    }
+
+    public boolean hasAdminPermission() {
+        return Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+    }
+
+    @RequirePOST
+    public void doExportAll(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            Jenkins jenkins = Jenkins.get();
+            if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
+                writeJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null);
+                return;
+            }
+
+            ExportEngine exportEngine = new ExportEngine();
+
+            String fileName = "jenkins-all-jobs.zip";
+            String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replace("+", "%20");
+
+            rsp.setContentType("application/zip");
+            rsp.setHeader("Content-Disposition", "attachment; filename=\"" + encodedFileName + "\"; filename*=UTF-8''" + encodedFileName);
+
+            ExportResult summary = exportEngine.exportAll(rsp.getOutputStream());
+            List<ExportResult> results = exportEngine.getResults();
+
+            rsp.flushBuffer();
+
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\"}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    @RequirePOST
+    public void doExportAllWithResult(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            Jenkins jenkins = Jenkins.get();
+            if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
+                writeExportJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null, null);
+                return;
+            }
+
+            ExportEngine exportEngine = new ExportEngine();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ExportResult summary = exportEngine.exportAll(baos);
+            List<ExportResult> results = exportEngine.getResults();
+
+            byte[] zipData = baos.toByteArray();
+            String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
+
+            writeExportJson(rsp, true, summary.message, base64Zip, results);
+
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\"}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     @RequirePOST
@@ -294,6 +373,62 @@ public class JobImportExportSidebarLink implements RootAction {
                 + "\"successCount\":" + successCount + ","
                 + "\"failCount\":" + failCount + ","
                 + "\"skipCount\":" + skipCount + ","
+                + "\"details\":" + details.toString()
+                + "}";
+
+        rsp.getWriter().write(json);
+    }
+
+    private void writeExportJson(
+            StaplerResponse rsp,
+            boolean success,
+            String message,
+            String zipData,
+            List<ExportResult> results) throws IOException {
+
+        rsp.setCharacterEncoding("UTF-8");
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder details = new StringBuilder("[");
+        if (results != null) {
+            boolean first = true;
+            for (ExportResult result : results) {
+                if (!first) {
+                    details.append(",");
+                }
+                first = false;
+                details.append("{\"jobPath\":\"")
+                       .append(escapeJson(result.jobPath))
+                       .append("\",\"fullPath\":\"")
+                       .append(escapeJson(result.fullPath))
+                       .append("\",\"status\":\"")
+                       .append(result.status)
+                       .append("\",\"message\":\"")
+                       .append(escapeJson(result.message))
+                       .append("\"}");
+            }
+        }
+        details.append("]");
+
+        int exported = 0;
+        int skipped = 0;
+        int errors = 0;
+        if (results != null) {
+            for (ExportResult r : results) {
+                if ("EXPORTED".equals(r.status)) exported++;
+                else if ("SKIPPED".equals(r.status)) skipped++;
+                else errors++;
+            }
+        }
+
+        String json = "{"
+                + "\"success\":" + success + ","
+                + "\"message\":\"" + escapeJson(message) + "\","
+                + "\"total\":" + (exported + skipped + errors) + ","
+                + "\"successCount\":" + exported + ","
+                + "\"skipCount\":" + skipped + ","
+                + "\"failCount\":" + errors + ","
+                + "\"zipData\":\"" + (zipData != null ? zipData : "") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 

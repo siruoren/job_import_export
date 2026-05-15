@@ -13,6 +13,8 @@
 | **导入新任务** | 文件夹页面 | 在当前文件夹下创建新任务（支持子文件夹） | `Item.CREATE` |
 | **全局导入任务** | 左侧边栏 | 从侧边栏直接导入任务，支持指定路径 | `Item.CREATE` |
 | **批量导入任务** | 左侧边栏 | 上传 ZIP 文件批量导入多个任务，支持多层目录结构 | `Item.CREATE` |
+| **导出全部任务** | 左侧边栏（仅管理员） | 导出 Jenkins 根目录下所有任务并打包为 ZIP | `Jenkins.ADMINISTER` |
+| **批量导出任务** | 文件夹页面 | 导出当前目录及所有子任务配置并打包为 ZIP | `Item.READ`（每个任务）|
 
 ---
 
@@ -110,6 +112,27 @@ mvn clean package -Denforcer.skip=true -DskipTests
    - 正确恢复目录层级和任务路径
 
 > **权限要求**：导出需要 `Item.READ` 权限，全局导入需要 Jenkins 根目录的 `Item.CREATE` 权限。无权限时页面不显示对应功能入口。
+
+### 4. 导出全部任务配置（管理员专用）
+
+通过 Jenkins 左侧边栏的 **任务导入/导出** 入口，可以导出全部任务配置（仅管理员可见）：
+
+1. **功能入口**：左侧边栏 → 任务导入/导出 → 导出全部任务配置（仅管理员可见）
+2. **导出范围**：Jenkins 根目录下所有任务（包括所有层级的目录和任务）
+3. **结果展示**：弹窗显示导出任务条目列表，包含任务路径、状态（已导出/跳过/失败）和消息
+4. **自动下载**：导出完成后自动触发浏览器下载 ZIP 文件
+
+### 5. 批量导出任务配置
+
+在任意 **Folder** 页面，点击 **导入/导出配置** 菜单，可以批量导出当前目录及子目录下的所有任务：
+
+1. **功能入口**：Folder 页面 → 导入/导出配置 → 批量导出任务
+2. **导出范围**：当前目录及所有子目录下的任务
+3. **权限检查**：逐级检查每个任务的 `Item.READ` 权限，无权限的任务标记为跳过并在结果中显示
+4. **结果展示**：弹窗显示导出任务条目列表，包含任务路径、状态（已导出/跳过/失败）和消息
+5. **自动下载**：导出完成后自动触发浏览器下载 ZIP 文件
+
+> **ZIP 格式**：导出的 ZIP 包路径格式与导入完全一致（`jobName/config.xml`），确保导出的配置可以直接重新导入。
 >
 > **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
 >
@@ -151,6 +174,8 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | 导入新任务 | Folder 页面 | `Item.CREATE` | 页面不显示「导入新任务」区域 |
 | 全局导入任务 | 侧边栏页面 | `Item.CREATE` | 页面不显示「导入任务配置」区域 |
 | 导出配置 | 所有页面 | `Item.READ` | 始终显示（后端接口仍做权限校验）|
+| 导出全部任务 | 侧边栏页面 | `Jenkins.ADMINISTER` | 页面不显示「导出全部任务配置」区域 |
+| 批量导出任务 | Folder 页面 | `Item.READ`（每个任务）| 无权限的任务标记为跳过，不显示在导出结果中 |
 
 ### 兼容性
 
@@ -267,6 +292,7 @@ job_import_export/
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
         │   └── engine/
         │       ├── ImportEngine.java          # 统一导入入口
+        │       ├── ExportEngine.java          # 统一导出入口
         │       ├── ExecutionEngine.java       # 核心执行引擎
         │       ├── PreviewEngine.java         # 预览引擎
         │       ├── model/
@@ -275,6 +301,7 @@ job_import_export/
         │       │   ├── RenameRule.java        # 重命名规则
         │       │   ├── ImportContext.java     # 状态上下文
         │       │   ├── ImportResult.java      # 导入结果
+        │       │   ├── ExportResult.java      # 导出结果
         │       │   └── DiffResult.java        # 差异结果（预览）
         │       ├── tree/
         │       │   └── ZipTreeBuilder.java    # 树形结构构建器
@@ -502,6 +529,13 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 批量导入的核心引擎，协调 TreeBuilder 和 ExecutionEngine：
 - `importZip()` — 解析 ZIP 文件并执行导入
 - `importSingle()` — 单任务导入入口
+
+### `ExportEngine`
+
+批量导出的核心引擎：
+- `exportAll()` — 导出 Jenkins 根目录下所有任务并打包为 ZIP
+- `exportFromGroup()` — 导出指定目录下所有任务并打包为 ZIP
+- 逐级检查 `Item.READ` 权限，无权限的任务标记为跳过
 
 ### `ExecutionEngine`
 

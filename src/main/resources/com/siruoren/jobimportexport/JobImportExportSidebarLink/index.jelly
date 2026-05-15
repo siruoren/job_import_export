@@ -523,16 +523,164 @@
 
                     es.onerror = () => es.close();
                 }
+
+                function renderExportResult(r) {
+                    if (r.details &amp;&amp; r.details.length &gt; 0) {
+                        let content = '&lt;div style="max-height:400px; overflow-y:auto;"&gt;';
+
+                        content += '&lt;p&gt;&lt;strong&gt;总计：&lt;/strong&gt;' + r.total + ' 个任务&lt;/p&gt;';
+                        content += '&lt;p style="color:#28a745;"&gt;&lt;strong&gt;已导出：&lt;/strong&gt;' + r.successCount + ' 个&lt;/p&gt;';
+
+                        if (r.skipCount &gt; 0) {
+                            content += '&lt;p style="color:#ffc107;"&gt;&lt;strong&gt;跳过：&lt;/strong&gt;' + r.skipCount + ' 个&lt;/p&gt;';
+                        }
+
+                        if (r.failCount &gt; 0) {
+                            content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;失败：&lt;/strong&gt;' + r.failCount + ' 个&lt;/p&gt;';
+                        }
+
+                        content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;任务路径&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;状态&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;消息&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;tbody&gt;';
+
+                        r.details.forEach(detail => {
+                            let statusColor = '#666';
+                            let statusIcon = '';
+
+                            switch(detail.status) {
+                                case 'EXPORTED':
+                                    statusColor = '#28a745';
+                                    statusIcon = '✔ ';
+                                    break;
+                                case 'SKIPPED':
+                                    statusColor = '#ffc107';
+                                    statusIcon = '⏭ ';
+                                    break;
+                                case 'ERROR':
+                                    statusColor = '#dc3545';
+                                    statusIcon = '✘ ';
+                                    break;
+                            }
+
+                            content += '&lt;tr&gt;';
+                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;/tr&gt;';
+                        });
+
+                        content += '&lt;/tbody&gt;&lt;/table&gt;';
+                        content += '&lt;/div&gt;';
+                        return content;
+                    }
+
+                    const color = r.success ? '#28a745' : '#dc3545';
+                    return '&lt;div style="color:' + color + '; padding:10px;"&gt;' + escapeHtml(r.message) + '&lt;/div&gt;';
+                }
+
+                async function getCrumb() {
+                    try {
+                        const res = await fetch(rootURL + '/crumbIssuer/api/json');
+                        const data = await res.json();
+                        return data;
+                    } catch (e) {
+                        return null;
+                    }
+                }
+
+                async function openExportAll() {
+                    JenkinsModal.open({
+                        title: '导出全部任务配置',
+                        content: '&lt;div style="text-align:center; padding:20px;"&gt;正在导出全部任务配置，请稍候...&lt;/div&gt;'
+                    });
+                    JenkinsModal.setFooter([]);
+                    JenkinsModal.setLoading(true);
+
+                    try {
+                        const crumb = await getCrumb();
+                        const headers = {};
+                        if (crumb) {
+                            headers[crumb.crumbRequestField] = crumb.crumb;
+                        }
+
+                        const res = await fetch('exportAllWithResult', {
+                            method: 'POST',
+                            headers: headers
+                        });
+
+                        const text = await res.text();
+                        const result = JSON.parse(text);
+
+                        JenkinsModal.setLoading(false);
+
+                        if (result.success &amp;&amp; result.zipData) {
+                            const byteCharacters = atob(result.zipData);
+                            const byteNumbers = new Array(byteCharacters.length);
+                            for (let i = 0; i &lt; byteCharacters.length; i++) {
+                                byteNumbers[i] = byteCharacters.charCodeAt(i);
+                            }
+                            const byteArray = new Uint8Array(byteNumbers);
+                            const blob = new Blob([byteArray], { type: 'application/zip' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'jenkins-all-jobs.zip';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }
+
+                        JenkinsModal.setContent(renderExportResult(result));
+
+                        JenkinsModal.setFooter([{
+                            text: '关闭',
+                            type: 'default',
+                            onClick: () => JenkinsModal.close()
+                        }]);
+
+                        if (result.success) {
+                            showToast('success', result.message || '导出成功');
+                        } else {
+                            showToast('error', result.message || '导出失败');
+                        }
+
+                    } catch (e) {
+                        JenkinsModal.setLoading(false);
+                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;导出失败: ' + e + '&lt;/div&gt;');
+                        JenkinsModal.setFooter([{
+                            text: '关闭',
+                            type: 'default',
+                            onClick: () => JenkinsModal.close()
+                        }]);
+                    }
+                }
             </script>
 
+            <div style="display:flex; gap:24px; width:100%; flex-wrap:wrap;">
+
+            <j:if test="${it.hasAdminPermission()}">
+                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">导出全部任务配置</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">将 Jenkins 根目录下的所有任务配置导出并打包为 ZIP 文件。</p>
+                    <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
+                        导出范围：<strong>Jenkins 根目录下所有任务</strong>（仅管理员可见）
+                    </div>
+                    <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
+                            onclick="openExportAll()">
+                        导出全部任务配置
+                    </button>
+                </div>
+            </j:if>
+
             <j:if test="${it.hasPermission()}">
-                <div style="width:100%;">
-                    <div style="padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
-                        <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
-                        <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
-                        <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
-                            任务将导入到目录：<strong>Jenkins 根目录</strong>
-                        </div>
+                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
+                    <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
+                        任务将导入到目录：<strong>Jenkins 根目录</strong>
+                    </div>
                         <form method="post" action="batchImport" enctype="multipart/form-data" accept-charset="UTF-8" id="batchImportForm" style="text-align:left;">
                             <table class="form" style="width:100%;">
                                 <tr>
@@ -601,6 +749,8 @@
                     </div>
                 </div>
             </j:if>
+
+            </div>
         </l:main-panel>
     </l:layout>
 </j:jelly>

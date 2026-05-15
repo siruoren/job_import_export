@@ -1,8 +1,10 @@
 package com.siruoren.jobimportexport;
 
 import com.siruoren.jobimportexport.engine.ImportEngine;
+import com.siruoren.jobimportexport.engine.ExportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
 import com.siruoren.jobimportexport.engine.model.ImportResult;
+import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.Status;
 import hudson.Extension;
 import hudson.Util;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -95,6 +98,10 @@ public class JobImportExportAction implements Action {
         return false;
     }
 
+    public boolean isFolder() {
+        return item instanceof ItemGroup;
+    }
+
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
         try {
             item.checkPermission(Item.READ);
@@ -134,6 +141,50 @@ public class JobImportExportAction implements Action {
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
                         "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    @RequirePOST
+    public void doBatchExport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            if (item instanceof AccessControlled) {
+                if (!((AccessControlled) item).hasPermission(Item.READ)) {
+                    writeJson(rsp, false, "无权限：当前用户没有查看此任务配置的权限", null);
+                    return;
+                }
+            }
+
+            ItemGroup<?> targetGroup;
+            if (item instanceof ItemGroup) {
+                targetGroup = (ItemGroup<?>) item;
+            } else {
+                writeJson(rsp, false, "当前任务不是目录，无法批量导出", null);
+                return;
+            }
+
+            ExportEngine exportEngine = new ExportEngine();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ExportResult summary = exportEngine.exportFromGroup(targetGroup, baos);
+            List<ExportResult> results = exportEngine.getResults();
+
+            byte[] zipData = baos.toByteArray();
+            String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
+
+            writeExportJson(rsp, true, summary.message, base64Zip, results);
+
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson("批量导出失败：" + msg) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -363,6 +414,62 @@ public class JobImportExportAction implements Action {
                 + "\"successCount\":" + successCount + ","
                 + "\"failCount\":" + failCount + ","
                 + "\"skipCount\":" + skipCount + ","
+                + "\"details\":" + details.toString()
+                + "}";
+
+        rsp.getWriter().write(json);
+    }
+
+    private void writeExportJson(
+            StaplerResponse rsp,
+            boolean success,
+            String message,
+            String zipData,
+            List<ExportResult> results) throws IOException {
+
+        rsp.setCharacterEncoding("UTF-8");
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder details = new StringBuilder("[");
+        if (results != null) {
+            boolean first = true;
+            for (ExportResult result : results) {
+                if (!first) {
+                    details.append(",");
+                }
+                first = false;
+                details.append("{\"jobPath\":\"")
+                       .append(escapeJson(result.jobPath))
+                       .append("\",\"fullPath\":\"")
+                       .append(escapeJson(result.fullPath))
+                       .append("\",\"status\":\"")
+                       .append(result.status)
+                       .append("\",\"message\":\"")
+                       .append(escapeJson(result.message))
+                       .append("\"}");
+            }
+        }
+        details.append("]");
+
+        int exported = 0;
+        int skipped = 0;
+        int errors = 0;
+        if (results != null) {
+            for (ExportResult r : results) {
+                if ("EXPORTED".equals(r.status)) exported++;
+                else if ("SKIPPED".equals(r.status)) skipped++;
+                else errors++;
+            }
+        }
+
+        String json = "{"
+                + "\"success\":" + success + ","
+                + "\"message\":\"" + escapeJson(message) + "\","
+                + "\"total\":" + (exported + skipped + errors) + ","
+                + "\"successCount\":" + exported + ","
+                + "\"skipCount\":" + skipped + ","
+                + "\"failCount\":" + errors + ","
+                + "\"zipData\":\"" + (zipData != null ? zipData : "") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 
