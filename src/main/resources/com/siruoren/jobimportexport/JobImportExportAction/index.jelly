@@ -605,15 +605,6 @@
                     return '&lt;div style="color:' + color + '; padding:10px;"&gt;' + escapeHtml(r.message) + '&lt;/div&gt;';
                 }
 
-                function getExportTimestamp() {
-                    const now = new Date();
-                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    const pad = n => String(n).padStart(2, '0');
-                    return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
-                        '_' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds()) +
-                        '_' + tz.replace(/\//g, '-');
-                }
-
                 async function getCrumb() {
                     try {
                         const res = await fetch(rootURL + '/crumbIssuer/api/json');
@@ -678,8 +669,7 @@
                             const a = document.createElement('a');
                             a.href = url;
                             const baseName = result.zipFileName || 'jenkins-jobs-export.zip';
-                            const ts = getExportTimestamp();
-                            a.download = baseName.replace(/\.zip$/i, '_' + ts + '.zip');
+                            a.download = baseName;
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
