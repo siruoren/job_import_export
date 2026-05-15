@@ -177,6 +177,165 @@ mvn clean package -Denforcer.skip=true -DskipTests
 
 ---
 
+## 后端统一 JSON 协议
+
+本插件采用统一的 JSON 响应协议，确保前后端通信一致：
+
+```json
+{
+  "success": true,
+  "message": "操作成功",
+  "redirect": "/job/myjob"
+}
+```
+
+**响应字段说明**：
+- `success` - 操作是否成功（布尔值）
+- `message` - 提示信息（字符串）
+- `redirect` - 重定向 URL（成功时返回，失败时为 null）
+
+**后端实现原则**：
+- 所有接口统一返回 JSON 格式，错误信息通过 Body 返回，**绝不写入 HTTP Header**
+- `sendError()` 已全面替换为 `writeJson()`（避免 Tomcat 将中文错误信息塞入 HTTP Header 导致 `Unicode字符无法编码` 异常）
+- 所有 Action 方法外层均有 `try-catch(Exception e)` 兜底，确保任何异常都不会冒泡到 Jenkins 默认错误处理
+- `writeJson()` 封装响应前显式调用 `rsp.setCharacterEncoding("UTF-8")`，确保 `getWriter()` 使用 UTF-8
+- 请求端统一调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数
+
+---
+
+## 前端防御性解析
+
+前端采用防御性 JSON 解析策略，确保即使后端返回非 JSON 内容也能优雅处理：
+
+```javascript
+async function safePost(form) {
+    const res = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form)
+    });
+
+    const text = await res.text();
+
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        showToast('error', '服务器返回非JSON：' + text);
+        return;
+    }
+
+    showToast(data.success ? 'success' : 'error', data.message);
+
+    if (data.success && data.redirect) {
+        setTimeout(() => {
+            window.location.href = data.redirect;
+        }, 300);
+    }
+}
+```
+
+### Toast 组件
+
+采用标准可控生命周期的悬浮提示组件：
+- 自动消失（默认 10 秒）
+- 可点击手动关闭
+- 平滑动画过渡
+- 支持成功/错误/普通三种类型
+
+---
+
+## 页面布局
+
+采用横向三栏布局设计，支持响应式自适应：
+
+**任务/文件夹页面**（JobImportExportAction）：
+- 第一栏：导出当前配置
+- 第二栏：更新当前配置（需 `Item.CONFIGURE` 权限）
+- 第三栏：导入新任务（仅 Folder 且需 `Item.CREATE` 权限）
+
+**侧边栏全局页面**（JobImportExportSidebarLink）：
+- 管理员：导出全部任务配置 + 批量导入任务
+- 有创建权限用户：仅批量导入任务
+- 无权限用户：黄色提示框
+
+**布局特性**：
+- 使用 Flexbox 布局，三栏等宽分配
+- 使用 `flex-wrap: wrap` 和 `min-width` 实现响应式自适应
+- 小屏幕上功能框自动换行堆叠
+- 有功能显示内容，无功能显示空白占位
+
+---
+
+## 中文任务名处理机制
+
+插件对中文任务名采用标准 UTF-8 处理：
+
+1. **标准编码**：`req.setCharacterEncoding("UTF-8")` 显式设置请求编码
+2. **控制字符检测**：使用 `Character.isISOControl()` 准确检测真正的控制字符
+3. **XML 清理**：导入前自动清理 XML 文件中的非法控制字符
+
+**处理流程**：
+```
+浏览器输入中文 → UTF-8 编码发送 → req.setCharacterEncoding("UTF-8") → 正确获取中文 → 控制字符检测 → XML 清理 → Jenkins 创建任务
+```
+
+---
+
+## XML 控制字符清理机制
+
+插件在导入 XML 配置时会自动清理非法控制字符：
+
+**清理规则**：
+- 移除非法控制字符：`\x00-\x08`、`\x0B`、`\x0C`、`\x0E-\x1F`
+- 保留合法字符：换行符（`\x0A`）、制表符（`\x09`）、回车符（`\x0D`）
+- 使用 UTF-8 编码处理，避免编码转换问题
+
+**技术实现**：
+```java
+private InputStream cleanXml(InputStream is) throws IOException {
+    String xml = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
+    return new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+}
+```
+
+**效果**：
+- 中文、emoji 等合法 Unicode 字符不会被误伤
+- XML 中的非法控制字符会被自动清理
+- 不再有 UTF-8/ISO-8859-1 的混乱转换
+
+---
+
+## 行为规则
+
+| 场景 | 行为 |
+| --- | --- |
+| 更新普通 Job | 自动 reload + 跳转 |
+| 更新 Folder | 自动 reload + 跳转 |
+| 更新后 rename | 自动进入新名称页面 |
+| 中文任务名 | 正常 |
+| Folder 内 Job | 正常 |
+| Pipeline Job | 正常 |
+| Freestyle Job | 正常 |
+
+---
+
+## 兼容性
+
+| 浏览器/部署方式 | 中文文件名 | 非 ROOT 部署 |
+| --- | --- | --- |
+| Chrome | ✅ | ✅ |
+| Edge | ✅ | ✅ |
+| Safari | ✅ | ✅ |
+| Firefox | ✅ | ✅ |
+| Jenkins 内嵌 Jetty | ✅ | ✅ |
+| Tomcat 部署 | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+| Linux | ✅ | ✅ |
+| macOS | ✅ | ✅ |
+
+---
+
 ## 项目结构
 
 ```
@@ -251,6 +410,79 @@ job_import_export/
 | Jenkins.ADMINISTER | 导出全部任务 + 批量导入任务 |
 | Item.CREATE（非管理员） | 仅批量导入任务 |
 | 无权限 | 菜单不显示 |
+
+---
+
+## 核心类说明
+
+### `JobImportExportAction`
+
+绑定到每个 `AbstractItem`（Job/Folder）页面的 Action，提供以下功能：
+- `doExport()` — 导出当前配置的 XML 文件
+- `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示；成功后使用 `Jenkins.get().getRootUrl() + refreshedItem.getUrl()` 生成安全的重定向 URL
+- `doBatchImport()` — 批量导入任务，支持 ZIP 文件；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
+- `hasPermission()` — 控制「更新配置」区域的显示（按 `Item.CONFIGURE` 权限）
+- `writeJson()` — 统一 JSON 响应封装
+
+### `JobImportExportSidebarLink`
+
+Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
+- `doExport()` — 全局导出任务配置
+- `doBatchImport()` — 全局批量导入任务；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
+- `hasPermission()` — 控制批量导入区域的显示（按 `Item.CREATE` 权限）
+- `writeJson()` — 统一 JSON 响应封装
+
+### `ImportEngine`
+
+批量导入的核心引擎，协调 ZipTreeBuilder 和 ExecutionEngine：
+- `importZip()` — 解析 ZIP 文件并执行导入
+- `importSingle()` — 单任务导入入口
+
+### `ExportEngine`
+
+批量导出的核心引擎：
+- `exportAll()` — 导出 Jenkins 根目录下所有任务并打包为 ZIP
+- `exportFromGroup()` — 导出指定目录下所有任务并打包为 ZIP，支持 `includeCurrentConfig` 参数控制是否包含当前目录配置
+- `exportFromGroup(ItemGroup, OutputStream, boolean)` — 带参数的导出方法，`includeCurrentConfig=false` 时仅导出子任务且 ZIP 路径不包含当前目录
+- 逐级检查 `Item.READ` 权限，无权限的任务标记为跳过
+
+### `ExecutionEngine`
+
+递归执行引擎，深度优先遍历树节点：
+- `execute()` — 执行导入流程（创建目录 → 创建任务 → 更新配置）
+- `createFolder()` — 创建目录，支持 dryRun 模式
+- `createOrUpdateJob()` — 创建或更新任务，支持覆盖/重命名模式
+- `backup()` — 备份现有配置为 `config.xml.bak`
+- `handleRootConfigXml()` — 处理 ZIP 根目录的 config.xml，用于更新当前目录配置
+
+### `ZipTreeBuilder`
+
+将 ZIP 条目转换为树形结构：
+- `build()` — 构建树形结构，检测根目录 config.xml
+- `resolveType()` — 根据是否包含 config.xml 判断节点类型（FOLDER/JOB）
+- 支持多层嵌套目录结构解析
+
+### `ImportContext`
+
+状态上下文，集中管理导入状态：
+- `renameMap` — 重命名映射表，支持级联传播
+- `createdFolders` — 已创建目录集合
+- `dryRun` — 是否为预演模式
+- `parentTypeErrors` — 父任务类型错误集合
+- `applyRootConfigToCurrentFolder` — 是否应用根目录 config.xml 到当前目录
+- `currentFolderItem` — 当前导入目录的 Item 引用
+- `rootConfigResults` — 根目录 config.xml 处理结果列表
+
+### `Status`
+
+导入状态枚举：
+- `CREATE_FOLDER` / `CREATE_JOB` — 新建成功
+- `OVERWRITE_FOLDER` / `OVERWRITE_JOB` — 覆盖成功
+- `RENAME_FOLDER` / `RENAME_JOB` — 重命名成功
+- `UPDATE_CONFIG` — 更新目录任务配置成功
+- `SKIP_EXISTS` / `SKIP_EMPTY` — 跳过
+- `REUSE_FOLDER` — 目录复用
+- `ERROR` — 错误
 
 ---
 
