@@ -168,7 +168,8 @@ public class JobImportExportAction implements Action {
 
             ExportEngine exportEngine = new ExportEngine();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ExportResult summary = exportEngine.exportFromGroup(targetGroup, baos);
+            boolean includeCurrentConfig = Boolean.parseBoolean(req.getParameter("includeCurrentConfig"));
+            ExportResult summary = exportEngine.exportFromGroup(targetGroup, baos, includeCurrentConfig);
             List<ExportResult> results = exportEngine.getResults();
 
             byte[] zipData = baos.toByteArray();

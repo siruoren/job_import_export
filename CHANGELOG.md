@@ -9,21 +9,30 @@
 
 ### 新增功能
 
-- **多层级目录任务导入**：导入的目录任务下没有 config.xml 文件时，默认作为目录任务处理，并对比已存在的任务类型，防止类型不匹配（普通任务 vs 目录）
-- **导出全部任务配置**：根目录菜单添加导出全部任务配置功能（仅管理员可见），导出 Jenkins 根目录下所有任务并打包为 ZIP，弹窗显示导出任务条目列表
-- **批量导出任务配置**：子目录下添加批量导出当前目录及所有子任务功能，逐级检查 READ 权限，无权限的任务标记为跳过并在结果中显示
+- **子目录批量导出优化**：导出的 ZIP 包名为当前任务名，当前任务的配置导出为 `config.xml` 文件存放在 ZIP 包中当前任务的目录名下
+- **批量导入功能增强**：
+  - 根目录下批量导入：如果 ZIP 包根目录有 `config.xml` 直接丢弃
+  - 子目录任务下批量导入：如果 ZIP 包根目录存在 `config.xml`，使用这个配置更新当前所在的目录任务配置
+  - 在预演和导入结果中显示目录任务配置更新条目（`UPDATE_CONFIG` 状态）
+- **权限分级显示**：根目录菜单功能按权限显示，`Item.CREATE` 权限显示批量导入，`Jenkins.ADMINISTER` 权限显示所有功能，无权限则不显示菜单
+- **导出计数优化**：子目录下批量导出时，当前目录的配置也作为成功条目计入导出结果
+- **批量导出选项**：新增「包含当前目录配置」复选框（默认不勾选），不勾选时仅导出子任务，且 ZIP 包路径不包含当前目录文件夹
 
-### 变更
+### 性能优化
 
-- **预演结果计数逻辑优化**：只有 `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB` 状态算作成功，`SKIP_EXISTS`、`REUSE_FOLDER`、`RENAME_JOB`、`RENAME_FOLDER`、`SKIP_EMPTY` 等状态均归为跳过
-- **冲突处理选项改为单选项**：将覆盖和重命名选项从复选框改为三个互斥的单选按钮（不处理冲突/覆盖/重命名）
-- **页面功能框自适应**：使用 flex-wrap 和 min-width 实现响应式布局，功能框在小屏幕上自动换行
-- **Dry Run 确认导入后显示结果**：修复确认导入完成后弹窗不显示结果的问题，改为保持弹窗打开并显示导入结果
+- **大幅优化导入性能**：删除了 `ExecutionEngine.java` 中每个任务创建后的 `Jenkins.get().reload()` 调用，改为只在批量导入完成后调用一次，导入大量任务时性能显著提升
 
 ### 修复
 
-- **确认导入后弹窗消失问题**：`confirmRealImport` 函数中移除 `JenkinsModal.close()`，改为显示加载状态，确保导入完成后弹窗正确显示结果
-- **目录类型不匹配检测**：当导入的目录（无 config.xml）与已存在的普通任务同名时，报告类型不匹配错误
+- **Jelly 文件语法错误**：修复了 `JobImportExportSidebarLink/index.jelly` 中多余的 `</div>` 标签导致的 XML 解析失败
+- **页面 404 问题**：添加了 `getIndex()` 方法确保 Stapler 正确解析视图路径
+- **代码冗余清理**：删除了重复的 `PathResolver.java` 文件（保留 `/engine/resolver/PathResolver.java`）
+
+### 变更
+
+- **权限控制细化**：`JobImportExportSidebarLink.isVisible()` 改为只在用户有 `Item.CREATE` 或 `Jenkins.ADMINISTER` 权限时显示菜单
+- **新增状态枚举**：添加 `UPDATE_CONFIG` 状态用于显示目录任务配置更新操作
+- **新增导入上下文字段**：`applyRootConfigToCurrentFolder`、`currentFolderItem`、`rootConfigResults` 用于控制根目录 config.xml 的处理逻辑
 
 ### 架构重构（ImportEngine v2）
 

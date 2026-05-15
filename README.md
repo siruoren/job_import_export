@@ -100,14 +100,18 @@ mvn clean package -Denforcer.skip=true -DskipTests
    - Dry Run 预览 → 确认对话框 → 实际导入
    - 确认导入后保持弹窗打开，显示详细导入结果
    - 实时进度显示（通过 SSE）
-   - 详细结果报告（成功/失败/跳过/重命名）
+   - 详细结果报告（成功/失败/跳过/重命名/更新配置）
 
 4. **结果统计规则**：
-   - **成功**：仅包含 `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB`
+   - **成功**：仅包含 `CREATE_FOLDER`、`CREATE_JOB`、`OVERWRITE_FOLDER`、`OVERWRITE_JOB`、`UPDATE_CONFIG`
    - **跳过**：包含 `SKIP_EXISTS`、`REUSE_FOLDER`、`RENAME_JOB`、`RENAME_FOLDER`、`SKIP_EMPTY` 等
    - **失败**：仅包含 `ERROR`
 
-5. **恢复导入**：
+5. **根目录 config.xml 处理**：
+   - **根目录导入**：如果 ZIP 包根目录有 `config.xml`，直接丢弃
+   - **子目录导入**：如果 ZIP 包根目录存在 `config.xml`，使用这个配置更新当前所在目录的任务配置，并在预演和导入结果中显示更新条目（`UPDATE_CONFIG` 状态）
+
+6. **恢复导入**：
    - 如果批量导入部分失败，可通过「恢复导入」重试失败任务
    - 正确恢复目录层级和任务路径
 
@@ -131,9 +135,17 @@ mvn clean package -Denforcer.skip=true -DskipTests
 3. **权限检查**：逐级检查每个任务的 `Item.READ` 权限，无权限的任务标记为跳过并在结果中显示
 4. **结果展示**：弹窗显示导出任务条目列表，包含任务路径、状态（已导出/跳过/失败）和消息
 5. **自动下载**：导出完成后自动触发浏览器下载 ZIP 文件
+6. **导出选项**：
+   - **包含当前目录配置**（默认不勾选）：
+     - 勾选：导出内容包括当前目录本身的配置（`myFolder/config.xml`）和所有子任务（`myFolder/job1/config.xml`）
+     - 不勾选：仅导出子任务，ZIP 包路径不包含当前目录文件夹（`job1/config.xml` 直接放在根目录）
+7. **ZIP 格式**：
+   - 导出的 ZIP 包名为当前任务名（如 `myFolder.zip`）
+   - 根据导出选项决定是否包含当前目录文件夹
+8. **计数规则**：当前目录的配置也作为一个成功条目计入导出结果
 
-> **ZIP 格式**：导出的 ZIP 包路径格式与导入完全一致（`jobName/config.xml`），确保导出的配置可以直接重新导入。
->
+> **注意**：导出的 ZIP 包路径格式与导入完全一致，确保导出的配置可以直接重新导入。
+
 > **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
 >
 > **重复任务名**：如果指定路径已存在同名任务，会显示友好提示用户需要重新命名和进入任务更新配置。
@@ -176,6 +188,16 @@ mvn clean package -Denforcer.skip=true -DskipTests
 | 导出配置 | 所有页面 | `Item.READ` | 始终显示（后端接口仍做权限校验）|
 | 导出全部任务 | 侧边栏页面 | `Jenkins.ADMINISTER` | 页面不显示「导出全部任务配置」区域 |
 | 批量导出任务 | Folder 页面 | `Item.READ`（每个任务）| 无权限的任务标记为跳过，不显示在导出结果中 |
+
+### 侧边栏页面权限分级
+
+侧边栏页面（任务导入/导出）根据用户权限显示不同功能：
+
+| 用户权限 | 显示内容 |
+|---------|---------|
+| `Jenkins.ADMINISTER` | 导出全部任务配置 + 批量导入任务 |
+| `Item.CREATE`（非管理员） | 仅批量导入任务 |
+| 两者都没有 | 菜单项不显示 |
 
 ### 兼容性
 
@@ -565,6 +587,7 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `CREATE_FOLDER` / `CREATE_JOB` — 新建成功
 - `OVERWRITE_FOLDER` / `OVERWRITE_JOB` — 覆盖成功
 - `RENAME_FOLDER` / `RENAME_JOB` — 重命名成功
+- `UPDATE_CONFIG` — 更新目录任务配置成功
 - `SKIP_EXISTS` / `SKIP_EMPTY` — 跳过
 - `REUSE_FOLDER` — 目录复用
 - `ERROR` — 错误

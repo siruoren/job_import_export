@@ -559,9 +559,13 @@
                         return;
                     }
 
+                    const includeCurrentConfig = document.getElementById('includeCurrentConfig')?.checked ? 'true' : 'false';
+                    const params = new URLSearchParams();
+                    params.append('includeCurrentConfig', includeCurrentConfig);
+
                     JenkinsModal.open({
                         title: '批量导出任务配置',
-                        content: '&lt;div style="text-align:center; padding:20px;"&gt;正在导出当前目录及子目录下的所有任务配置，请稍候...&lt;/div&gt;'
+                        content: '<div style="text-align:center; padding:20px;">正在导出当前目录及子目录下的所有任务配置，请稍候...</div>'
                     });
                     JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(true);
@@ -573,7 +577,7 @@
                             headers[crumb.crumbRequestField] = crumb.crumb;
                         }
 
-                        const res = await fetch('batchExport', {
+                        const res = await fetch('batchExport?' + params.toString(), {
                             method: 'POST',
                             headers: headers
                         });
@@ -652,9 +656,17 @@
                         <j:if test="${it.isFolder()}">
                         <div>
                             <label style="display:flex; align-items:center; cursor:pointer;">
-                                <input type="radio" name="exportType" value="batch" 
-                                       style="margin-right:8px;"/>
+                                <input type="radio" name="exportType" value="batch"
+                                       style="margin-right:8px;"
+                                       onclick="document.getElementById('includeCurrentConfigDiv').style.display='block';"/>
                                 <span style="color:#333;">批量导出当前目录及所有子任务</span>
+                            </label>
+                        </div>
+                        <div id="includeCurrentConfigDiv" style="display:none; margin-top:12px; margin-left:24px;">
+                            <label style="display:flex; align-items:center; cursor:pointer;">
+                                <input type="checkbox" name="includeCurrentConfig" id="includeCurrentConfig" value="true"
+                                       style="margin-right:8px;"/>
+                                <span style="color:#333;">包含当前目录配置（导出当前目录任务本身的 config.xml）</span>
                             </label>
                         </div>
                         </j:if>

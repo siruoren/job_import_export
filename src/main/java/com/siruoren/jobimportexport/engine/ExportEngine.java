@@ -55,7 +55,7 @@ public class ExportEngine {
         }
     }
 
-    public ExportResult exportFromGroup(ItemGroup<?> group, OutputStream outputStream) {
+    public ExportResult exportFromGroup(ItemGroup<?> group, OutputStream outputStream, boolean includeCurrentConfig) {
         results.clear();
         baos = null;
         zos = null;
@@ -70,7 +70,7 @@ public class ExportEngine {
                 basePath = ((AbstractItem) group).getFullName();
             }
 
-            if (!isRoot && group instanceof AbstractItem) {
+            if (!isRoot && group instanceof AbstractItem && includeCurrentConfig) {
                 addCurrentFolderConfigToZipRoot((AbstractItem) group);
                 results.add(new ExportResult(
                     ((AbstractItem) group).getName(),
@@ -80,7 +80,8 @@ public class ExportEngine {
                 ));
             }
 
-            collectItems(group, basePath, group);
+            String exportBasePath = includeCurrentConfig ? basePath : "";
+            collectItems(group, exportBasePath, group);
 
             zos.finish();
             zos.flush();
@@ -99,6 +100,10 @@ public class ExportEngine {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    public ExportResult exportFromGroup(ItemGroup<?> group, OutputStream outputStream) {
+        return exportFromGroup(group, outputStream, true);
     }
 
     private void addCurrentFolderConfigToZipRoot(AbstractItem folderItem) throws Exception {
