@@ -1,5 +1,6 @@
 package com.siruoren.jobimportexport.engine.diff;
 
+import com.siruoren.jobimportexport.engine.Messages;
 import com.siruoren.jobimportexport.engine.model.*;
 import hudson.model.Item;
 import jenkins.model.Jenkins;
