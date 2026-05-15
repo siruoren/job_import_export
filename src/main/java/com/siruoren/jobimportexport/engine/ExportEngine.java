@@ -72,6 +72,12 @@ public class ExportEngine {
 
             if (!isRoot && group instanceof AbstractItem) {
                 addCurrentFolderConfigToZipRoot((AbstractItem) group);
+                results.add(new ExportResult(
+                    ((AbstractItem) group).getName(),
+                    ((AbstractItem) group).getFullName(),
+                    "EXPORTED",
+                    "已导出当前目录任务配置"
+                ));
             }
 
             collectItems(group, basePath, group);
