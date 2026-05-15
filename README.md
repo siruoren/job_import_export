@@ -24,7 +24,7 @@
    ```bash
    mvn clean package -Denforcer.skip=true -DskipTests
    ```
-2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-1.0.3-SNAPSHOT.hpi`）
+2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-2.0.0.hpi`）
 3. 进入 Jenkins **Manage Jenkins** → **Plugins** → **Advanced settings**
 4. 点击 **Deploy Plugin**，上传 `job-import-export-{version}.hpi` 文件
 5. 重启 Jenkins 使插件生效
@@ -689,4 +689,4 @@ SOFTWARE.
 ## 维护者
 
 - 项目归属：`com.siruoren:job-import-export`
-- 版本：`1.0.3-SNAPSHOT`
+- 版本：`2.0.0`
