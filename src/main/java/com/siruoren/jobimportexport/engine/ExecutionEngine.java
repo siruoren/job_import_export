@@ -401,8 +401,6 @@ public class ExecutionEngine {
                 result.status = "CREATE_FOLDER";
                 result.success = true;
                 result.message = isFolderWithConfig ? "已创建目录任务" : "已创建目录";
-                
-                Jenkins.get().reload();
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
@@ -776,9 +774,6 @@ public class ExecutionEngine {
             try (InputStream xmlStream = new ByteArrayInputStream(configXml)) {
                 ((ModifiableTopLevelItemGroup) parentGroup).createProjectFromXML(jobName, xmlStream);
                 ctx.createdJobs.add(getFullPath(path, ctx));
-                
-                // 刷新 Jenkins 内存状态，确保后续重命名检查能感知到刚创建的任务
-                Jenkins.get().reload();
             }
         }
     }
