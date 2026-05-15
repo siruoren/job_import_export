@@ -14,7 +14,7 @@
   - 新增 `Messages.properties` / `Messages_zh_CN.properties` Java 代码资源文件
   - 前端 JavaScript i18n 对象支持动态语言切换
 - **导入进度条显示**：导入任务弹窗中加入动画进度条，实时显示导入进度
-- **导出时间戳**：自动获取当前页面时区及时间，导出文件名后追加导出时间（格式：`任务名_yyyy-MM-dd_HH-mm-ss_时区.zip`）
+- **导出时间戳**：导出文件名后追加导出时间（格式：`任务名_yyyy-MM-dd_HH-mm-ss.zip`），由后端生成服务器本地时间
 - **子目录批量导出优化**：导出的 ZIP 包名为当前任务名，当前任务的配置导出为 `config.xml` 文件存放在 ZIP 包中当前任务的目录名下
 - **批量导入功能增强**：
   - 根目录下批量导入：如果 ZIP 包根目录有 `config.xml` 直接丢弃
@@ -32,6 +32,9 @@
 
 - **Jelly 文件语法错误**：修复了 `JobImportExportSidebarLink/index.jelly` 中多余的 `</div>` 标签导致的 XML 解析失败
 - **页面 404 问题**：添加了 `getIndex()` 方法确保 Stapler 正确解析视图路径
+- **Jelly XML 解析失败**：修复 `<script>` 标签内裸露的 `<` 比较运算符导致 XML 解析失败，页面显示 404 的问题
+- **缺失 Java 方法**：补充 `JobImportExportAction` 中缺失的 `canImportJobs()`、`canCreateJob()`、`hasAdminPermission()` 方法，修复 Jelly 渲染异常
+- **导出文件名时间戳重复**：修复前端和后端同时添加时间戳导致导出 ZIP 文件名出现两次时间的问题
 - **代码冗余清理**：删除了重复的 `PathResolver.java` 文件（保留 `/engine/resolver/PathResolver.java`）
 
 ### 变更
