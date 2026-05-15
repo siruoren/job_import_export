@@ -1,5 +1,6 @@
 package com.siruoren.jobimportexport.service;
 
+import com.siruoren.jobimportexport.Messages;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
@@ -30,7 +31,7 @@ public class JobService {
 
     public boolean createJob(ItemGroup<?> targetGroup, String jobName, InputStream xmlStream) throws IOException {
         if (!(targetGroup instanceof ModifiableTopLevelItemGroup)) {
-            throw new IOException("当前目录不支持创建任务");
+            throw new IOException(Messages.JobService_dirNotSupportCreateJob());
         }
 
         TopLevelItem item = ((ModifiableTopLevelItemGroup) targetGroup)
@@ -45,7 +46,7 @@ public class JobService {
                 item.delete();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new IOException("删除任务被中断", e);
+                throw new IOException(Messages.JobService_deleteJobInterrupted(e.getMessage()), e);
             }
         }
     }

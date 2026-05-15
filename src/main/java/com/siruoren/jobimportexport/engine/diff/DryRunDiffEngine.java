@@ -73,14 +73,14 @@ public class DryRunDiffEngine {
                         // 记录 rename DAG（原始路径 -> 最终路径）
                         renameMap.put(originalPath, newPath);
 
-                        result.addFolderAction(new NodeAction(originalPath, Action.RENAME, "目录已重命名为: " + newPath));
+                        result.addFolderAction(new NodeAction(originalPath, Action.RENAME, Messages.DryRunDiffEngine_dirRenamedTo(newPath)));
                     } else {
-                        result.addFolderAction(new NodeAction(resolvedPath, Action.REUSE, "文件夹已存在，复用"));
+                        result.addFolderAction(new NodeAction(resolvedPath, Action.REUSE, Messages.DryRunDiffEngine_dirExistsReuse()));
                     }
                 } else if (existingItem != null) {
-                    result.addFolderAction(new NodeAction(resolvedPath, Action.CREATE_FOLDER, "路径已存在但不是文件夹"));
+                    result.addFolderAction(new NodeAction(resolvedPath, Action.CREATE_FOLDER, Messages.DryRunDiffEngine_pathExistsNotFolder()));
                 } else {
-                    result.addFolderAction(new NodeAction(resolvedPath, Action.CREATE_FOLDER, "将创建文件夹"));
+                    result.addFolderAction(new NodeAction(resolvedPath, Action.CREATE_FOLDER, Messages.DryRunDiffEngine_willCreateFolder()));
                 }
             }
             
@@ -97,12 +97,12 @@ public class DryRunDiffEngine {
                         // 记录 rename DAG（原始路径 -> 最终路径）
                         renameMap.put(originalPath, newPath);
 
-                        result.addJobAction(new NodeAction(originalPath, Action.RENAME, "任务已重命名为: " + newPath));
+                        result.addJobAction(new NodeAction(originalPath, Action.RENAME, Messages.DryRunDiffEngine_jobRenamedTo(newPath)));
                     } else {
-                        result.addJobAction(new NodeAction(resolvedPath, Action.OVERWRITE, "将覆盖现有任务"));
+                        result.addJobAction(new NodeAction(resolvedPath, Action.OVERWRITE, Messages.DryRunDiffEngine_willOverwriteJob()));
                     }
                 } else {
-                    result.addJobAction(new NodeAction(resolvedPath, Action.CREATE_JOB, "将创建任务"));
+                    result.addJobAction(new NodeAction(resolvedPath, Action.CREATE_JOB, Messages.DryRunDiffEngine_willCreateJob()));
                 }
             }
         }
@@ -283,19 +283,19 @@ public class DryRunDiffEngine {
             result.add(new Diff(
                 path,
                 Action.CREATE_FOLDER,
-                "文件夹已存在，复用"
+                Messages.DryRunDiffEngine_dirExistsReuse()
             ));
         } else if (existingItem != null) {
             result.add(new Diff(
                 path,
                 Action.CREATE_FOLDER,
-                "路径已存在但不是文件夹"
+                Messages.DryRunDiffEngine_pathExistsNotFolder()
             ));
         } else {
             result.add(new Diff(
                 path,
                 Action.CREATE_FOLDER,
-                "将创建文件夹"
+                Messages.DryRunDiffEngine_willCreateFolder()
             ));
         }
 
@@ -305,13 +305,13 @@ public class DryRunDiffEngine {
                 result.add(new Diff(
                     path,
                     Action.OVERWRITE,
-                    "将覆盖现有任务"
+                    Messages.DryRunDiffEngine_willOverwriteJob()
                 ));
             } else {
                 result.add(new Diff(
                     path,
                     Action.CREATE_JOB,
-                    "将创建任务"
+                    Messages.DryRunDiffEngine_willCreateJob()
                 ));
             }
         }
@@ -346,13 +346,13 @@ public class DryRunDiffEngine {
         String folderMessage;
         if (existingItem != null && existingItem instanceof hudson.model.ItemGroup) {
             folderAction = Action.REUSE;
-            folderMessage = "文件夹已存在，复用";
+            folderMessage = Messages.DryRunDiffEngine_dirExistsReuse();
         } else if (existingItem != null) {
             folderAction = Action.CREATE_FOLDER;
-            folderMessage = "路径已存在但不是文件夹";
+            folderMessage = Messages.DryRunDiffEngine_pathExistsNotFolder();
         } else {
             folderAction = Action.CREATE_FOLDER;
-            folderMessage = "将创建文件夹";
+            folderMessage = Messages.DryRunDiffEngine_willCreateFolder();
         }
         result.addFolderAction(new NodeAction(path, folderAction, folderMessage));
 
@@ -362,10 +362,10 @@ public class DryRunDiffEngine {
             String jobMessage;
             if (existingItem != null) {
                 jobAction = Action.OVERWRITE;
-                jobMessage = "将覆盖现有任务";
+                jobMessage = Messages.DryRunDiffEngine_willOverwriteJob();
             } else {
                 jobAction = Action.CREATE_JOB;
-                jobMessage = "将创建任务";
+                jobMessage = Messages.DryRunDiffEngine_willCreateJob();
             }
             result.addJobAction(new NodeAction(path, jobAction, jobMessage));
         }

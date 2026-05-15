@@ -35,7 +35,7 @@ public class ImportProgress implements Serializable {
     public void complete() {
         this.status = "DONE";
         this.overallProgress = 100;
-        this.message = "导入完成";
+        this.message = Messages.ImportProgress_importComplete();
     }
 
     public void error(String errorMessage) {

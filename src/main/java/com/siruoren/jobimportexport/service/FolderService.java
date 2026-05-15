@@ -1,5 +1,6 @@
 package com.siruoren.jobimportexport.service;
 
+import com.siruoren.jobimportexport.Messages;
 import com.cloudbees.hudson.plugins.folder.Folder;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
@@ -47,11 +48,11 @@ public class FolderService {
                 }
 
                 if (!hasFolderPlugin()) {
-                    throw new IOException("缺少 Folder 插件，无法创建目录: " + part);
+                    throw new IOException(Messages.FolderService_missingFolderPlugin(part));
                 }
 
                 if (!(current instanceof ModifiableTopLevelItemGroup)) {
-                    throw new IOException("目录不支持创建 Folder: " + part);
+                    throw new IOException(Messages.FolderService_dirNotSupportFolder(part));
                 }
 
                 TopLevelItem folder = ((ModifiableTopLevelItemGroup) current)
@@ -65,7 +66,7 @@ public class FolderService {
             }
 
             if (!(item instanceof ItemGroup)) {
-                throw new IOException("路径不是 Folder: " + currentPath);
+                throw new IOException(Messages.FolderService_pathNotFolder(currentPath));
             }
 
             current = (ItemGroup<?>) item;

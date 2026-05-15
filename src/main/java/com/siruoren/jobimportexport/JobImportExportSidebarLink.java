@@ -60,7 +60,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
     @Override
     public String getDisplayName() {
-        return "任务导入/导出";
+        return Messages.JobImportExportSidebarLink_displayName();
     }
 
     @Override
@@ -90,7 +90,7 @@ public class JobImportExportSidebarLink implements RootAction {
         try {
             Jenkins jenkins = Jenkins.get();
             if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
-                writeJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null);
+                writeJson(rsp, false, Messages.JobImportExportSidebarLink_noPermissionExportAll(), null);
                 return;
             }
 
@@ -115,7 +115,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\"}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_exportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -128,7 +128,7 @@ public class JobImportExportSidebarLink implements RootAction {
         try {
             Jenkins jenkins = Jenkins.get();
             if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
-                writeExportJson(rsp, false, "无权限：仅管理员可导出全部任务配置", null, null, null);
+                writeExportJson(rsp, false, Messages.JobImportExportSidebarLink_noPermissionExportAll(), null, null, null);
                 return;
             }
 
@@ -150,7 +150,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\"}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_exportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -163,27 +163,27 @@ public class JobImportExportSidebarLink implements RootAction {
         try {
             String jobName = req.getParameter("job");
         if (jobName == null || jobName.isEmpty()) {
-            writeJson(rsp, false, "任务名称不能为空", null);
+            writeJson(rsp, false, Messages.JobImportExportAction_jobNameEmpty(), null);
             return;
         }
 
         Jenkins jenkins = Jenkins.get();
         AbstractItem item = jenkins.getItemByFullName(jobName, AbstractItem.class);
         if (item == null) {
-            writeJson(rsp, false, "未找到任务: " + jobName, null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_jobNotFound(jobName), null);
             return;
         }
 
         if (item instanceof AccessControlled) {
             if (!((AccessControlled) item).hasPermission(Item.READ)) {
-                writeJson(rsp, false, "无权限：当前用户没有查看此任务配置的权限", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noPermissionRead(), null);
                 return;
             }
         }
 
         Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
         if (!Files.exists(configFile)) {
-            writeJson(rsp, false, "配置文件不存在", null);
+            writeJson(rsp, false, Messages.JobImportExportAction_noConfigFile(), null);
             return;
         }
 
@@ -215,7 +215,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_exportFailed(msg)) + "\",\"redirect\":null}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -232,7 +232,7 @@ public class JobImportExportSidebarLink implements RootAction {
             FileItem fileItem = req.getFileItem("zipFile");
 
             if (fileItem == null || fileItem.getSize() == 0) {
-                writeJson(rsp, false, "请选择 ZIP 文件", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noZipFile(), null);
                 return;
             }
 
@@ -243,7 +243,7 @@ public class JobImportExportSidebarLink implements RootAction {
             Jenkins jenkins = Jenkins.get();
 
             if (!jenkins.hasPermission(Item.CREATE)) {
-                writeJson(rsp, false, "无权限：当前用户没有创建任务的权限", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noPermissionCreate(), null);
                 return;
             }
 
@@ -280,7 +280,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 Jenkins.get().reload();
             }
 
-            writeBatchJson(rsp, true, dryRun ? "预演完成" : "批量导入完成", successCount, failCount, skipCount, results, dryRun);
+            writeBatchJson(rsp, true, dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete(), successCount, failCount, skipCount, results, dryRun);
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -290,7 +290,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("批量导入失败：" + msg) + "\"}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_batchImportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -467,7 +467,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
     private void validateJobName(String jobName) {
         if (jobName == null || jobName.trim().isEmpty()) {
-            throw new IllegalArgumentException("任务名称不能为空");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameEmpty());
         }
         
         jobName = jobName.trim().replace('\u3000', ' ');
@@ -476,16 +476,16 @@ public class JobImportExportSidebarLink implements RootAction {
             char c = jobName.charAt(i);
             
             if (Character.isISOControl(c)) {
-                throw new IllegalArgumentException("任务名称包含非法控制字符");
+                throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameControlChars());
             }
         }
         
         if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
-            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameIllegalChars());
         }
         
         if (jobName.length() > 200) {
-            throw new IllegalArgumentException("任务名称过长");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameTooLong());
         }
     }
 
@@ -679,7 +679,7 @@ public class JobImportExportSidebarLink implements RootAction {
         if (ctx.blocked || ctx.isPathBlocked(currentPath)) {
             ImportResult r = new ImportResult(parts[index]);
             r.status = "BLOCKED";
-            r.message = "父级冲突阻断：" + ctx.blockedReason;
+            r.message = Messages.JobImportExportSidebarLink_parentBlocked(ctx.blockedReason);
             results.add(r);
             return;
         }
@@ -696,10 +696,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (isConflict(ctx, fullPath, newType)) {
             ctx.blocked = true;
-            ctx.blockedReason =
-                    "类型冲突：路径 " + fullPath +
-                    " 之前已定义为 " + ctx.typeMap.get(fullPath) +
-                    "，当前为 " + newType;
+            ctx.blockedReason = Messages.JobImportExportSidebarLink_typeConflict(fullPath, ctx.typeMap.get(fullPath), newType);
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
@@ -711,7 +708,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (!isLast && item != null && !(item instanceof ItemGroup)) {
             ctx.blocked = true;
-            ctx.blockedReason = "类型冲突：路径 " + fullPath + " 已是 Job，不允许作为目录";
+            ctx.blockedReason = Messages.JobImportExportSidebarLink_typeConflictJobAsDir(fullPath);
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
@@ -723,7 +720,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (isLast && item != null && item instanceof ItemGroup) {
             ctx.blocked = true;
-            ctx.blockedReason = "类型冲突：路径 " + fullPath + " 已是 Folder，不允许作为 Job";
+            ctx.blockedReason = Messages.JobImportExportSidebarLink_typeConflictFolderAsJob(fullPath);
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
@@ -736,7 +733,7 @@ public class JobImportExportSidebarLink implements RootAction {
         if (isLast && item != null) {
             ImportResult r = new ImportResult(name);
             r.status = "SKIP_EXISTS";
-            r.message = "任务已存在";
+            r.message = Messages.JobImportExportSidebarLink_jobExists();
             results.add(r);
             return;
         }
@@ -745,7 +742,7 @@ public class JobImportExportSidebarLink implements RootAction {
             if (item == null) {
                 if (!dryRun) {
                     if (!(base instanceof ModifiableTopLevelItemGroup)) {
-                        ctx.block("当前层级不可创建目录: " + name);
+                        ctx.block(Messages.JobImportExportSidebarLink_cannotCreateDirHere(name));
                         ImportResult r = new ImportResult(name);
                         r.status = "ERROR";
                         r.message = ctx.blockedReason;
@@ -781,7 +778,7 @@ public class JobImportExportSidebarLink implements RootAction {
             if (!(base instanceof ModifiableTopLevelItemGroup)) {
                 ImportResult r = new ImportResult(name);
                 r.status = "ERROR";
-                r.message = "当前层级不可创建任务: " + name;
+                r.message = Messages.JobImportExportSidebarLink_cannotCreateJobHere(name);
                 results.add(r);
                 return;
             }
@@ -868,7 +865,7 @@ public class JobImportExportSidebarLink implements RootAction {
     private PrecheckResult precheck(ItemGroup<?> base, String folderPath, String jobName) {
         if (!checkFolderExists(base, folderPath, null)) {
             return new PrecheckResult(false,
-                    "目录不存在：" + folderPath,
+                    Messages.JobImportExportSidebarLink_dirNotFound(folderPath),
                     folderPath);
         }
 
@@ -878,7 +875,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (item != null) {
             return new PrecheckResult(false,
-                    "任务已存在：" + fullName,
+                    Messages.JobImportExportSidebarLink_jobExistsAt(fullName),
                     fullName);
         }
 
@@ -1073,13 +1070,13 @@ public class JobImportExportSidebarLink implements RootAction {
 
                 if (!hasFolderPlugin()) {
                     throw new IOException(
-                            "缺少 Folder 插件，无法创建目录: " + part
+                            Messages.JobImportExportSidebarLink_missingFolderPlugin(part)
                     );
                 }
 
                 if (!(current instanceof ModifiableTopLevelItemGroup)) {
                     throw new IOException(
-                            "目录不支持创建 Folder: " + part
+                            Messages.JobImportExportSidebarLink_dirNotSupportFolder(part)
                     );
                 }
 
@@ -1105,7 +1102,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
             if (!(item instanceof ItemGroup)) {
                 throw new IOException(
-                        "路径不是 Folder: " + currentPath
+                        Messages.JobImportExportSidebarLink_pathNotFolder(currentPath)
                 );
             }
 
@@ -1185,7 +1182,7 @@ public class JobImportExportSidebarLink implements RootAction {
         try {
             if (ctx != null && ctx.blocked) {
                 result.status = "BLOCKED";
-                result.message = "上游冲突阻断，后续路径禁止创建";
+                result.message = Messages.JobImportExportSidebarLink_upstreamBlocked();
                 result.blockedBy = ctx.blockedReason;
                 result.reason = "parent folder mismatch";
                 return result;
@@ -1195,7 +1192,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
             if (jobName == null) {
                 result.status = "ERROR_INVALID_NAME";
-                result.message = "任务名称不能为空";
+                result.message = Messages.JobImportExportSidebarLink_jobNameEmpty();
                 return result;
             }
 
@@ -1203,7 +1200,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 validateJobName(jobName);
             } catch (Exception e) {
                 result.status = "ERROR_INVALID_NAME";
-                result.message = "任务名称不合法：" + e.getMessage();
+                result.message = Messages.JobImportExportSidebarLink_jobNameInvalid(e.getMessage());
                 return result;
             }
 
@@ -1214,13 +1211,13 @@ public class JobImportExportSidebarLink implements RootAction {
 
             if (!missingPlugins.isEmpty()) {
                 result.status = "ERROR_PLUGIN";
-                result.message = "缺少插件依赖：" + String.join(", ", missingPlugins);
+                result.message = Messages.JobImportExportSidebarLink_missingPluginDeps(String.join(", ", missingPlugins));
                 return result;
             }
 
             if (!isCreatableGroup(itemGroup)) {
                 result.status = "ERROR";
-                result.message = "当前目录不支持创建任务";
+                result.message = Messages.JobImportExportSidebarLink_dirNotSupportCreateJob();
                 return result;
             }
 
@@ -1238,10 +1235,10 @@ public class JobImportExportSidebarLink implements RootAction {
                 if (overwrite) {
                     if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
                         result.status = "REUSE";
-                        result.message = "目录已存在，且无 config.xml，复用已有目录";
+                        result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     } else {
                         result.status = "OVERWRITE";
-                        result.message = "将覆盖已存在的任务";
+                        result.message = Messages.JobImportExportSidebarLink_willOverwriteExisting();
                     }
                 } else if (rename) {
                     String newName =
@@ -1254,7 +1251,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     result.finalName = effectiveFolderPath.isEmpty() ? newName : effectiveFolderPath + "/" + newName;
                     result.renamed = true;
                     result.status = "RENAME";
-                    result.message = "任务已存在，将重命名为：" + result.finalName;
+                    result.message = Messages.JobImportExportSidebarLink_jobExistsWillRename(result.finalName);
 
                     if (renameCtx != null) {
                         String oldPath = folderPath.isEmpty() ? jobName : folderPath + "/" + jobName;
@@ -1264,12 +1261,12 @@ public class JobImportExportSidebarLink implements RootAction {
                 } else {
                     result.skipped = true;
                     result.status = "SKIP_EXISTS";
-                    result.message = "任务已存在，已跳过";
+                    result.message = Messages.JobImportExportSidebarLink_jobExistsSkipped();
                     return result;
                 }
             } else {
                 result.status = "OK";
-                result.message = "可以导入";
+                result.message = Messages.JobImportExportSidebarLink_canImport();
             }
 
             String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
@@ -1289,7 +1286,7 @@ public class JobImportExportSidebarLink implements RootAction {
                         }
                     } catch (IOException e) {
                         result.status = "SKIP_FOLDER_MISSING";
-                        result.message = "创建目录失败：" + effectiveFolderPath + ", " + e.getMessage();
+                        result.message = Messages.JobImportExportSidebarLink_createDirFailed(effectiveFolderPath, e.getMessage());
                         result.skipped = true;
                         return result;
                     }
@@ -1307,7 +1304,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
                     result.success = true;
                     result.status = "REUSE";
-                    result.message = "目录已存在，且无 config.xml，复用已有目录";
+                    result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     return result;
                 }
 
@@ -1316,7 +1313,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
                     if (isSpecialFolder(abstractItem)) {
                         result.status = "ERROR";
-                        result.message = "不允许覆盖动态目录类型任务（如 Multibranch Pipeline）";
+                        result.message = Messages.JobImportExportSidebarLink_cannotOverwriteDynamicDir();
                         return result;
                     }
 
@@ -1328,7 +1325,7 @@ public class JobImportExportSidebarLink implements RootAction {
                             }
                             result.status = "OVERWRITE";
                             result.success = true;
-                            result.message = "目录配置已覆盖（保留子任务）";
+                            result.message = Messages.JobImportExportSidebarLink_dirConfigOverwritten();
                             return result;
                         } else {
                             existingItem.delete();
@@ -1340,13 +1337,13 @@ public class JobImportExportSidebarLink implements RootAction {
                         }
                         result.status = "OVERWRITE";
                         result.success = true;
-                        result.message = "任务配置已覆盖（保留历史记录）";
+                        result.message = Messages.JobImportExportSidebarLink_jobConfigOverwritten();
                         return result;
                     }
                 } else if (existingItem instanceof ItemGroup) {
                     if (isFolderConfig(xmlBytes)) {
                         result.status = "ERROR";
-                        result.message = "不支持覆盖此类目录类型";
+                        result.message = Messages.JobImportExportSidebarLink_dirTypeNotSupported();
                         return result;
                     } else {
                         existingItem.delete();
@@ -1378,7 +1375,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         String batchId = req.getParameter("batchId");
         if (batchId == null || batchId.isEmpty()) {
-            writeJson(rsp, false, "缺少 batchId 参数", null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_missingBatchId(), null);
             return;
         }
 
@@ -1386,13 +1383,13 @@ public class JobImportExportSidebarLink implements RootAction {
         List<ImportCheckpoint> failedCheckpoints = checkpointManager.getFailedCheckpoints(batchId);
 
         if (failedCheckpoints.isEmpty()) {
-            writeJson(rsp, false, "没有需要恢复的失败任务", null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_noFailedJobsToResume(), null);
             return;
         }
 
         Jenkins jenkins = Jenkins.get();
         if (!jenkins.hasPermission(Item.CREATE)) {
-            writeJson(rsp, false, "无权限：当前用户没有创建任务的权限", null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_noPermissionCreate(), null);
             return;
         }
 
@@ -1432,7 +1429,7 @@ public class JobImportExportSidebarLink implements RootAction {
             }
         }
 
-        writeBatchJson(rsp, successCount > 0, "恢复导入完成", successCount, failCount, 0, results, false);
+        writeBatchJson(rsp, successCount > 0, Messages.JobImportExportSidebarLink_resumeImportComplete(), successCount, failCount, 0, results, false);
     }
 
     public void doInstallPlugin(StaplerRequest req, StaplerResponse rsp) throws IOException {
@@ -1441,7 +1438,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         String pluginShortName = req.getParameter("plugin");
         if (pluginShortName == null || pluginShortName.isEmpty()) {
-            writeJson(rsp, false, "缺少 plugin 参数", null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_missingPluginParam(), null);
             return;
         }
 
@@ -1449,9 +1446,9 @@ public class JobImportExportSidebarLink implements RootAction {
         boolean success = pluginManager.installPlugin(pluginShortName);
 
         if (success) {
-            writeJson(rsp, true, "插件安装已启动，请稍后刷新页面查看安装状态", null);
+            writeJson(rsp, true, Messages.JobImportExportSidebarLink_pluginInstallStarted(), null);
         } else {
-            writeJson(rsp, false, "插件安装失败，请检查插件名称或手动安装", null);
+            writeJson(rsp, false, Messages.JobImportExportSidebarLink_pluginInstallFailed(), null);
         }
     }
 

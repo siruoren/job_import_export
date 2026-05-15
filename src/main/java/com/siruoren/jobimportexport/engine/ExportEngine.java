@@ -45,7 +45,7 @@ public class ExportEngine {
 
             return buildSummary();
         } catch (Exception e) {
-            return new ExportResult("", "", "ERROR", "导出失败: " + e.getMessage());
+            return new ExportResult("", "", "ERROR", Messages.ExportEngine_exportFailed(e.getMessage()));
         } finally {
             try {
                 if (zos != null) zos.close();
@@ -76,7 +76,7 @@ public class ExportEngine {
                     ((AbstractItem) group).getName(),
                     ((AbstractItem) group).getFullName(),
                     "EXPORTED",
-                    "已导出当前目录任务配置"
+                    Messages.ExportEngine_exportedCurrentConfig()
                 ));
             }
 
@@ -92,7 +92,7 @@ public class ExportEngine {
 
             return buildSummary();
         } catch (Exception e) {
-            return new ExportResult("", "", "ERROR", "导出失败: " + e.getMessage());
+            return new ExportResult("", "", "ERROR", Messages.ExportEngine_exportFailed(e.getMessage()));
         } finally {
             try {
                 if (zos != null) zos.close();
@@ -133,7 +133,7 @@ public class ExportEngine {
                         relativePath,
                         item.getFullName(),
                         "SKIPPED",
-                        "无权限导出，跳过"
+                        Messages.ExportEngine_noPermissionSkip()
                     ));
                     continue;
                 }
@@ -151,7 +151,7 @@ public class ExportEngine {
                     relativePath,
                     item.getFullName(),
                     "ERROR",
-                    "导出失败: " + e.getMessage()
+                    Messages.ExportEngine_exportJobFailed(e.getMessage())
                 ));
             }
         }
@@ -172,14 +172,14 @@ public class ExportEngine {
                     relativePath,
                     item.getFullName(),
                     "EXPORTED",
-                    "已导出目录任务配置"
+                    Messages.ExportEngine_exportedDirConfig()
                 ));
             } else {
                 results.add(new ExportResult(
                     relativePath,
                     item.getFullName(),
                     "EXPORTED",
-                    "已导出目录"
+                    Messages.ExportEngine_exportedDir()
                 ));
             }
         } else {
@@ -187,7 +187,7 @@ public class ExportEngine {
                 relativePath,
                 item.getFullName(),
                 "EXPORTED",
-                "已导出目录"
+                Messages.ExportEngine_exportedDir()
             ));
         }
     }
@@ -206,14 +206,14 @@ public class ExportEngine {
                 relativePath,
                 item.getFullName(),
                 "EXPORTED",
-                "已导出任务配置"
+                Messages.ExportEngine_exportedJobConfig()
             ));
         } else {
             results.add(new ExportResult(
                 relativePath,
                 item.getFullName(),
                 "ERROR",
-                "配置文件不存在"
+                Messages.ExportEngine_configNotFound()
             ));
         }
     }
@@ -228,7 +228,7 @@ public class ExportEngine {
             else errors++;
         }
         return new ExportResult("", "", "SUMMARY",
-            "导出完成: 成功 " + exported + " 个, 跳过 " + skipped + " 个, 失败 " + errors + " 个");
+            Messages.ExportEngine_summary(exported, skipped, errors));
     }
 
     public List<ExportResult> getResults() {

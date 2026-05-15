@@ -67,7 +67,7 @@ public class JobImportExportAction implements Action {
 
     @Override
     public String getDisplayName() {
-        return "导入/导出配置";
+        return Messages.JobImportExportAction_displayName();
     }
 
     @Override
@@ -125,7 +125,7 @@ public class JobImportExportAction implements Action {
 
             Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
             if (!Files.exists(configFile)) {
-                writeJson(rsp, false, "配置文件不存在", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noConfigFile(), null);
                 return;
             }
 
@@ -140,7 +140,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_exportFailed(msg)) + "\",\"redirect\":null}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -153,7 +153,7 @@ public class JobImportExportAction implements Action {
         try {
             if (item instanceof AccessControlled) {
                 if (!((AccessControlled) item).hasPermission(Item.READ)) {
-                    writeJson(rsp, false, "无权限：当前用户没有查看此任务配置的权限", null);
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionRead(), null);
                     return;
                 }
             }
@@ -162,7 +162,7 @@ public class JobImportExportAction implements Action {
             if (item instanceof ItemGroup) {
                 targetGroup = (ItemGroup<?>) item;
             } else {
-                writeJson(rsp, false, "当前任务不是目录，无法批量导出", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_notFolder(), null);
                 return;
             }
 
@@ -187,7 +187,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("批量导出失败：" + msg) + "\"}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_batchExportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -200,7 +200,7 @@ public class JobImportExportAction implements Action {
         try {
             if (item instanceof AccessControlled) {
                 if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
-                    writeJson(rsp, false, "无权限：当前用户没有更新此任务配置的权限", null);
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionUpdate(), null);
                     return;
                 }
             }
@@ -208,7 +208,7 @@ public class JobImportExportAction implements Action {
             FileItem fileItem = req.getFileItem("xmlFile");
 
             if (fileItem == null || fileItem.getSize() == 0) {
-                writeJson(rsp, false, "请选择 XML 文件", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noFileSelected(), null);
                 return;
             }
 
@@ -220,10 +220,10 @@ public class JobImportExportAction implements Action {
                 }
             } catch (IOException e) {
                 if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
-                    writeJson(rsp, false, "任务类型不匹配：" + e.getMessage() + "\n\n请确认任务类型是否匹配后重试。", null);
+                    writeJson(rsp, false, Messages.JobImportExportAction_typeMismatch(e.getMessage()), null);
                     return;
                 } else {
-                    writeJson(rsp, false, "XML解析失败：" + e.getMessage(), null);
+                    writeJson(rsp, false, Messages.JobImportExportAction_xmlParseFailed(e.getMessage()), null);
                     return;
                 }
             }
@@ -239,7 +239,7 @@ public class JobImportExportAction implements Action {
                 redirectUrl = Jenkins.get().getRootUrl() + refreshedItem.getUrl();
             }
 
-            writeJson(rsp, true, "更新成功", redirectUrl);
+            writeJson(rsp, true, Messages.JobImportExportAction_updateSuccess(), redirectUrl);
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
                 try {
@@ -248,7 +248,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("更新失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_updateFailed(msg)) + "\",\"redirect\":null}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -265,7 +265,7 @@ public class JobImportExportAction implements Action {
             FileItem fileItem = req.getFileItem("zipFile");
 
             if (fileItem == null || fileItem.getSize() == 0) {
-                writeJson(rsp, false, "请选择 ZIP 文件", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_noZipFile(), null);
                 return;
             }
 
@@ -276,7 +276,7 @@ public class JobImportExportAction implements Action {
             ItemGroup<?> target = (item instanceof ItemGroup) ? (ItemGroup<?>) item : item.getParent();
 
             if (!(target instanceof ModifiableTopLevelItemGroup)) {
-                writeJson(rsp, false, "当前目录不支持创建任务", null);
+                writeJson(rsp, false, Messages.JobImportExportAction_cannotCreateJob(), null);
                 return;
             }
 
@@ -284,7 +284,7 @@ public class JobImportExportAction implements Action {
 
             if (itemGroup instanceof AccessControlled) {
                 if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
-                    writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionCreate(), null);
                     return;
                 }
             }
@@ -324,7 +324,7 @@ public class JobImportExportAction implements Action {
                 safeReload();
             }
 
-            writeBatchJson(rsp, true, dryRun ? "预演完成" : "批量导入完成", successCount, failCount, skipCount, results, dryRun);
+            writeBatchJson(rsp, true, dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete(), successCount, failCount, skipCount, results, dryRun);
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -334,7 +334,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("批量导入失败：" + msg) + "\"}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_batchImportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -534,7 +534,7 @@ public class JobImportExportAction implements Action {
 
     private void validateJobName(String jobName) {
         if (jobName == null || jobName.trim().isEmpty()) {
-            throw new IllegalArgumentException("任务名称不能为空");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameEmpty());
         }
 
         jobName = jobName.trim().replace('\u3000', ' ');
@@ -543,16 +543,16 @@ public class JobImportExportAction implements Action {
             char c = jobName.charAt(i);
 
             if (Character.isISOControl(c)) {
-                throw new IllegalArgumentException("任务名称包含非法控制字符");
+                throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameControlChars());
             }
         }
 
         if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
-            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameIllegalChars());
         }
 
         if (jobName.length() > 200) {
-            throw new IllegalArgumentException("任务名称过长");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameTooLong());
         }
     }
 

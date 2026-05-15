@@ -115,7 +115,7 @@ public class ExecutionEngine {
             result.statusEnum = Status.UPDATE_CONFIG;
             result.status = "UPDATE_CONFIG";
             result.success = true;
-            result.message = "将更新当前目录任务配置";
+            result.message = Messages.ExecutionEngine_willUpdateConfig();
         } else {
             try {
                 if (folderItem instanceof AbstractItem) {
@@ -128,12 +128,12 @@ public class ExecutionEngine {
                 result.statusEnum = Status.UPDATE_CONFIG;
                 result.status = "UPDATE_CONFIG";
                 result.success = true;
-                result.message = "已更新当前目录任务配置";
+                result.message = Messages.ExecutionEngine_updatedConfig();
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.success = false;
-                result.message = "更新目录任务配置失败: " + e.getMessage();
+                result.message = Messages.ExecutionEngine_updateConfigFailed(e.getMessage());
             }
         }
 
@@ -290,25 +290,25 @@ public class ExecutionEngine {
                             result.statusEnum = Status.RENAME_FOLDER;
                             result.status = "RENAME_FOLDER";
                             result.renamed = true;
-                            result.message = "目录已重命名为: " + getLastPathSegment(resolvedPath);
+                            result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
                         } else if (ctx.overwrite) {
                             if (folderNode.configXml != null && folderNode.configXml.length > 0
                                     && !isFolderConfigXml(folderNode.configXml)) {
                                 result.statusEnum = Status.ERROR;
                                 result.status = "ERROR";
                                 result.success = false;
-                                result.message = "任务类型不同，无法覆盖（现有: 目录，导入: 普通任务）";
+                                result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
                                 ctx.parentTypeErrors.add(resolvedPath);
                             } else {
                                 result.statusEnum = Status.OVERWRITE_FOLDER;
                                 result.status = "OVERWRITE_FOLDER";
-                                result.message = "将覆盖目录任务配置";
+                                result.message = Messages.ExecutionEngine_willOverwriteDirConfig();
                             }
                         } else {
                             result.statusEnum = Status.SKIP_EXISTS;
                             result.status = "SKIP_EXISTS";
                             result.skipped = true;
-                            result.message = "目录任务已存在，已跳过";
+                            result.message = Messages.ExecutionEngine_dirExistsSkipped();
                         }
                     } else {
                         // 普通 Folder 已存在，检查类型是否匹配
@@ -316,13 +316,13 @@ public class ExecutionEngine {
                             result.statusEnum = Status.ERROR;
                             result.status = "ERROR";
                             result.success = false;
-                            result.message = "任务类型不同，无法作为目录导入（现有: 普通任务，导入: 目录）";
+                            result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
                             ctx.parentTypeErrors.add(resolvedPath);
                         } else {
                             result.statusEnum = Status.REUSE_FOLDER;
                             result.status = "REUSE_FOLDER";
                             result.skipped = true;
-                            result.message = "目录已存在，复用";
+                            result.message = Messages.ExecutionEngine_dirExistsReuse();
                         }
                     }
                 } else {
@@ -332,16 +332,16 @@ public class ExecutionEngine {
                             result.statusEnum = Status.RENAME_FOLDER;
                             result.status = "RENAME_FOLDER";
                             result.renamed = true;
-                            result.message = "目录已重命名为: " + getLastPathSegment(resolvedPath);
+                            result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
                         } else {
                             result.statusEnum = Status.CREATE_FOLDER;
                             result.status = "CREATE_FOLDER";
-                            result.message = "将创建目录任务";
+                            result.message = Messages.ExecutionEngine_willCreateDirJob();
                         }
                     } else {
                         result.statusEnum = Status.CREATE_FOLDER;
                         result.status = "CREATE_FOLDER";
-                        result.message = "将创建目录";
+                        result.message = Messages.ExecutionEngine_willCreateDir();
                     }
                 }
                 result.success = true;
@@ -362,7 +362,7 @@ public class ExecutionEngine {
                         result.statusEnum = Status.SKIP_EXISTS;
                         result.status = "SKIP_EXISTS";
                         result.skipped = true;
-                        result.message = "目录任务已存在，已跳过";
+                        result.message = Messages.ExecutionEngine_dirExistsSkipped();
                         results.add(result);
                     }
                 } else {
@@ -371,13 +371,13 @@ public class ExecutionEngine {
                         result.statusEnum = Status.ERROR;
                         result.status = "ERROR";
                         result.success = false;
-                        result.message = "任务类型不同，无法作为目录导入（现有: 普通任务，导入: 目录）";
+                        result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
                         ctx.parentTypeErrors.add(resolvedPath);
                     } else {
                         result.statusEnum = Status.REUSE_FOLDER;
                         result.status = "REUSE_FOLDER";
                         result.skipped = true;
-                        result.message = "目录已存在，复用";
+                        result.message = Messages.ExecutionEngine_dirExistsReuse();
                     }
                     results.add(result);
                 }
@@ -400,12 +400,12 @@ public class ExecutionEngine {
                 result.statusEnum = isFolderWithConfig ? Status.CREATE_FOLDER : Status.CREATE_FOLDER;
                 result.status = "CREATE_FOLDER";
                 result.success = true;
-                result.message = isFolderWithConfig ? "已创建目录任务" : "已创建目录";
+                result.message = isFolderWithConfig ? Messages.ExecutionEngine_createdDirJob() : Messages.ExecutionEngine_createdDir();
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.success = false;
-                result.message = "创建目录失败: " + e.getMessage();
+                result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
                 ctx.parentTypeErrors.add(resolvedPath);
             }
             results.add(result);
@@ -423,7 +423,7 @@ public class ExecutionEngine {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
                 result.success = false;
-                result.message = "任务类型不同，无法覆盖（现有: 目录，导入: 普通任务）";
+                result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
                 ctx.parentTypeErrors.add(path);
                 results.add(result);
                 return;
@@ -436,18 +436,18 @@ public class ExecutionEngine {
                 result.statusEnum = Status.OVERWRITE_FOLDER;
                 result.status = "OVERWRITE_FOLDER";
                 result.success = true;
-                result.message = "已更新目录任务配置";
+                result.message = Messages.ExecutionEngine_updatedDirConfig();
             } else {
                 result.statusEnum = Status.REUSE_FOLDER;
                 result.status = "REUSE_FOLDER";
                 result.skipped = true;
-                result.message = "目录任务已存在，复用原配置";
+                result.message = Messages.ExecutionEngine_dirExistsReuseConfig();
             }
         } catch (Exception e) {
             result.statusEnum = Status.ERROR;
             result.status = "ERROR";
             result.success = false;
-            result.message = "更新目录任务失败: " + e.getMessage();
+            result.message = Messages.ExecutionEngine_updateDirFailed(e.getMessage());
             ctx.parentTypeErrors.add(path);
         }
 
@@ -504,7 +504,7 @@ public class ExecutionEngine {
                 result.status = "ERROR";
                 result.success = false;
                 result.skipped = true;
-                result.message = "父类任务导入失败，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
+                result.message = Messages.ExecutionEngine_parentTypeErrorSkip(parentErrorPath);
                 results.add(result);
                 continue;
             }
@@ -517,7 +517,7 @@ public class ExecutionEngine {
                 result.status = "ERROR";
                 result.success = false;
                 result.skipped = true;
-                result.message = "父类权限不足，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
+                result.message = Messages.ExecutionEngine_parentPermissionErrorSkip(parentErrorPath);
                 results.add(result);
                 continue;
             }
@@ -530,7 +530,7 @@ public class ExecutionEngine {
                 result.statusEnum = Status.SKIP_EXISTS;
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
-                result.message = "父目录任务已存在，已跳过";
+                result.message = Messages.ExecutionEngine_parentDirExistsSkipped();
                 results.add(result);
                 continue;
             }
@@ -626,7 +626,7 @@ public class ExecutionEngine {
                 result.statusEnum = Status.SKIP_EXISTS;
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
-                result.message = "任务已存在，已跳过";
+                result.message = Messages.ExecutionEngine_jobExistsSkipped();
             }
         } else {
             createJob(node, path, result, ctx);
@@ -644,7 +644,7 @@ public class ExecutionEngine {
                     result.statusEnum = Status.ERROR;
                     result.status = "ERROR";
                     result.success = false;
-                    result.message = "任务类型不同，无法覆盖（现有: " + existingType + "，导入: " + newType + "）";
+                    result.message = Messages.ExecutionEngine_jobTypeMismatchCannotOverwrite(existingType, newType);
                     // 标记此路径为类型错误，子任务将被跳过
                     ctx.parentTypeErrors.add(path);
                     return;
@@ -665,14 +665,14 @@ public class ExecutionEngine {
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
-                result.message = "覆盖失败: " + e.getMessage();
+                result.message = Messages.ExecutionEngine_overwriteFailed(e.getMessage());
                 return;
             }
         }
         result.statusEnum = Status.OVERWRITE_JOB;
         result.status = "OVERWRITE_JOB";
         result.success = true;
-        result.message = ctx.dryRun ? "将覆盖任务配置" : "已覆盖任务配置";
+        result.message = ctx.dryRun ? Messages.ExecutionEngine_willOverwriteJobConfig() : Messages.ExecutionEngine_overwroteJobConfig();
     }
 
     private void handleAutoRename(TreeNode node, String path, ImportResult result, ImportContext ctx) {
@@ -689,7 +689,7 @@ public class ExecutionEngine {
         if (node.hasConfigXml) {
             result.statusEnum = Status.RENAME_JOB;
             result.status = "RENAME_JOB";
-            result.message = "任务已重命名为: " + newName;
+            result.message = Messages.ExecutionEngine_jobRenamedTo(newName);
 
             if (!ctx.dryRun) {
                 try {
@@ -697,14 +697,14 @@ public class ExecutionEngine {
                 } catch (Exception e) {
                     result.statusEnum = Status.ERROR;
                     result.status = "ERROR";
-                    result.message = "创建失败: " + e.getMessage();
+                    result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                     return;
                 }
             }
         } else {
             result.statusEnum = Status.RENAME_FOLDER;
             result.status = "RENAME_FOLDER";
-            result.message = "目录已重命名为: " + newName;
+            result.message = Messages.ExecutionEngine_dirRenamedTo(newName);
 
             if (!ctx.dryRun) {
                 try {
@@ -713,7 +713,7 @@ public class ExecutionEngine {
                 } catch (Exception e) {
                     result.statusEnum = Status.ERROR;
                     result.status = "ERROR";
-                    result.message = "创建目录失败: " + e.getMessage();
+                    result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
                     return;
                 }
             }
@@ -733,7 +733,7 @@ public class ExecutionEngine {
         result.renamed = true;
         result.statusEnum = Status.RENAME_JOB;
         result.status = "RENAME_JOB";
-        result.message = "任务已重命名为: " + jobName;
+        result.message = Messages.ExecutionEngine_jobRenamedTo(jobName);
 
         if (!ctx.dryRun) {
             try {
@@ -741,7 +741,7 @@ public class ExecutionEngine {
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
-                result.message = "创建失败: " + e.getMessage();
+                result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                 return;
             }
         }
@@ -755,14 +755,14 @@ public class ExecutionEngine {
             } catch (Exception e) {
                 result.statusEnum = Status.ERROR;
                 result.status = "ERROR";
-                result.message = "创建失败: " + e.getMessage();
+                result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                 return;
             }
         }
         result.statusEnum = Status.CREATE_JOB;
         result.status = "CREATE_JOB";
         result.success = true;
-        result.message = ctx.dryRun ? "将创建任务" : "已创建任务";
+        result.message = ctx.dryRun ? Messages.ExecutionEngine_willCreateJob() : Messages.ExecutionEngine_createdJob();
     }
 
     private void createJobDirect(String path, byte[] configXml, ImportContext ctx) throws Exception {
@@ -1023,7 +1023,7 @@ public class ExecutionEngine {
                     errorResult.statusEnum = Status.ERROR;
                     errorResult.status = "ERROR";
                     errorResult.success = false;
-                    errorResult.message = "权限不足，无法更新目录任务配置";
+                    errorResult.message = Messages.ExecutionEngine_noPermissionUpdateDirConfig();
                     ctx.parentPermissionErrors.add(resolvedPath);
                     return errorResult;
                 }
@@ -1038,7 +1038,7 @@ public class ExecutionEngine {
                     errorResult.statusEnum = Status.ERROR;
                     errorResult.status = "ERROR";
                     errorResult.success = false;
-                    errorResult.message = "权限不足，无法在目录下创建新任务";
+                    errorResult.message = Messages.ExecutionEngine_noPermissionCreateInDir();
                     ctx.parentPermissionErrors.add(resolvedPath);
                     return errorResult;
                 }
@@ -1054,7 +1054,7 @@ public class ExecutionEngine {
                     errorResult.statusEnum = Status.ERROR;
                     errorResult.status = "ERROR";
                     errorResult.success = false;
-                    errorResult.message = "权限不足，无法更新任务配置";
+                    errorResult.message = Messages.ExecutionEngine_noPermissionUpdateJobConfig();
                     return errorResult;
                 }
             }
@@ -1071,7 +1071,7 @@ public class ExecutionEngine {
                 errorResult.statusEnum = Status.ERROR;
                 errorResult.status = "ERROR";
                 errorResult.success = false;
-                errorResult.message = "权限不足，无法创建新任务";
+                errorResult.message = Messages.ExecutionEngine_noPermissionCreateJob();
                 if (!isLeaf) {
                     ctx.parentPermissionErrors.add(resolvedPath);
                 }

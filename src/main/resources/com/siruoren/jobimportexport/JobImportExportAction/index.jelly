@@ -1,8 +1,8 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <l:layout title="任务配置管理">
+    <l:layout title="${%page.title}">
         <l:main-panel>
-            <h1>任务配置管理: ${it.item.fullName}</h1>
+            <h1>${%page.heading(it.item.fullName)}</h1>
 
             <div id="modalOverlay"
                  style="display:none;
@@ -42,6 +42,49 @@
             </div>
 
             <script>
+                var i18n = {
+                    close: '${%modal.btn.close}',
+                    jump: '${%modal.btn.jump}',
+                    confirmImport: '${%import.btn.confirmImport}',
+                    importing: '${%import.importing}',
+                    importSuccess: '${%import.success}',
+                    importFailed: '${%import.failed}',
+                    importError: '${%import.error}',
+                    exportSuccess: '${%export.success}',
+                    exportFailed: '${%export.failed}',
+                    exportError: '${%export.error}',
+                    requestFailed: '${%result.requestFailed}',
+                    nonJson: '${%result.nonJson}',
+                    dryRunMode: '🔍 Dry Run mode (check only, no actual import)',
+                    total: 'Total',
+                    success: 'Success',
+                    skipped: 'Skipped',
+                    failed: 'Failed',
+                    jobs: 'jobs',
+                    job: 'Job',
+                    finalName: 'Final Name',
+                    status: 'Status',
+                    message: 'Message',
+                    jobPath: 'Job Path',
+                    exported: 'Exported',
+                    missingPlugins: 'Missing plugins',
+                    updateModalTitle: '${%update.modal.title}',
+                    updateModalContent: '${%update.modal.content(it.item.fullName)}',
+                    cancel: '${%update.btn.cancel}',
+                    confirmUpdate: '${%update.btn.confirm}',
+                    batchImportDryRunTitle: '${%import.modal.title.dryrun}',
+                    batchImportTitle: '${%import.modal.title}',
+                    batchImportDryRunContent: '${%import.modal.content.dryrun}',
+                    batchImportContent: '${%import.modal.content}',
+                    startCheck: '${%import.btn.startCheck}',
+                    startImport: '${%import.btn.startImport}',
+                    exportModalTitle: '${%export.modal.title}',
+                    exportModalContent: '${%export.btn.exporting}',
+                    dryRunResult: '${%result.dryRun}',
+                    importResult: '${%result.import}',
+                    previewResult: '${%result.preview}',
+                    previewDone: '${%result.previewDone}'
+                };
                 const JenkinsModal = {
                     el: null,
                     loading: false,
@@ -113,14 +156,14 @@
                         JenkinsModal.setContent(renderResult(result));
 
                         const buttons = [{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }];
 
                         if (result.redirect) {
                             buttons.push({
-                                text: '跳转',
+                                text: i18n.jump,
                                 type: 'primary',
                                 onClick: () => location.href = result.redirect
                             });
@@ -128,7 +171,7 @@
 
                         if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0) {
                             buttons.unshift({
-                                text: '确认导入',
+                                text: i18n.confirmImport,
                                 type: 'primary',
                                 onClick: () => confirmRealImport(form)
                             });
@@ -138,9 +181,9 @@
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
-                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;请求失败: ' + e + '&lt;/div&gt;');
+                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;' + i18n.requestFailed.replace('{0}', e) + '&lt;/div&gt;');
                         JenkinsModal.setFooter([{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }]);
@@ -173,14 +216,14 @@
                         JenkinsModal.setContent(renderResult(result));
 
                         const buttons = [{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }];
 
                         if (result.redirect) {
                             buttons.push({
-                                text: '跳转',
+                                text: i18n.jump,
                                 type: 'primary',
                                 onClick: () => location.href = result.redirect
                             });
@@ -190,9 +233,9 @@
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
-                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;请求失败: ' + e + '&lt;/div&gt;');
+                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;' + i18n.requestFailed.replace('{0}', e) + '&lt;/div&gt;');
                         JenkinsModal.setFooter([{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }]);
@@ -204,27 +247,27 @@
                         let content = '&lt;div style="max-height:400px; overflow-y:auto;"&gt;';
 
                         if (r.dryRun) {
-                            content += '&lt;p style="color:#17a2b8; font-weight:bold;"&gt;🔍 Dry Run 模式（仅检查，未实际导入）&lt;/p&gt;';
+                            content += '&lt;p style="color:#17a2b8; font-weight:bold;"&gt;' + i18n.dryRunMode + '&lt;/p&gt;';
                         }
 
-                        content += '&lt;p&gt;&lt;strong&gt;总计：&lt;/strong&gt;' + r.total + ' 个任务&lt;/p&gt;';
-                        content += '&lt;p style="color:#28a745;"&gt;&lt;strong&gt;成功：&lt;/strong&gt;' + r.successCount + ' 个&lt;/p&gt;';
+                        content += '&lt;p&gt;&lt;strong&gt;' + i18n.total + '：&lt;/strong&gt;' + r.total + ' ' + i18n.jobs + '&lt;/p&gt;';
+                        content += '&lt;p style="color:#28a745;"&gt;&lt;strong&gt;' + i18n.success + '：&lt;/strong&gt;' + r.successCount + '&lt;/p&gt;';
 
                         if (r.skipCount &gt; 0) {
-                            content += '&lt;p style="color:#ffc107;"&gt;&lt;strong&gt;跳过：&lt;/strong&gt;' + r.skipCount + ' 个&lt;/p&gt;';
+                            content += '&lt;p style="color:#ffc107;"&gt;&lt;strong&gt;' + i18n.skipped + '：&lt;/strong&gt;' + r.skipCount + '&lt;/p&gt;';
                         }
 
-                        content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;失败：&lt;/strong&gt;' + r.failCount + ' 个&lt;/p&gt;';
+                        content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + r.failCount + '&lt;/p&gt;';
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
 
                         content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
 
                         content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;任务&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;最终名称&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;状态&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;消息&lt;/th&gt;' +
+                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;' +
+                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;' +
+                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;' +
+                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;' +
                             '&lt;/tr&gt;&lt;/thead&gt;';
 
                         content += '&lt;tbody&gt;';
@@ -305,7 +348,7 @@
 
                             if (detail.missingPlugins &amp;&amp; detail.missingPlugins.length &gt; 0) {
                                 message +=
-                                    '&lt;br /&gt;&lt;span style="color:#dc3545; font-size:12px;"&gt;缺少插件: '
+                                    '&lt;br /&gt;&lt;span style="color:#dc3545; font-size:12px;"&gt;' + i18n.missingPlugins + ': '
                                     + detail.missingPlugins.map(p => escapeHtml(p)).join(', ')
                                     + '&lt;/span&gt;';
                             }
@@ -382,15 +425,15 @@
 
                 function openUpdate() {
                     JenkinsModal.open({
-                        title: '确认更新配置',
-                        content: '&lt;div&gt;是否确认更新「${it.item.fullName}」的配置？&lt;/div&gt;'
+                        title: i18n.updateModalTitle,
+                        content: '&lt;div&gt;' + i18n.updateModalContent + '&lt;/div&gt;'
                     });
                     JenkinsModal.setFooter([{
-                        text: '取消',
+                        text: i18n.cancel,
                         type: 'default',
                         onClick: () => JenkinsModal.close()
                     }, {
-                        text: '确认更新',
+                        text: i18n.confirmUpdate,
                         type: 'primary',
                         onClick: () => submit(document.getElementById('updateForm'))
                     }]);
@@ -402,22 +445,22 @@
                     const isDryRun = dryRunCheckbox.checked;
 
                     JenkinsModal.open({
-                        title: isDryRun ? '批量导入任务（Dry Run）' : '批量导入任务',
-                        content: '&lt;div&gt;' + (isDryRun ? '确认执行 Dry Run（仅检查，不实际导入）' : '确认执行批量导入（支持失败重试）') + '&lt;/div&gt;'
+                        title: isDryRun ? i18n.batchImportDryRunTitle : i18n.batchImportTitle,
+                        content: '&lt;div&gt;' + (isDryRun ? i18n.batchImportDryRunContent : i18n.batchImportContent) + '&lt;/div&gt;'
                     });
                     JenkinsModal.setFooter([{
-                        text: '取消',
+                        text: i18n.cancel,
                         type: 'default',
                         onClick: () => JenkinsModal.close()
                     }, {
-                        text: isDryRun ? '开始检查' : '开始导入',
+                        text: isDryRun ? i18n.startCheck : i18n.startImport,
                         type: 'primary',
                         onClick: () => isDryRun ? submit(form) : submitWithoutDryRun(form)
                     }]);
                 }
 
                 async function confirmRealImport(form) {
-                    JenkinsModal.setContent('<div style="text-align:center; padding:20px;">正在导入，请稍候...</div>');
+                    JenkinsModal.setContent('<div style="text-align:center; padding:20px;">' + i18n.importing + '</div>');
                     JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(true);
 
@@ -444,14 +487,14 @@
                         JenkinsModal.setContent(renderResult(result));
 
                         const buttons = [{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }];
 
                         if (result.redirect) {
                             buttons.push({
-                                text: '跳转',
+                                text: i18n.jump,
                                 type: 'primary',
                                 onClick: () => location.href = result.redirect
                             });
@@ -460,14 +503,14 @@
                         JenkinsModal.setFooter(buttons);
 
                         if (result.success) {
-                            showToast('success', result.message || '导入成功');
+                            showToast('success', result.message || i18n.importSuccess);
                         } else {
-                            showToast('error', result.message || '导入失败');
+                            showToast('error', result.message || i18n.importFailed);
                         }
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
-                        showToast('error', '导入失败: ' + e);
+                        showToast('error', i18n.importError.replace('{0}', e));
                     }
                 }
 
@@ -490,20 +533,20 @@
                     if (r.details &amp;&amp; r.details.length &gt; 0) {
                         let content = '&lt;div style="max-height:400px; overflow-y:auto;"&gt;';
 
-                        content += '&lt;p&gt;&lt;strong&gt;总计：&lt;/strong&gt;' + r.total + ' 个任务&lt;/p&gt;';
-                        content += '&lt;p style="color:#28a745;"&gt;&lt;strong&gt;已导出：&lt;/strong&gt;' + r.successCount + ' 个&lt;/p&gt;';
+                        content += '&lt;p&gt;&lt;strong&gt;' + i18n.total + '：&lt;/strong&gt;' + r.total + ' ' + i18n.jobs + '&lt;/p&gt;';
+                        content += '&lt;p style="color:#28a745;"&gt;&lt;strong&gt;' + i18n.exported + '：&lt;/strong&gt;' + r.successCount + '&lt;/p&gt;';
 
                         if (r.skipCount &gt; 0) {
-                            content += '&lt;p style="color:#ffc107;"&gt;&lt;strong&gt;跳过：&lt;/strong&gt;' + r.skipCount + ' 个&lt;/p&gt;';
+                            content += '&lt;p style="color:#ffc107;"&gt;&lt;strong&gt;' + i18n.skipped + '：&lt;/strong&gt;' + r.skipCount + '&lt;/p&gt;';
                         }
 
                         if (r.failCount &gt; 0) {
-                            content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;失败：&lt;/strong&gt;' + r.failCount + ' 个&lt;/p&gt;';
+                            content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + r.failCount + '&lt;/p&gt;';
                         }
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
                         content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;任务路径&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;状态&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;消息&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
@@ -564,8 +607,8 @@
                     params.append('includeCurrentConfig', includeCurrentConfig);
 
                     JenkinsModal.open({
-                        title: '批量导出任务配置',
-                        content: '<div style="text-align:center; padding:20px;">正在导出当前目录及子目录下的所有任务配置，请稍候...</div>'
+                        title: i18n.exportModalTitle,
+                        content: '<div style="text-align:center; padding:20px;">' + i18n.exportModalContent + '</div>'
                     });
                     JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(true);
@@ -588,7 +631,7 @@
                         try {
                             result = JSON.parse(text);
                         } catch (e) {
-                            throw new Error('服务器返回非JSON响应: ' + text.substring(0, 200));
+                            throw new Error(i18n.nonJson.replace('{0}', text.substring(0, 200)));
                         }
 
                         JenkinsModal.setLoading(false);
@@ -614,22 +657,22 @@
                         JenkinsModal.setContent(renderExportResult(result));
 
                         JenkinsModal.setFooter([{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }]);
 
                         if (result.success) {
-                            showToast('success', result.message || '导出成功');
+                            showToast('success', result.message || i18n.exportSuccess);
                         } else {
-                            showToast('error', result.message || '导出失败');
+                            showToast('error', result.message || i18n.exportFailed);
                         }
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
-                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;导出失败: ' + e + '&lt;/div&gt;');
+                        JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;' + i18n.exportError.replace('{0}', e) + '&lt;/div&gt;');
                         JenkinsModal.setFooter([{
-                            text: '关闭',
+                            text: i18n.close,
                             type: 'default',
                             onClick: () => JenkinsModal.close()
                         }]);
@@ -639,17 +682,17 @@
 
             <div style="display:flex; gap:24px; width:100%; flex-wrap:wrap;">
                 <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
-                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">导出任务配置</h2>
-                    <p style="margin-bottom:16px; color:#666; font-size:14px;">选择导出方式并执行导出操作。</p>
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%export.section.title}</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">${%export.section.desc}</p>
                     
                     <div style="margin-bottom:16px;">
-                        <label style="display:block; margin-bottom:8px; font-weight:500; color:#333; font-size:14px;">导出类型</label>
+                        <label style="display:block; margin-bottom:8px; font-weight:500; color:#333; font-size:14px;">${%export.type.label}</label>
                         
                         <div style="margin-bottom:8px;">
                             <label style="display:flex; align-items:center; cursor:pointer;">
                                 <input type="radio" name="exportType" value="single" checked="checked" 
                                        style="margin-right:8px;"/>
-                                <span style="color:#333;">导出当前配置</span>
+                                <span style="color:#333;">${%export.single}</span>
                             </label>
                         </div>
                         
@@ -659,14 +702,14 @@
                                 <input type="radio" name="exportType" value="batch"
                                        style="margin-right:8px;"
                                        onclick="document.getElementById('includeCurrentConfigDiv').style.display='block';"/>
-                                <span style="color:#333;">批量导出当前目录及所有子任务</span>
+                                <span style="color:#333;">${%export.batch}</span>
                             </label>
                         </div>
                         <div id="includeCurrentConfigDiv" style="display:none; margin-top:12px; margin-left:24px;">
                             <label style="display:flex; align-items:center; cursor:pointer;">
                                 <input type="checkbox" name="includeCurrentConfig" id="includeCurrentConfig" value="true"
                                        style="margin-right:8px;"/>
-                                <span style="color:#333;">包含当前目录配置（导出当前目录任务本身的 config.xml）</span>
+                                <span style="color:#333;">${%export.includeCurrentConfig}</span>
                             </label>
                         </div>
                         </j:if>
@@ -674,7 +717,7 @@
 
                     <j:if test="${it.isFolder()}">
                     <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
-                        批量导出范围：<strong>${it.item.fullName}</strong> 目录下所有任务（仅导出有权限的任务）
+                        ${%export.batch.scope(it.item.fullName)}
                     </div>
                     </j:if>
 
@@ -683,19 +726,19 @@
                     
                     <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
                             onclick="executeExport()">
-                        执行导出
+                        ${%export.btn.execute}
                     </button>
                 </div>
 
                 <j:if test="${it.hasPermission()}">
                 <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
-                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">更新配置</h2>
-                    <p style="margin-bottom:16px; color:#666; font-size:14px;">上传新的 XML 配置文件来更新当前任务/文件夹配置。</p>
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%update.section.title}</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">${%update.section.desc}</p>
                     <form method="post" action="update" enctype="multipart/form-data" id="updateForm" style="text-align:left;">
                         <table class="form" style="width:100%;">
                             <tr>
                                 <td class="label" style="width:100%; padding-bottom:12px;">
-                                    <label for="xmlFile" style="font-weight:500; color:#333; font-size:14px;">配置文件 (XML)</label>
+                                    <label for="xmlFile" style="font-weight:500; color:#333; font-size:14px;">${%update.file.label}</label>
                                 </td>
                             </tr>
                             <tr>
@@ -705,19 +748,19 @@
                                            style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;"
                                            onchange="document.getElementById('fileName1').textContent = this.files[0]?.name || '';" />
                                     <span id="fileName1" style="margin-left:10px; color:#337ab7; font-size:13px;"></span>
-                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">Jenkins 任务配置的 XML 文件</p>
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">${%update.file.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">当 XML 文件类型与当前任务类型不匹配时，会导致更新失败。</p>
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">${%update.file.type.warning}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-top:8px;">
                                     <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
                                             onclick="openUpdate()">
-                                        更新配置
+                                        ${%update.btn}
                                     </button>
                                 </td>
                             </tr>
@@ -732,17 +775,17 @@
 
                 <j:if test="${it.hasPermission()}">
                 <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
-                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">批量导入任务</h2>
-                    <p style="margin-bottom:16px; color:#666; font-size:14px;">上传包含多个任务配置的 ZIP 文件来批量创建任务。</p>
+                    <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%import.section.title}</h2>
+                    <p style="margin-bottom:16px; color:#666; font-size:14px;">${%import.section.desc}</p>
                     <j:set var="targetName" value="${it.item.fullName}" />
                     <div style="margin-bottom:16px; padding:10px 14px; background:#e7f3ff; border-left:4px solid #2196F3; border-radius:4px; font-size:13px; color:#333;">
-                        任务将导入到目录：<strong>${empty targetName ? 'Jenkins 根目录' : targetName}</strong>
+                        ${%import.target.dir(empty targetName ? 'Jenkins 根目录' : targetName)}
                     </div>
                     <form method="post" action="batchImport" enctype="multipart/form-data" accept-charset="UTF-8" id="batchImportForm" style="text-align:left;">
                         <table class="form" style="width:100%;">
                             <tr>
                                 <td class="label" style="width:100%; padding-bottom:12px;">
-                                    <label for="zipFile" style="font-weight:500; color:#333; font-size:14px;">ZIP 文件</label>
+                                    <label for="zipFile" style="font-weight:500; color:#333; font-size:14px;">${%import.file.label}</label>
                                 </td>
                             </tr>
                             <tr>
@@ -752,52 +795,52 @@
                                            style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; width:100%; box-sizing:border-box;"
                                            onchange="document.getElementById('zipFileName').textContent = this.files[0]?.name || '';" />
                                     <span id="zipFileName" style="margin-left:10px; color:#337ab7; font-size:13px;"></span>
-                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">包含任务配置的 ZIP 文件，支持目录结构（job/config.xml）或扁平结构（job.xml）</p>
+                                    <p class="description" style="margin-top:8px; color:#666; font-size:12px;">${%import.file.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <label style="font-weight:500; color:#333; font-size:14px;">导入选项</label>
+                                    <label style="font-weight:500; color:#333; font-size:14px;">${%import.options.label}</label>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:8px;">
                                     <input type="checkbox" name="dryRun" id="dryRun" value="true" style="margin-right:8px;" checked="checked" />
-                                    <label for="dryRun" style="color:#333; font-size:13px;">Dry Run（仅检查不导入）</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">勾选后仅检查任务配置，不实际导入。推荐先使用此模式检查后再导入</p>
+                                    <label for="dryRun" style="color:#333; font-size:13px;">${%import.dryRun}</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">${%import.dryRun.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
-                                    <label style="font-weight:500; color:#333; font-size:14px;">冲突处理</label>
+                                    <label style="font-weight:500; color:#333; font-size:14px;">${%import.conflict.label}</label>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:8px;">
                                     <input type="radio" name="conflictMode" id="conflictSkip" value="skip" style="margin-right:8px;" checked="checked" />
-                                    <label for="conflictSkip" style="color:#333; font-size:13px;">不处理冲突（跳过已存在的任务）</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则跳过，不进行任何操作</p>
+                                    <label for="conflictSkip" style="color:#333; font-size:13px;">${%import.conflict.skip}</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">${%import.conflict.skip.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:8px;">
                                     <input type="radio" name="conflictMode" id="conflictOverwrite" value="overwrite" style="margin-right:8px;" />
-                                    <label for="conflictOverwrite" style="color:#333; font-size:13px;">覆盖已存在的任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则覆盖原任务（会自动备份原配置）</p>
+                                    <label for="conflictOverwrite" style="color:#333; font-size:13px;">${%import.conflict.overwrite}</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">${%import.conflict.overwrite.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-bottom:12px;">
                                     <input type="radio" name="conflictMode" id="conflictRename" value="rename" style="margin-right:8px;" />
-                                    <label for="conflictRename" style="color:#333; font-size:13px;">自动重命名冲突任务</label>
-                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">如果任务已存在则自动重命名（test → test_1 → test_2）</p>
+                                    <label for="conflictRename" style="color:#333; font-size:13px;">${%import.conflict.rename}</label>
+                                    <p class="description" style="margin-top:4px; color:#666; font-size:12px;">${%import.conflict.rename.desc}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding-top:8px;">
                                     <button type="button" class="jenkins-button jenkins-button--primary" style="padding:8px 16px;"
                                             onclick="openBatch()">
-                                        批量导入
+                                        ${%import.btn}
                                     </button>
                                 </td>
                             </tr>
