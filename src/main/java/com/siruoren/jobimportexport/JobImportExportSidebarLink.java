@@ -69,7 +69,12 @@ public class JobImportExportSidebarLink implements RootAction {
     }
 
     public boolean isVisible() {
-        return true;
+        Jenkins jenkins = Jenkins.get();
+        return jenkins.hasPermission(Item.CREATE) || jenkins.hasPermission(Jenkins.ADMINISTER);
+    }
+
+    public Object getIndex() {
+        return this;
     }
 
     public boolean hasPermission() {
