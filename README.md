@@ -288,25 +288,33 @@ team/backend_1/api/job1/config.xml
 
 | 组件 | 职责 | 说明 |
 |------|------|------|
-| **ImportEngine** | 统一入口 | 协调 TreeBuilder 和 ExecutionEngine |
+| **ImportEngine** | 统一入口 | 协调 ZipTreeBuilder 和 ExecutionEngine |
+| **ExportEngine** | 导出引擎 | 处理批量导出逻辑，支持包含/排除当前目录配置选项 |
 | **ZipTreeBuilder** | 结构构建 | 将 ZIP 条目转换为树形结构，支持索引快速查找 |
 | **ExecutionEngine** | 递归执行 | 深度优先遍历树节点，执行导入逻辑 |
+| **PreviewEngine** | 预览引擎 | 复用 ExecutionEngine，通过 dryRun 模式实现预演 |
+| **DryRunDiffEngine** | 差异计算 | 计算导入前后的差异，用于预演显示 |
 | **TypeResolver** | 类型解析 | 根据 `hasConfigXml` 判断节点是 JOB 还是 FOLDER |
 | **PathResolver** | 路径解析 | 处理重命名映射，支持级联传播 |
+| **RenameDAGResolver** | 重命名解析 | 基于 DAG 图处理复杂的重命名依赖关系 |
+| **ConfigScanner** | 配置扫描 | 扫描 XML 配置文件，检测插件依赖等信息 |
 | **ImportContext** | 状态管理 | 集中管理 renameMap、createdFolders、dryRun 等状态 |
+| **ImportStateStore** | 状态持久化 | 管理导入检查点，支持失败恢复 |
 
 **关键设计原则：**
 - **TreeBuilder（结构）**：将线性 ZIP 条目转换为树形结构
 - **Resolver（类型）**：统一的类型和路径解析入口
 - **Engine（执行）**：统一的递归执行引擎
-- **Context（状态）**：集中式状态管理
+- **Context（状态）**：集中式状态管理（renameMap、createdFolders、dryRun）
 - **Preview == Import**：预览和导入复用同一引擎，通过 `dryRun` 模式区分
+- **Checkpoint（断点）**：支持导入失败后的恢复重试
 
 **项目结构（v2 重构后）：**
 ```
 job_import_export/
 ├── pom.xml                                    # Maven 构建配置
 ├── README.md                                  # 本文档
+├── CHANGELOG.md                               # 变更日志
 └── src/
     └── main/
         ├── java/com/siruoren/jobimportexport/
@@ -314,30 +322,44 @@ job_import_export/
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
         │   └── engine/
         │       ├── ImportEngine.java          # 统一导入入口
-        │       ├── ExportEngine.java          # 统一导出入口
-        │       ├── ExecutionEngine.java       # 核心执行引擎
-        │       ├── PreviewEngine.java         # 预览引擎
+        │       ├── ExportEngine.java          # 统一导出入口（支持包含/排除当前目录配置）
+        │       ├── ExecutionEngine.java       # 核心执行引擎（递归执行导入逻辑）
+        │       ├── PreviewEngine.java         # 预览引擎（dryRun 模式）
+        │       ├── diff/
+        │       │   └── DryRunDiffEngine.java  # 差异计算引擎
         │       ├── model/
-        │       │   ├── Node.java              # 树节点结构
-        │       │   ├── NodeType.java          # 节点类型枚举
-        │       │   ├── RenameRule.java        # 重命名规则
+        │       │   ├── Action.java            # 操作枚举
+        │       │   ├── Diff.java              # 差异对象
+        │       │   ├── DiffResult.java        # 差异结果（预览）
+        │       │   ├── DryRunResult.java      # 预演结果
+        │       │   ├── ExportResult.java      # 导出结果
         │       │   ├── ImportContext.java     # 状态上下文
         │       │   ├── ImportResult.java      # 导入结果
-        │       │   ├── ExportResult.java      # 导出结果
-        │       │   └── DiffResult.java        # 差异结果（预览）
+        │       │   ├── MissingConfigReport.java # 缺失配置报告
+        │       │   ├── Node.java              # 树节点结构
+        │       │   ├── NodeAction.java        # 节点操作
+        │       │   ├── NodeType.java          # 节点类型枚举（FOLDER/JOB）
+        │       │   ├── RenameRule.java        # 重命名规则
+        │       │   ├── Status.java            # 导入状态枚举
+        │       │   └── TreeNode.java          # 树形节点（用于 ZIP 解析）
         │       ├── tree/
-        │       │   └── ZipTreeBuilder.java    # 树形结构构建器
+        │       │   ├── TreeBuilder.java       # 树形结构构建器接口
+        │       │   └── ZipTreeBuilder.java    # ZIP 树形结构构建器
         │       ├── resolver/
-        │       │   ├── TypeResolver.java      # 类型解析器
-        │       │   └── PathResolver.java      # 路径解析器
+        │       │   ├── PathResolver.java      # 路径解析器
+        │       │   ├── RenameDAGResolver.java # 重命名 DAG 解析器
+        │       │   └── TypeResolver.java      # 类型解析器
+        │       ├── scanner/
+        │       │   └── ConfigScanner.java     # 配置扫描器（检测插件依赖）
         │       └── state/
         │           └── ImportStateStore.java  # 断点恢复存储
         └── resources/
+            ├── index.jelly                    # 插件首页（Jenkins 要求必须存在）
             └── com/siruoren/jobimportexport/
                 ├── JobImportExportAction/
-                │   └── index.jelly             # 任务/文件夹页面 UI
+                │   └── index.jelly            # 任务/文件夹页面 UI
                 └── JobImportExportSidebarLink/
-                    └── index.jelly             # 侧边栏全局导入页面 UI
+                    └── index.jelly            # 侧边栏全局导入页面 UI
 ```
 
 ### 后端统一 JSON 协议
@@ -556,30 +578,36 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 
 批量导出的核心引擎：
 - `exportAll()` — 导出 Jenkins 根目录下所有任务并打包为 ZIP
-- `exportFromGroup()` — 导出指定目录下所有任务并打包为 ZIP
+- `exportFromGroup()` — 导出指定目录下所有任务并打包为 ZIP，支持 `includeCurrentConfig` 参数控制是否包含当前目录配置
+- `exportFromGroup(ItemGroup, OutputStream, boolean)` — 带参数的导出方法，`includeCurrentConfig=false` 时仅导出子任务且 ZIP 路径不包含当前目录
 - 逐级检查 `Item.READ` 权限，无权限的任务标记为跳过
 
 ### `ExecutionEngine`
 
 递归执行引擎，深度优先遍历树节点：
-- `execute()` — 执行单个节点导入
-- `createFolder()` — 创建目录
-- `createOrUpdateJob()` — 创建或更新任务
-- `backup()` — 备份现有配置
+- `execute()` — 执行导入流程（创建目录 → 创建任务 → 更新配置）
+- `createFolder()` — 创建目录，支持 dryRun 模式
+- `createOrUpdateJob()` — 创建或更新任务，支持覆盖/重命名模式
+- `backup()` — 备份现有配置为 `config.xml.bak`
+- `handleRootConfigXml()` — 处理 ZIP 根目录的 config.xml，用于更新当前目录配置
 
 ### `ZipTreeBuilder`
 
 将 ZIP 条目转换为树形结构：
-- `build()` — 构建树形结构
-- `resolveType()` — 判断节点类型（FOLDER/JOB）
+- `build()` — 构建树形结构，检测根目录 config.xml
+- `resolveType()` — 根据是否包含 config.xml 判断节点类型（FOLDER/JOB）
+- 支持多层嵌套目录结构解析
 
 ### `ImportContext`
 
 状态上下文，集中管理导入状态：
-- `renameMap` — 重命名映射表
+- `renameMap` — 重命名映射表，支持级联传播
 - `createdFolders` — 已创建目录集合
 - `dryRun` — 是否为预演模式
 - `parentTypeErrors` — 父任务类型错误集合
+- `applyRootConfigToCurrentFolder` — 是否应用根目录 config.xml 到当前目录
+- `currentFolderItem` — 当前导入目录的 Item 引用
+- `rootConfigResults` — 根目录 config.xml 处理结果列表
 
 ### `Status`
 
