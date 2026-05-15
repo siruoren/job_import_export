@@ -30,6 +30,9 @@ public class ImportContext {
     // 父任务类型错误路径集合（用于跳过子任务）
     public Set<String> parentTypeErrors = new HashSet<>();
     
+    // 父任务权限不足路径集合（用于跳过子任务）
+    public Set<String> parentPermissionErrors = new HashSet<>();
+    
     public ImportContext() {
     }
     
@@ -85,6 +88,24 @@ public class ImportContext {
     public String getParentTypeErrorPath(String path) {
         for (String parentError : parentTypeErrors) {
             if (path.startsWith(parentError + "/")) {
+                return parentError;
+            }
+        }
+        return null;
+    }
+    
+    public boolean hasParentPermissionError(String path) {
+        for (String parentError : parentPermissionErrors) {
+            if (path.startsWith(parentError + "/") || path.equals(parentError)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    public String getParentPermissionErrorPath(String path) {
+        for (String parentError : parentPermissionErrors) {
+            if (path.startsWith(parentError + "/") || path.equals(parentError)) {
                 return parentError;
             }
         }

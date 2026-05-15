@@ -183,6 +183,13 @@ public class ExecutionEngine {
             String fullPath = getFullPath(resolvedPath, ctx);
             Item existingItem = Jenkins.get().getItemByFullName(fullPath);
             
+            // 权限检查
+            ImportResult permissionError = checkPermissionForPath(path, resolvedPath, ctx);
+            if (permissionError != null) {
+                results.add(permissionError);
+                continue;
+            }
+            
             if (ctx.dryRun) {
                 ctx.virtualFolders.add(fullPath);
                 
@@ -314,6 +321,7 @@ public class ExecutionEngine {
                 result.status = "ERROR";
                 result.success = false;
                 result.message = "创建目录失败: " + e.getMessage();
+                ctx.parentTypeErrors.add(resolvedPath);
             }
             results.add(result);
         }
@@ -355,6 +363,7 @@ public class ExecutionEngine {
             result.status = "ERROR";
             result.success = false;
             result.message = "更新目录任务失败: " + e.getMessage();
+            ctx.parentTypeErrors.add(path);
         }
 
         results.add(result);
@@ -402,6 +411,32 @@ public class ExecutionEngine {
             // ✔ 使用 Rename DAG 解析最终路径
             String resolvedPath = renameResolver.resolvePath(originalPath, ctx);
 
+            // 检查父任务是否有类型错误（优先于 shouldSkipDueToParentFolder）
+            if (ctx.hasParentTypeError(resolvedPath)) {
+                String parentErrorPath = ctx.getParentTypeErrorPath(resolvedPath);
+                ImportResult result = createResult(node, resolvedPath, ctx);
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.skipped = true;
+                result.message = "父类任务导入失败，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
+                results.add(result);
+                continue;
+            }
+
+            // 检查父任务是否有权限不足（优先于 shouldSkipDueToParentFolder）
+            if (ctx.hasParentPermissionError(resolvedPath)) {
+                String parentErrorPath = ctx.getParentPermissionErrorPath(resolvedPath);
+                ImportResult result = createResult(node, resolvedPath, ctx);
+                result.statusEnum = Status.ERROR;
+                result.status = "ERROR";
+                result.success = false;
+                result.skipped = true;
+                result.message = "父类权限不足，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
+                results.add(result);
+                continue;
+            }
+
             // 检查父目录是否被跳过（如果父目录是 FOLDER_WITH_CONFIG 且不覆盖/不重命名）
             String parentPath = getParentPath(resolvedPath);
             if (shouldSkipDueToParentFolder(originalPath, resolvedPath, ctx)) {
@@ -415,16 +450,10 @@ public class ExecutionEngine {
                 continue;
             }
 
-            // 检查父任务是否有类型错误
-            if (ctx.hasParentTypeError(resolvedPath)) {
-                String parentErrorPath = ctx.getParentTypeErrorPath(resolvedPath);
-                ImportResult result = createResult(node, resolvedPath, ctx);
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
-                result.success = false;
-                result.skipped = true;
-                result.message = "父类任务更新错误，任务更新或创建跳过（父路径: " + parentErrorPath + "）";
-                results.add(result);
+            // 权限检查
+            ImportResult permissionError = checkPermissionForPath(originalPath, resolvedPath, ctx);
+            if (permissionError != null) {
+                results.add(permissionError);
                 continue;
             }
 
@@ -878,6 +907,110 @@ public class ExecutionEngine {
                  || ctx.virtualFolders.contains(checkPath));
 
         return candidate;
+    }
+
+    private boolean isLeafNode(String path) {
+        for (String folderPath : folderPathsToCreate) {
+            if (folderPath.startsWith(path + "/")) {
+                return false;
+            }
+        }
+        for (String jobPath : jobNodesToCreate.keySet()) {
+            if (jobPath.startsWith(path + "/")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private ImportResult checkPermissionForPath(String originalPath, String resolvedPath, ImportContext ctx) {
+        String fullPath = getFullPath(resolvedPath, ctx);
+        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
+        boolean isLeaf = isLeafNode(originalPath);
+
+        if (existingItem != null && ctx.overwrite) {
+            if (!isLeaf) {
+                if (!existingItem.hasPermission(Item.CONFIGURE)) {
+                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
+                    errorResult.finalName = resolvedPath;
+                    errorResult.fullPath = fullPath;
+                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
+                    errorResult.displayPath = errorResult.sourcePath;
+                    errorResult.isFolder = true;
+                    errorResult.isJob = false;
+                    errorResult.statusEnum = Status.ERROR;
+                    errorResult.status = "ERROR";
+                    errorResult.success = false;
+                    errorResult.message = "权限不足，无法更新目录任务配置";
+                    ctx.parentPermissionErrors.add(resolvedPath);
+                    return errorResult;
+                }
+                if (!existingItem.hasPermission(Item.CREATE)) {
+                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
+                    errorResult.finalName = resolvedPath;
+                    errorResult.fullPath = fullPath;
+                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
+                    errorResult.displayPath = errorResult.sourcePath;
+                    errorResult.isFolder = true;
+                    errorResult.isJob = false;
+                    errorResult.statusEnum = Status.ERROR;
+                    errorResult.status = "ERROR";
+                    errorResult.success = false;
+                    errorResult.message = "权限不足，无法在目录下创建新任务";
+                    ctx.parentPermissionErrors.add(resolvedPath);
+                    return errorResult;
+                }
+            } else {
+                if (!existingItem.hasPermission(Item.CONFIGURE)) {
+                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
+                    errorResult.finalName = resolvedPath;
+                    errorResult.fullPath = fullPath;
+                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
+                    errorResult.displayPath = errorResult.sourcePath;
+                    errorResult.isFolder = false;
+                    errorResult.isJob = true;
+                    errorResult.statusEnum = Status.ERROR;
+                    errorResult.status = "ERROR";
+                    errorResult.success = false;
+                    errorResult.message = "权限不足，无法更新任务配置";
+                    return errorResult;
+                }
+            }
+        } else if (existingItem == null) {
+            ItemGroup parentGroup = getParentGroupForPath(resolvedPath, ctx);
+            if (parentGroup instanceof Item && !((Item) parentGroup).hasPermission(Item.CREATE)) {
+                ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
+                errorResult.finalName = resolvedPath;
+                errorResult.fullPath = fullPath;
+                errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
+                errorResult.displayPath = errorResult.sourcePath;
+                errorResult.isFolder = !isLeaf;
+                errorResult.isJob = isLeaf;
+                errorResult.statusEnum = Status.ERROR;
+                errorResult.status = "ERROR";
+                errorResult.success = false;
+                errorResult.message = "权限不足，无法创建新任务";
+                if (!isLeaf) {
+                    ctx.parentPermissionErrors.add(resolvedPath);
+                }
+                return errorResult;
+            }
+        }
+
+        return null;
+    }
+
+    private ItemGroup getParentGroupForPath(String path, ImportContext ctx) {
+        String parentPath = getParentPath(path);
+        if (parentPath.isEmpty()) {
+            return ctx.targetGroup;
+        }
+        String fullParentPath = getFullPath(parentPath, ctx);
+        Item parentItem = Jenkins.get().getItemByFullName(fullParentPath);
+        if (parentItem instanceof ItemGroup) {
+            return (ItemGroup) parentItem;
+        }
+        return ctx.targetGroup;
     }
 
     private void backupConfig(Item item) throws Exception {
