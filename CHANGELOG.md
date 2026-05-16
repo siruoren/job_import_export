@@ -11,6 +11,11 @@
 
 - **进度显示全称路径**：进度条中显示任务的全称路径（如 `myFolder/subFolder/myJob`），而非相对路径（如 `subFolder/myJob`）
 
+### 性能优化
+
+- **轮询间隔优化**：将前端轮询间隔从 500ms 调整为 800ms，减少服务器请求压力，同时用户体验几乎不受影响
+- **内存泄漏防护**：在 `ProgressManager` 中添加自动清理机制，当结果准备好 10 分钟后自动删除该进度记录，防止长时间运行后内存泄漏
+
 ### 修复
 
 - **进度条不动（致命错误）**：
@@ -18,7 +23,7 @@
   - 修复 `JobImportExportAction/index.jelly` 中 SSE URL 路径重复问题（`${it.getUrlName()}/progress` 在已包含 `urlName` 的页面路径下导致 404）
   - 修复 `ImportProgress` 所有字段缺少 `volatile`，导致跨线程写入后读线程看不到新值
   - 修复 `doProgress` SSE 端点用 while 循环阻塞 Jetty 请求线程 120 秒，多页面同时导入时线程池耗尽
-  - 将 SSE 长连接改为短轮询 JSON 接口，前端用 `setInterval` 每 500ms 轮询，每次请求立即返回不阻塞线程
+  - 将 SSE 长连接改为短轮询 JSON 接口，前端用 `setInterval` 每 800ms 轮询，每次请求立即返回不阻塞线程
 - **No permission to create job**：修复后台线程中 `Authentication` 上下文丢失问题，在 `new Thread()` 启动前保存当前用户认证，线程内恢复，线程结束时清理
 - **预演阶段卡住**：修复 `completeProgress()` 和 `setResult()` 之间的竞态条件——`completeProgress` 先设置 `status="DONE"`，前端轮询命中 `status==DONE` 但 `resultReady==false`，执行提前停止轮询；将 `status`、`overallProgress`、`resultReady` 合并到 `setResult()` 的同一个 `synchronized` 方法中原子设置
 - **预演阶段显示跳转按钮**：修复预演（dryRun）完成后也显示跳转按钮的问题，增加 `!result.dryRun` 条件

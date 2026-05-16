@@ -593,7 +593,7 @@
                             });
                     }
 
-                    pollTimer = setInterval(poll, 500);
+                    pollTimer = setInterval(poll, 800);
                     poll();
                 }
 

@@ -5,14 +5,19 @@ import com.siruoren.jobimportexport.engine.model.ImportResult;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ProgressManager {
     private static final Logger LOGGER = Logger.getLogger(ProgressManager.class.getName());
+    private static final long CLEANUP_DELAY_MINUTES = 10;
 
     private static ProgressManager instance;
     private final Map<String, ImportProgress> progressMap = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     private ProgressManager() {
     }
@@ -63,6 +68,7 @@ public class ProgressManager {
         ImportProgress progress = progressMap.get(batchId);
         if (progress != null) {
             progress.setResult(message, successCount, failCount, skipCount, details, dryRun, redirect);
+            scheduleCleanup(batchId);
         }
     }
 
@@ -70,7 +76,15 @@ public class ProgressManager {
         ImportProgress progress = progressMap.get(batchId);
         if (progress != null) {
             progress.setErrorResult(errorMessage, successCount, failCount, skipCount, details, dryRun, redirect);
+            scheduleCleanup(batchId);
         }
+    }
+
+    private void scheduleCleanup(String batchId) {
+        scheduler.schedule(() -> {
+            removeProgress(batchId);
+            LOGGER.log(Level.FINE, "Progress cleaned up for batchId: " + batchId);
+        }, CLEANUP_DELAY_MINUTES, TimeUnit.MINUTES);
     }
 
     public void removeProgress(String batchId) {
