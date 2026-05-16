@@ -6,6 +6,7 @@ import com.siruoren.jobimportexport.engine.model.ImportContext;
 import com.siruoren.jobimportexport.engine.model.ImportResult;
 import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.Status;
+import com.siruoren.jobimportexport.engine.model.LocaleHolder;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractItem;
@@ -50,6 +51,7 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipInputStream;
 import java.util.Collections;
 import java.util.Collection;
+import java.util.Locale;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -317,12 +319,14 @@ public class JobImportExportAction implements Action {
 
             String redirectUrl = (target instanceof Item) ? Jenkins.get().getRootUrl() + ((Item) target).getUrl() : null;
             org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            Locale capturedLocale = req.getLocale();
 
             ImportExecutor executor = ImportExecutor.getInstance();
             boolean accepted = executor.submitTask(() -> {
                 org.springframework.security.core.context.SecurityContext securityContext = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
                 securityContext.setAuthentication(authentication);
                 org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
+                LocaleHolder.setLocale(capturedLocale);
                 try {
                     int successCount = 0;
                     int failCount = 0;
@@ -373,6 +377,7 @@ public class JobImportExportAction implements Action {
                         progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, redirectUrl);
                     }
                 } finally {
+                    LocaleHolder.clear();
                     executor.taskCompleted();
                     org.springframework.security.core.context.SecurityContextHolder.clearContext();
                 }
@@ -473,6 +478,7 @@ public class JobImportExportAction implements Action {
                 json.append("\"finalName\":\"").append(escapeJson(r.finalName)).append("\",");
                 json.append("\"fullPath\":\"").append(escapeJson(r.fullPath != null ? r.fullPath : r.finalName)).append("\",");
                 json.append("\"status\":\"").append(escapeJson(r.status)).append("\",");
+                json.append("\"statusCode\":\"").append(escapeJson(r.statusEnum != null ? r.statusEnum.name() : "")).append("\",");
                 json.append("\"message\":\"").append(escapeJson(r.message)).append("\"");
                 json.append("}");
             }
@@ -512,7 +518,9 @@ public class JobImportExportAction implements Action {
                    .append("\",\"fullPath\":\"")
                    .append(escapeJson(result.fullPath != null ? result.fullPath : result.finalName))
                    .append("\",\"status\":\"")
-                   .append(result.status)
+                   .append(escapeJson(result.status))
+                   .append("\",\"statusCode\":\"")
+                   .append(escapeJson(result.statusEnum != null ? result.statusEnum.name() : ""))
                    .append("\",\"message\":\"")
                    .append(escapeJson(result.message))
                    .append("\"");
@@ -575,7 +583,9 @@ public class JobImportExportAction implements Action {
                        .append("\",\"fullPath\":\"")
                        .append(escapeJson(result.fullPath))
                        .append("\",\"status\":\"")
-                       .append(result.status)
+                       .append(escapeJson(result.status))
+                       .append("\",\"statusCode\":\"")
+                       .append(escapeJson(result.statusCode))
                        .append("\",\"message\":\"")
                        .append(escapeJson(result.message))
                        .append("\"}");
@@ -588,8 +598,8 @@ public class JobImportExportAction implements Action {
         int errors = 0;
         if (results != null) {
             for (ExportResult r : results) {
-                if ("EXPORTED".equals(r.status)) exported++;
-                else if ("SKIPPED".equals(r.status)) skipped++;
+                if ("EXPORTED".equals(r.statusCode)) exported++;
+                else if ("SKIPPED".equals(r.statusCode)) skipped++;
                 else errors++;
             }
         }

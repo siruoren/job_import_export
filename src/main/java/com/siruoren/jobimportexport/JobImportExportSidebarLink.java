@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import com.siruoren.jobimportexport.engine.ImportEngine;
 import com.siruoren.jobimportexport.engine.ExportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
@@ -51,6 +52,7 @@ import com.siruoren.jobimportexport.engine.model.ImportResult;
 import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.NodeType;
 import com.siruoren.jobimportexport.engine.model.Status;
+import com.siruoren.jobimportexport.engine.model.LocaleHolder;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -259,12 +261,14 @@ public class JobImportExportSidebarLink implements RootAction {
             Files.copy(fileItem.getInputStream(), tempZip, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
             org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            Locale capturedLocale = req.getLocale();
 
             ImportExecutor executor = ImportExecutor.getInstance();
             boolean accepted = executor.submitTask(() -> {
                 org.springframework.security.core.context.SecurityContext securityContext = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
                 securityContext.setAuthentication(authentication);
                 org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
+                LocaleHolder.setLocale(capturedLocale);
                 try {
                     int successCount = 0;
                     int failCount = 0;
@@ -313,6 +317,7 @@ public class JobImportExportSidebarLink implements RootAction {
                         progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, null);
                     }
                 } finally {
+                    LocaleHolder.clear();
                     executor.taskCompleted();
                     org.springframework.security.core.context.SecurityContextHolder.clearContext();
                 }
@@ -394,7 +399,9 @@ public class JobImportExportSidebarLink implements RootAction {
                    .append("\",\"fullPath\":\"")
                    .append(escapeJson(result.fullPath != null ? result.fullPath : result.finalName))
                    .append("\",\"status\":\"")
-                   .append(result.status)
+                   .append(escapeJson(result.status))
+                   .append("\",\"statusCode\":\"")
+                   .append(escapeJson(result.statusEnum != null ? result.statusEnum.name() : ""))
                    .append("\",\"message\":\"")
                    .append(escapeJson(result.message))
                    .append("\"");
@@ -457,7 +464,9 @@ public class JobImportExportSidebarLink implements RootAction {
                        .append("\",\"fullPath\":\"")
                        .append(escapeJson(result.fullPath))
                        .append("\",\"status\":\"")
-                       .append(result.status)
+                       .append(escapeJson(result.status))
+                       .append("\",\"statusCode\":\"")
+                       .append(escapeJson(result.statusCode))
                        .append("\",\"message\":\"")
                        .append(escapeJson(result.message))
                        .append("\"}");
@@ -470,8 +479,8 @@ public class JobImportExportSidebarLink implements RootAction {
         int errors = 0;
         if (results != null) {
             for (ExportResult r : results) {
-                if ("EXPORTED".equals(r.status)) exported++;
-                else if ("SKIPPED".equals(r.status)) skipped++;
+                if ("EXPORTED".equals(r.statusCode)) exported++;
+                else if ("SKIPPED".equals(r.statusCode)) skipped++;
                 else errors++;
             }
         }
@@ -727,7 +736,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (ctx.blocked || ctx.isPathBlocked(currentPath)) {
             ImportResult r = new ImportResult(parts[index]);
-            r.status = "BLOCKED";
+            r.setStatusEnum(Status.BLOCKED);
             r.message = Messages.JobImportExportSidebarLink_parentBlocked(ctx.blockedReason);
             results.add(r);
             return;
@@ -749,7 +758,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -761,7 +770,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -773,7 +782,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -781,7 +790,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (isLast && item != null) {
             ImportResult r = new ImportResult(name);
-            r.status = "SKIP_EXISTS";
+            r.setStatusEnum(Status.SKIP_EXISTS);
             r.message = Messages.JobImportExportSidebarLink_jobExists();
             results.add(r);
             return;
@@ -793,7 +802,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     if (!(base instanceof ModifiableTopLevelItemGroup)) {
                         ctx.block(Messages.JobImportExportSidebarLink_cannotCreateDirHere(name));
                         ImportResult r = new ImportResult(name);
-                        r.status = "ERROR";
+                        r.setStatusEnum(Status.ERROR);
                         r.message = ctx.blockedReason;
                         results.add(r);
                         return;
@@ -826,7 +835,7 @@ public class JobImportExportSidebarLink implements RootAction {
         if (isLast && !dryRun) {
             if (!(base instanceof ModifiableTopLevelItemGroup)) {
                 ImportResult r = new ImportResult(name);
-                r.status = "ERROR";
+                r.setStatusEnum(Status.ERROR);
                 r.message = Messages.JobImportExportSidebarLink_cannotCreateJobHere(name);
                 results.add(r);
                 return;
@@ -840,7 +849,7 @@ public class JobImportExportSidebarLink implements RootAction {
         }
 
         ImportResult r = new ImportResult(name);
-        r.status = "OK";
+        r.setStatusEnum(Status.OK);
         r.success = true;
         results.add(r);
     }
@@ -1230,7 +1239,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         try {
             if (ctx != null && ctx.blocked) {
-                result.status = "BLOCKED";
+                result.setStatus("BLOCKED");
                 result.message = Messages.JobImportExportSidebarLink_upstreamBlocked();
                 result.blockedBy = ctx.blockedReason;
                 result.reason = "parent folder mismatch";
@@ -1240,7 +1249,7 @@ public class JobImportExportSidebarLink implements RootAction {
             jobName = sanitizeJobName(jobName);
 
             if (jobName == null) {
-                result.status = "ERROR_INVALID_NAME";
+                result.setStatus("ERROR_INVALID_NAME");
                 result.message = Messages.JobImportExportSidebarLink_jobNameEmpty();
                 return result;
             }
@@ -1248,7 +1257,7 @@ public class JobImportExportSidebarLink implements RootAction {
             try {
                 validateJobName(jobName);
             } catch (Exception e) {
-                result.status = "ERROR_INVALID_NAME";
+                result.setStatus("ERROR_INVALID_NAME");
                 result.message = Messages.JobImportExportSidebarLink_jobNameInvalid(e.getMessage());
                 return result;
             }
@@ -1259,13 +1268,13 @@ public class JobImportExportSidebarLink implements RootAction {
             result.missingPlugins = missingPlugins;
 
             if (!missingPlugins.isEmpty()) {
-                result.status = "ERROR_PLUGIN";
+                result.setStatus("ERROR_PLUGIN");
                 result.message = Messages.JobImportExportSidebarLink_missingPluginDeps(String.join(", ", missingPlugins));
                 return result;
             }
 
             if (!isCreatableGroup(itemGroup)) {
-                result.status = "ERROR";
+                result.setStatus("ERROR");
                 result.message = Messages.JobImportExportSidebarLink_dirNotSupportCreateJob();
                 return result;
             }
@@ -1283,10 +1292,10 @@ public class JobImportExportSidebarLink implements RootAction {
             if (existingItem != null) {
                 if (overwrite) {
                     if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
-                        result.status = "REUSE";
+                        result.setStatus("REUSE");
                         result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     } else {
-                        result.status = "OVERWRITE";
+                        result.setStatus("OVERWRITE");
                         result.message = Messages.JobImportExportSidebarLink_willOverwriteExisting();
                     }
                 } else if (rename) {
@@ -1299,7 +1308,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
                     result.finalName = effectiveFolderPath.isEmpty() ? newName : effectiveFolderPath + "/" + newName;
                     result.renamed = true;
-                    result.status = "RENAME";
+                    result.setStatus("RENAME");
                     result.message = Messages.JobImportExportSidebarLink_jobExistsWillRename(result.finalName);
 
                     if (renameCtx != null) {
@@ -1309,12 +1318,12 @@ public class JobImportExportSidebarLink implements RootAction {
                     }
                 } else {
                     result.skipped = true;
-                    result.status = "SKIP_EXISTS";
+                    result.setStatus("SKIP_EXISTS");
                     result.message = Messages.JobImportExportSidebarLink_jobExistsSkipped();
                     return result;
                 }
             } else {
-                result.status = "OK";
+                result.setStatus("OK");
                 result.message = Messages.JobImportExportSidebarLink_canImport();
             }
 
@@ -1334,7 +1343,7 @@ public class JobImportExportSidebarLink implements RootAction {
                             vfs.createFolder(effectiveFolderPath);
                         }
                     } catch (IOException e) {
-                        result.status = "SKIP_FOLDER_MISSING";
+                        result.setStatus("SKIP_FOLDER_MISSING");
                         result.message = Messages.JobImportExportSidebarLink_createDirFailed(effectiveFolderPath, e.getMessage());
                         result.skipped = true;
                         return result;
@@ -1352,7 +1361,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
                 if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
                     result.success = true;
-                    result.status = "REUSE";
+                    result.setStatus("REUSE");
                     result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     return result;
                 }
@@ -1361,7 +1370,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     AbstractItem abstractItem = (AbstractItem) existingItem;
 
                     if (isSpecialFolder(abstractItem)) {
-                        result.status = "ERROR";
+                        result.setStatus("ERROR");
                         result.message = Messages.JobImportExportSidebarLink_cannotOverwriteDynamicDir();
                         return result;
                     }
@@ -1372,7 +1381,7 @@ public class JobImportExportSidebarLink implements RootAction {
                                 abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                                 abstractItem.save();
                             }
-                            result.status = "OVERWRITE";
+                            result.setStatus("OVERWRITE");
                             result.success = true;
                             result.message = Messages.JobImportExportSidebarLink_dirConfigOverwritten();
                             return result;
@@ -1384,14 +1393,14 @@ public class JobImportExportSidebarLink implements RootAction {
                             abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                             abstractItem.save();
                         }
-                        result.status = "OVERWRITE";
+                        result.setStatus("OVERWRITE");
                         result.success = true;
                         result.message = Messages.JobImportExportSidebarLink_jobConfigOverwritten();
                         return result;
                     }
                 } else if (existingItem instanceof ItemGroup) {
                     if (isFolderConfig(xmlBytes)) {
-                        result.status = "ERROR";
+                        result.setStatus("ERROR");
                         result.message = Messages.JobImportExportSidebarLink_dirTypeNotSupported();
                         return result;
                     } else {
@@ -1411,7 +1420,7 @@ public class JobImportExportSidebarLink implements RootAction {
             result.success = true;
 
         } catch (Exception e) {
-            result.status = "ERROR";
+            result.setStatus("ERROR");
             result.message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
         }
 
@@ -1471,7 +1480,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 }
             } catch (Exception e) {
                 ImportResult errorResult = new ImportResult(checkpoint.getJobName());
-                errorResult.status = "ERROR";
+                errorResult.setStatus("ERROR");
                 errorResult.message = e.getMessage();
                 results.add(errorResult);
                 failCount++;
@@ -1548,6 +1557,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 json.append("\"finalName\":\"").append(escapeJson(r.finalName)).append("\",");
                 json.append("\"fullPath\":\"").append(escapeJson(r.fullPath != null ? r.fullPath : r.finalName)).append("\",");
                 json.append("\"status\":\"").append(escapeJson(r.status)).append("\",");
+                json.append("\"statusCode\":\"").append(escapeJson(r.statusEnum != null ? r.statusEnum.name() : "")).append("\",");
                 json.append("\"message\":\"").append(escapeJson(r.message)).append("\"");
                 json.append("}");
             }

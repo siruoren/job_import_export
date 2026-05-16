@@ -188,26 +188,31 @@
 
                         content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + r.failCount + '&lt;/p&gt;';
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:14%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:30%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'OK':
                                 case 'SUCCESS':
                                     statusColor = '#28a745';
                                     statusIcon = '✔ ';
                                     break;
                                 case 'ERROR':
+                                case 'ERROR_INVALID_NAME':
+                                case 'ERROR_PLUGIN':
                                     statusColor = '#dc3545';
                                     statusIcon = '✘ ';
                                     break;
                                 case 'SKIP':
                                 case 'SKIP_EXISTS':
+                                case 'SKIP_EMPTY':
+                                case 'SKIP_FOLDER_MISSING':
                                     statusColor = '#ffc107';
                                     statusIcon = '⏭ ';
                                     break;
@@ -219,6 +224,7 @@
                                     break;
                                 case 'OVERWRITE':
                                 case 'OVERWRITE_JOB':
+                                case 'OVERWRITE_FOLDER':
                                     statusColor = '#fd7e14';
                                     statusIcon = '⚠ ';
                                     break;
@@ -226,18 +232,36 @@
                                     statusColor = '#6f42c1';
                                     statusIcon = '📁 ';
                                     break;
+                                case 'CREATE_JOB':
+                                    statusColor = '#28a745';
+                                    statusIcon = '📄 ';
+                                    break;
+                                case 'UPDATE_CONFIG':
+                                    statusColor = '#17a2b8';
+                                    statusIcon = '🔄 ';
+                                    break;
+                                case 'REUSE_FOLDER':
+                                case 'REUSE':
+                                    statusColor = '#6c757d';
+                                    statusIcon = '📂 ';
+                                    break;
+                                case 'BLOCKED':
+                                case 'CONFLICT':
+                                    statusColor = '#dc3545';
+                                    statusIcon = '🚫 ';
+                                    break;
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
 
                             let finalName = escapeHtml(detail.fullPath || detail.finalName);
                             if (detail.finalName !== detail.jobPath) {
                                 finalName = escapeHtml(detail.fullPath || detail.jobPath) + ' → ' + escapeHtml(detail.fullPath || detail.finalName);
                             }
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + finalName + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
                             content += '&lt;/tr&gt;';
                         });
 
@@ -314,54 +338,86 @@
                     
                     content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + result.failCount + '&lt;/p&gt;';
                     content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                    content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                    content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                    content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                    content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:14%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:30%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                     content += '&lt;tbody&gt;';
                     
                     result.details.forEach(detail => {
                         let statusColor = '#666';
                         let statusIcon = '';
+                        let statusCode = detail.statusCode || detail.status;
                         
-                        switch(detail.status) {
+                        switch(statusCode) {
                             case 'OK':
                             case 'SUCCESS':
                                 statusColor = '#28a745';
                                 statusIcon = '✔ ';
                                 break;
                             case 'ERROR':
+                            case 'ERROR_INVALID_NAME':
+                            case 'ERROR_PLUGIN':
                                 statusColor = '#dc3545';
                                 statusIcon = '✘ ';
                                 break;
                             case 'SKIP':
+                            case 'SKIP_EXISTS':
+                            case 'SKIP_EMPTY':
+                            case 'SKIP_FOLDER_MISSING':
                                 statusColor = '#ffc107';
                                 statusIcon = '⏭ ';
                                 break;
                             case 'RENAME':
+                            case 'RENAME_JOB':
+                            case 'RENAME_FOLDER':
                                 statusColor = '#17a2b8';
                                 statusIcon = '↻ ';
                                 break;
                             case 'OVERWRITE':
+                            case 'OVERWRITE_JOB':
+                            case 'OVERWRITE_FOLDER':
                                 statusColor = '#fd7e14';
                                 statusIcon = '⚠ ';
+                                break;
+                            case 'CREATE_FOLDER':
+                                statusColor = '#6f42c1';
+                                statusIcon = '📁 ';
+                                break;
+                            case 'CREATE_JOB':
+                                statusColor = '#28a745';
+                                statusIcon = '📄 ';
+                                break;
+                            case 'UPDATE_CONFIG':
+                                statusColor = '#17a2b8';
+                                statusIcon = '🔄 ';
+                                break;
+                            case 'REUSE_FOLDER':
+                            case 'REUSE':
+                                statusColor = '#6c757d';
+                                statusIcon = '📂 ';
+                                break;
+                            case 'BLOCKED':
+                            case 'CONFLICT':
+                                statusColor = '#dc3545';
+                                statusIcon = '🚫 ';
                                 break;
                         }
                         
                         content += '&lt;tr&gt;';
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
                         
                         let finalName = escapeHtml(detail.fullPath || detail.finalName);
                         if (detail.finalName !== detail.jobPath) {
                             finalName = escapeHtml(detail.fullPath || detail.jobPath) + ' → ' + escapeHtml(detail.fullPath || detail.finalName);
                         }
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + finalName + '&lt;/td&gt;';
                         
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
                         
                         let message = escapeHtml(detail.message);
                         if (detail.missingPlugins &amp;&amp; detail.missingPlugins.length &gt; 0) {
                             message += '&lt;br /&gt;&lt;span style="color:#dc3545; font-size:12px;"&gt;' + i18n.missingPlugins + ': ' + detail.missingPlugins.map(p => escapeHtml(p)).join(', ') + '&lt;/span&gt;';
                         }
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + message + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + message + '&lt;/td&gt;';
                         content += '&lt;/tr&gt;';
                     });
                     
@@ -613,15 +669,16 @@
                         }
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:45%;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:15%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:40%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'EXPORTED':
                                     statusColor = '#28a745';
                                     statusIcon = '✔ ';
@@ -637,9 +694,9 @@
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
                             content += '&lt;/tr&gt;';
                         });
 

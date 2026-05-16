@@ -11,6 +11,29 @@
 
 - **进度显示全称路径**：进度条中显示任务的全称路径（如 `myFolder/subFolder/myJob`），而非相对路径（如 `subFolder/myJob`）
 
+### 修复
+
+- **异步任务 Locale 丢失导致状态/消息未汉化**：异步导入任务在后台线程执行时，`Messages.XXX()` 调用无法获取用户 Locale，导致所有状态文本和消息都返回英文（如 "Skip (Exists)"、"Directory job already exists, skipped"）
+  - 新增 `LocaleHolder` 工具类，安装自定义 `LocaleProvider`，通过 `ThreadLocal` 在异步线程中保存用户 Locale
+  - 修改 `JobImportExportAction.doBatchImport` 和 `JobImportExportSidebarLink` 异步任务入口，捕获 `req.getLocale()` 并在子线程中通过 `LocaleHolder.setLocale()` 恢复
+  - 统一所有 `ImportResult.status` 赋值方式，通过 `setStatusEnum()` / `setStatus()` 方法自动调用 `StatusUtil.getLocalizedStatus()` 汉化
+  - 移除所有直接 `result.status = "XXX"` 赋值（共 45 处）
+  - `ExportResult` 构造函数中自动通过 `StatusUtil.getLocalizedStatus()` 汉化 status 字段
+  - JSON 响应新增 `statusCode` 字段，前端使用 `statusCode` 判断状态样式，`status` 字段直接显示汉化文本
+- **导出结果本地化**：修复 `ExportResult` 状态未汉化问题，导出弹窗中 "EXPORTED" / "SKIPPED" 等状态正确显示为中文
+- **扩展状态码支持**：新增 `BLOCKED`、`CONFLICT`、`OK`、`EXPORTED`、`SKIPPED`、`ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`REUSE`、`SKIP_FOLDER_MISSING` 等状态码的本地化支持
+
+### UI 优化
+
+- **结果弹窗表格自适应**：
+  - 减小单元格 padding：`8px` → `4px 6px`
+  - 添加 `table-layout:fixed` 固定列宽
+  - 设置列宽比例（任务 28% / 最终名称 28% / 状态 14% / 消息 30%）
+  - 长路径自动换行：`word-break:break-all`
+  - 紧凑行高：`line-height:1.4`
+  - 状态列 `white-space:nowrap` 防止状态图标和文字被拆行
+- **前端 switch 状态码映射补全**：补充 `ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`SKIP_EMPTY`、`SKIP_FOLDER_MISSING`、`OVERWRITE_FOLDER`、`CREATE_JOB`、`UPDATE_CONFIG`、`REUSE`、`BLOCKED`、`CONFLICT` 等状态码的颜色/图标映射
+
 ### 性能优化
 
 - **线程池限流机制**：新增 `ImportExecutor` 类，统一管理导入任务线程池

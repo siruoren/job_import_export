@@ -35,6 +35,24 @@ public class StatusUtil {
                 return Messages.Status_REUSE_FOLDER();
             } else if ("ERROR".equals(statusCode)) {
                 return Messages.Status_ERROR();
+            } else if ("BLOCKED".equals(statusCode)) {
+                return Messages.Status_BLOCKED();
+            } else if ("CONFLICT".equals(statusCode)) {
+                return Messages.Status_CONFLICT();
+            } else if ("OK".equals(statusCode)) {
+                return Messages.Status_OK();
+            } else if ("EXPORTED".equals(statusCode)) {
+                return Messages.Status_EXPORTED();
+            } else if ("SKIPPED".equals(statusCode)) {
+                return Messages.Status_SKIPPED();
+            } else if ("ERROR_INVALID_NAME".equals(statusCode)) {
+                return Messages.Status_ERROR_INVALID_NAME();
+            } else if ("ERROR_PLUGIN".equals(statusCode)) {
+                return Messages.Status_ERROR_PLUGIN();
+            } else if ("REUSE".equals(statusCode)) {
+                return Messages.Status_REUSE();
+            } else if ("SKIP_FOLDER_MISSING".equals(statusCode)) {
+                return Messages.Status_SKIP_FOLDER_MISSING();
             }
         } catch (Exception e) {
             // ignore

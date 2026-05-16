@@ -138,8 +138,7 @@ public class ExecutionEngine {
         result.isJob = false;
 
         if (ctx.dryRun) {
-            result.statusEnum = Status.UPDATE_CONFIG;
-            result.status = "UPDATE_CONFIG";
+            result.setStatusEnum(Status.UPDATE_CONFIG);
             result.success = true;
             result.message = Messages.ExecutionEngine_willUpdateConfig();
         } else {
@@ -151,13 +150,11 @@ public class ExecutionEngine {
                         abstractItem.save();
                     }
                 }
-                result.statusEnum = Status.UPDATE_CONFIG;
-                result.status = "UPDATE_CONFIG";
+                result.setStatusEnum(Status.UPDATE_CONFIG);
                 result.success = true;
                 result.message = Messages.ExecutionEngine_updatedConfig();
             } catch (Exception e) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.message = Messages.ExecutionEngine_updateConfigFailed(e.getMessage());
             }
@@ -313,40 +310,34 @@ public class ExecutionEngine {
                     // Jenkins 中已存在
                     if (isFolderWithConfig) {
                         if (ctx.autoRename && !path.equals(resolvedPath)) {
-                            result.statusEnum = Status.RENAME_FOLDER;
-                            result.status = "RENAME_FOLDER";
+                            result.setStatusEnum(Status.RENAME_FOLDER);
                             result.renamed = true;
                             result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
                         } else if (ctx.overwrite) {
                             if (folderNode.configXml != null && folderNode.configXml.length > 0
                                     && !isFolderConfigXml(folderNode.configXml)) {
-                                result.statusEnum = Status.ERROR;
-                                result.status = "ERROR";
+                                result.setStatusEnum(Status.ERROR);
                                 result.success = false;
                                 result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
                                 ctx.parentTypeErrors.add(resolvedPath);
                             } else {
-                                result.statusEnum = Status.OVERWRITE_FOLDER;
-                                result.status = "OVERWRITE_FOLDER";
+                                result.setStatusEnum(Status.OVERWRITE_FOLDER);
                                 result.message = Messages.ExecutionEngine_willOverwriteDirConfig();
                             }
                         } else {
-                            result.statusEnum = Status.SKIP_EXISTS;
-                            result.status = "SKIP_EXISTS";
+                            result.setStatusEnum(Status.SKIP_EXISTS);
                             result.skipped = true;
                             result.message = Messages.ExecutionEngine_dirExistsSkipped();
                         }
                     } else {
                         // 普通 Folder 已存在，检查类型是否匹配
                         if (existingItem instanceof Job) {
-                            result.statusEnum = Status.ERROR;
-                            result.status = "ERROR";
+                            result.setStatusEnum(Status.ERROR);
                             result.success = false;
                             result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
                             ctx.parentTypeErrors.add(resolvedPath);
                         } else {
-                            result.statusEnum = Status.REUSE_FOLDER;
-                            result.status = "REUSE_FOLDER";
+                            result.setStatusEnum(Status.REUSE_FOLDER);
                             result.skipped = true;
                             result.message = Messages.ExecutionEngine_dirExistsReuse();
                         }
@@ -355,18 +346,15 @@ public class ExecutionEngine {
                     // Jenkins 中不存在，将创建
                     if (isFolderWithConfig) {
                         if (ctx.autoRename && !path.equals(resolvedPath)) {
-                            result.statusEnum = Status.RENAME_FOLDER;
-                            result.status = "RENAME_FOLDER";
+                            result.setStatusEnum(Status.RENAME_FOLDER);
                             result.renamed = true;
                             result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
                         } else {
-                            result.statusEnum = Status.CREATE_FOLDER;
-                            result.status = "CREATE_FOLDER";
+                            result.setStatusEnum(Status.CREATE_FOLDER);
                             result.message = Messages.ExecutionEngine_willCreateDirJob();
                         }
                     } else {
-                        result.statusEnum = Status.CREATE_FOLDER;
-                        result.status = "CREATE_FOLDER";
+                        result.setStatusEnum(Status.CREATE_FOLDER);
                         result.message = Messages.ExecutionEngine_willCreateDir();
                     }
                 }
@@ -385,8 +373,7 @@ public class ExecutionEngine {
                         handleOverwriteFolder(existingItem, folderNode, resolvedPath, ctx);
                     } else {
                         ImportResult result = createFolderResult(path, resolvedPath, ctx);
-                        result.statusEnum = Status.SKIP_EXISTS;
-                        result.status = "SKIP_EXISTS";
+                        result.setStatusEnum(Status.SKIP_EXISTS);
                         result.skipped = true;
                         result.message = Messages.ExecutionEngine_dirExistsSkipped();
                         addResult(result);
@@ -394,14 +381,12 @@ public class ExecutionEngine {
                 } else {
                     ImportResult result = createFolderResult(path, resolvedPath, ctx);
                     if (existingItem instanceof Job) {
-                        result.statusEnum = Status.ERROR;
-                        result.status = "ERROR";
+                        result.setStatusEnum(Status.ERROR);
                         result.success = false;
                         result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
                         ctx.parentTypeErrors.add(resolvedPath);
                     } else {
-                        result.statusEnum = Status.REUSE_FOLDER;
-                        result.status = "REUSE_FOLDER";
+                        result.setStatusEnum(Status.REUSE_FOLDER);
                         result.skipped = true;
                         result.message = Messages.ExecutionEngine_dirExistsReuse();
                     }
@@ -423,13 +408,11 @@ public class ExecutionEngine {
                     }
                 }
                 
-                result.statusEnum = isFolderWithConfig ? Status.CREATE_FOLDER : Status.CREATE_FOLDER;
-                result.status = "CREATE_FOLDER";
+                result.setStatusEnum(Status.CREATE_FOLDER);
                 result.success = true;
                 result.message = isFolderWithConfig ? Messages.ExecutionEngine_createdDirJob() : Messages.ExecutionEngine_createdDir();
             } catch (Exception e) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
                 ctx.parentTypeErrors.add(resolvedPath);
@@ -446,8 +429,7 @@ public class ExecutionEngine {
 
         if (node.configXml != null && node.configXml.length > 0) {
             if (!isFolderConfigXml(node.configXml)) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
                 ctx.parentTypeErrors.add(path);
@@ -459,19 +441,16 @@ public class ExecutionEngine {
         try {
             if (node.configXml != null && node.configXml.length > 0) {
                 updateFolderConfig(existingItem, node, path);
-                result.statusEnum = Status.OVERWRITE_FOLDER;
-                result.status = "OVERWRITE_FOLDER";
+                result.setStatusEnum(Status.OVERWRITE_FOLDER);
                 result.success = true;
                 result.message = Messages.ExecutionEngine_updatedDirConfig();
             } else {
-                result.statusEnum = Status.REUSE_FOLDER;
-                result.status = "REUSE_FOLDER";
+                result.setStatusEnum(Status.REUSE_FOLDER);
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_dirExistsReuseConfig();
             }
         } catch (Exception e) {
-            result.statusEnum = Status.ERROR;
-            result.status = "ERROR";
+            result.setStatusEnum(Status.ERROR);
             result.success = false;
             result.message = Messages.ExecutionEngine_updateDirFailed(e.getMessage());
             ctx.parentTypeErrors.add(path);
@@ -526,8 +505,7 @@ public class ExecutionEngine {
             if (ctx.hasParentTypeError(resolvedPath)) {
                 String parentErrorPath = ctx.getParentTypeErrorPath(resolvedPath);
                 ImportResult result = createResult(node, resolvedPath, ctx);
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentTypeErrorSkip(parentErrorPath);
@@ -539,8 +517,7 @@ public class ExecutionEngine {
             if (ctx.hasParentPermissionError(resolvedPath)) {
                 String parentErrorPath = ctx.getParentPermissionErrorPath(resolvedPath);
                 ImportResult result = createResult(node, resolvedPath, ctx);
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentPermissionErrorSkip(parentErrorPath);
@@ -553,8 +530,7 @@ public class ExecutionEngine {
             if (shouldSkipDueToParentFolder(originalPath, resolvedPath, ctx)) {
                 // 父目录冲突且不覆盖/不重命名，跳过此任务
                 ImportResult result = createResult(node, resolvedPath, ctx);
-                result.statusEnum = Status.SKIP_EXISTS;
-                result.status = "SKIP_EXISTS";
+                result.setStatusEnum(Status.SKIP_EXISTS);
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentDirExistsSkipped();
                 addResult(result);
@@ -649,8 +625,7 @@ public class ExecutionEngine {
                     handleAutoRename(node, path, result, ctx);
                 }
             } else {
-                result.statusEnum = Status.SKIP_EXISTS;
-                result.status = "SKIP_EXISTS";
+                result.setStatusEnum(Status.SKIP_EXISTS);
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_jobExistsSkipped();
             }
@@ -667,8 +642,7 @@ public class ExecutionEngine {
                 String newType = getJobTypeFromXml(node.configXml);
                 
                 if (existingType != null && newType != null && !existingType.equals(newType)) {
-                    result.statusEnum = Status.ERROR;
-                    result.status = "ERROR";
+                    result.setStatusEnum(Status.ERROR);
                     result.success = false;
                     result.message = Messages.ExecutionEngine_jobTypeMismatchCannotOverwrite(existingType, newType);
                     // 标记此路径为类型错误，子任务将被跳过
@@ -689,14 +663,12 @@ public class ExecutionEngine {
                     createJobDirect(path, node.configXml, ctx);
                 }
             } catch (Exception e) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.message = Messages.ExecutionEngine_overwriteFailed(e.getMessage());
                 return;
             }
         }
-        result.statusEnum = Status.OVERWRITE_JOB;
-        result.status = "OVERWRITE_JOB";
+        result.setStatusEnum(Status.OVERWRITE_JOB);
         result.success = true;
         result.message = ctx.dryRun ? Messages.ExecutionEngine_willOverwriteJobConfig() : Messages.ExecutionEngine_overwroteJobConfig();
     }
@@ -713,23 +685,20 @@ public class ExecutionEngine {
         result.renamed = true;
         
         if (node.hasConfigXml) {
-            result.statusEnum = Status.RENAME_JOB;
-            result.status = "RENAME_JOB";
+            result.setStatusEnum(Status.RENAME_JOB);
             result.message = Messages.ExecutionEngine_jobRenamedTo(newName);
 
             if (!ctx.dryRun) {
                 try {
                     createJobDirect(newPath, node.configXml, ctx);
                 } catch (Exception e) {
-                    result.statusEnum = Status.ERROR;
-                    result.status = "ERROR";
+                    result.setStatusEnum(Status.ERROR);
                     result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                     return;
                 }
             }
         } else {
-            result.statusEnum = Status.RENAME_FOLDER;
-            result.status = "RENAME_FOLDER";
+            result.setStatusEnum(Status.RENAME_FOLDER);
             result.message = Messages.ExecutionEngine_dirRenamedTo(newName);
 
             if (!ctx.dryRun) {
@@ -737,8 +706,7 @@ public class ExecutionEngine {
                     ensureFolderPath(ctx.targetGroup, newPath, true, ctx);
                     ctx.createdFolders.add(getFullPath(newPath, ctx));
                 } catch (Exception e) {
-                    result.statusEnum = Status.ERROR;
-                    result.status = "ERROR";
+                    result.setStatusEnum(Status.ERROR);
                     result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
                     return;
                 }
@@ -757,16 +725,14 @@ public class ExecutionEngine {
 
         result.finalName = resolvedPath;
         result.renamed = true;
-        result.statusEnum = Status.RENAME_JOB;
-        result.status = "RENAME_JOB";
+        result.setStatusEnum(Status.RENAME_JOB);
         result.message = Messages.ExecutionEngine_jobRenamedTo(jobName);
 
         if (!ctx.dryRun) {
             try {
                 createJobDirect(resolvedPath, node.configXml, ctx);
             } catch (Exception e) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                 return;
             }
@@ -779,14 +745,12 @@ public class ExecutionEngine {
             try {
                 createJobDirect(path, node.configXml, ctx);
             } catch (Exception e) {
-                result.statusEnum = Status.ERROR;
-                result.status = "ERROR";
+                result.setStatusEnum(Status.ERROR);
                 result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
                 return;
             }
         }
-        result.statusEnum = Status.CREATE_JOB;
-        result.status = "CREATE_JOB";
+        result.setStatusEnum(Status.CREATE_JOB);
         result.success = true;
         result.message = ctx.dryRun ? Messages.ExecutionEngine_willCreateJob() : Messages.ExecutionEngine_createdJob();
     }
@@ -1046,8 +1010,7 @@ public class ExecutionEngine {
                     errorResult.displayPath = errorResult.sourcePath;
                     errorResult.isFolder = true;
                     errorResult.isJob = false;
-                    errorResult.statusEnum = Status.ERROR;
-                    errorResult.status = "ERROR";
+                    errorResult.setStatus("ERROR");
                     errorResult.success = false;
                     errorResult.message = Messages.ExecutionEngine_noPermissionUpdateDirConfig();
                     ctx.parentPermissionErrors.add(resolvedPath);
@@ -1061,8 +1024,7 @@ public class ExecutionEngine {
                     errorResult.displayPath = errorResult.sourcePath;
                     errorResult.isFolder = true;
                     errorResult.isJob = false;
-                    errorResult.statusEnum = Status.ERROR;
-                    errorResult.status = "ERROR";
+                    errorResult.setStatus("ERROR");
                     errorResult.success = false;
                     errorResult.message = Messages.ExecutionEngine_noPermissionCreateInDir();
                     ctx.parentPermissionErrors.add(resolvedPath);
@@ -1077,8 +1039,7 @@ public class ExecutionEngine {
                     errorResult.displayPath = errorResult.sourcePath;
                     errorResult.isFolder = false;
                     errorResult.isJob = true;
-                    errorResult.statusEnum = Status.ERROR;
-                    errorResult.status = "ERROR";
+                    errorResult.setStatus("ERROR");
                     errorResult.success = false;
                     errorResult.message = Messages.ExecutionEngine_noPermissionUpdateJobConfig();
                     return errorResult;
@@ -1094,8 +1055,7 @@ public class ExecutionEngine {
                 errorResult.displayPath = errorResult.sourcePath;
                 errorResult.isFolder = !isLeaf;
                 errorResult.isJob = isLeaf;
-                errorResult.statusEnum = Status.ERROR;
-                errorResult.status = "ERROR";
+                errorResult.setStatus("ERROR");
                 errorResult.success = false;
                 errorResult.message = Messages.ExecutionEngine_noPermissionCreateJob();
                 if (!isLeaf) {

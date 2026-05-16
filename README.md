@@ -30,6 +30,10 @@
 - 页面文本、按钮、提示信息均支持双语切换
 - JavaScript 前端提示也通过 i18n 对象实现动态语言切换
 - Java 后端消息通过 `Messages` 资源文件实现国际化
+- **导入/导出结果状态完整汉化**：预演弹窗和结果弹窗中所有任务状态（如 "跳过（已存在）"、"目录已存在，跳过"）和消息内容均以后端 Locale 为准正确显示中文
+  - 异步任务通过 `LocaleHolder` 保持用户 Locale 上下文
+  - 状态通过 `statusCode`（英文枚举值）判断样式 + `status`（汉化文本）显示
+  - 支持状态码：`OK`、`EXPORTED`、`SKIPPED`、`ERROR`、`BLOCKED`、`CONFLICT`、`ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`REUSE` 等
 
 ### 导入进度条
 

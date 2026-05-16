@@ -19,8 +19,9 @@
                         transform:translate(-50%,-50%);
                         background:#fff;
                         border-radius:10px;
-                        width:700px;
-                        max-width:90vw;
+                        width:1000px;
+                        max-width:95vw;
+                        max-height:90vh;
                         padding:28px;
                         z-index:10000;
                         box-shadow:0 10px 40px rgba(0,0,0,.25);">
@@ -84,7 +85,28 @@
                     dryRunResult: '${%result.dryRun}',
                     importResult: '${%result.import}',
                     previewResult: '${%result.preview}',
-                    previewDone: '${%result.previewDone}'
+                    previewDone: '${%result.previewDone}',
+                    statusText: {
+                        'REUSE_FOLDER': '${%status.REUSE_FOLDER}',
+                        'CREATE_FOLDER': '${%status.CREATE_FOLDER}',
+                        'CREATE_JOB': '${%status.CREATE_JOB}',
+                        'OVERWRITE_JOB': '${%status.OVERWRITE_JOB}',
+                        'OVERWRITE_FOLDER': '${%status.OVERWRITE_FOLDER}',
+                        'SKIP_EXISTS': '${%status.SKIP_EXISTS}',
+                        'SKIP_EMPTY': '${%status.SKIP_EMPTY}',
+                        'RENAME_JOB': '${%status.RENAME_JOB}',
+                        'RENAME_FOLDER': '${%status.RENAME_FOLDER}',
+                        'UPDATE_CONFIG': '${%status.UPDATE_CONFIG}',
+                        'REUSE': '${%status.REUSE}',
+                        'CREATE': '${%status.CREATE}',
+                        'OVERWRITE': '${%status.OVERWRITE}',
+                        'RENAME': '${%status.RENAME}',
+                        'ERROR': '${%status.ERROR}',
+                        'SUCCESS': '${%status.SUCCESS}',
+                        'OK': '${%status.OK}',
+                        'EXPORTED': '${%status.EXPORTED}',
+                        'SKIPPED': '${%status.SKIPPED}'
+                    }
                 };
                 const JenkinsModal = {
                     el: null,
@@ -228,13 +250,13 @@
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
 
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
 
                         content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;' +
-                            '&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;' +
+                            '&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.job + '&lt;/th&gt;' +
+                            '&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.finalName + '&lt;/th&gt;' +
+                            '&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:14%;"&gt;' + i18n.status + '&lt;/th&gt;' +
+                            '&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:30%;"&gt;' + i18n.message + '&lt;/th&gt;' +
                             '&lt;/tr&gt;&lt;/thead&gt;';
 
                         content += '&lt;tbody&gt;';
@@ -242,8 +264,9 @@
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'OK':
                                 case 'SUCCESS':
                                     statusColor = '#28a745';
@@ -251,12 +274,16 @@
                                     break;
 
                                 case 'ERROR':
+                                case 'ERROR_INVALID_NAME':
+                                case 'ERROR_PLUGIN':
                                     statusColor = '#dc3545';
                                     statusIcon = '✘ ';
                                     break;
 
                                 case 'SKIP':
                                 case 'SKIP_EXISTS':
+                                case 'SKIP_EMPTY':
+                                case 'SKIP_FOLDER_MISSING':
                                     statusColor = '#ffc107';
                                     statusIcon = '⏭ ';
                                     break;
@@ -270,6 +297,7 @@
 
                                 case 'OVERWRITE':
                                 case 'OVERWRITE_JOB':
+                                case 'OVERWRITE_FOLDER':
                                     statusColor = '#fd7e14';
                                     statusIcon = '⚠ ';
                                     break;
@@ -278,16 +306,33 @@
                                     statusColor = '#6f42c1';
                                     statusIcon = '📁 ';
                                     break;
+
+                                case 'CREATE_JOB':
+                                    statusColor = '#28a745';
+                                    statusIcon = '📄 ';
+                                    break;
                                     
                                 case 'UPDATE_CONFIG':
                                     statusColor = '#17a2b8';
                                     statusIcon = '🔄 ';
                                     break;
+
+                                case 'REUSE_FOLDER':
+                                case 'REUSE':
+                                    statusColor = '#6c757d';
+                                    statusIcon = '📂 ';
+                                    break;
+
+                                case 'BLOCKED':
+                                case 'CONFLICT':
+                                    statusColor = '#dc3545';
+                                    statusIcon = '🚫 ';
+                                    break;
                             }
 
                             content += '&lt;tr&gt;';
 
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;'
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;'
                                 + escapeHtml(detail.fullPath || detail.jobPath)
                                 + '&lt;/td&gt;';
 
@@ -300,15 +345,15 @@
                                     + escapeHtml(detail.fullPath || detail.finalName);
                             }
 
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;'
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;'
                                 + finalName
                                 + '&lt;/td&gt;';
 
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:'
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:'
                                 + statusColor
-                                + '; font-weight:bold;"&gt;'
+                                + '; font-weight:bold; white-space:nowrap;"&gt;'
                                 + statusIcon
-                                + detail.status
+                                + escapeHtml(detail.status)
                                 + '&lt;/td&gt;';
 
                             let message = escapeHtml(detail.message || '');
@@ -320,7 +365,7 @@
                                     + '&lt;/span&gt;';
                             }
 
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;'
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;'
                                 + message
                                 + '&lt;/td&gt;';
 
@@ -575,15 +620,16 @@
                         }
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:45%;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:15%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:40%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'EXPORTED':
                                     statusColor = '#28a745';
                                     statusIcon = '✔ ';
@@ -599,9 +645,9 @@
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
                             content += '&lt;/tr&gt;';
                         });
 
@@ -711,8 +757,8 @@
                 }
             </script>
 
-            <div style="display:flex; gap:24px; width:100%; flex-wrap:wrap;">
-                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+            <div style="display:flex; gap:24px; width:100%; flex-wrap:wrap; box-sizing:border-box; overflow:visible;">
+                <div style="flex:1; min-width:260px; max-width:100%; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; box-sizing:border-box;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%export.section.title}</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">${%export.section.desc}</p>
                     
@@ -762,7 +808,7 @@
                 </div>
 
                 <j:if test="${it.hasPermission()}">
-                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                <div style="flex:1; min-width:260px; max-width:100%; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; box-sizing:border-box;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%update.section.title}</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">${%update.section.desc}</p>
                     <form method="post" action="update" enctype="multipart/form-data" id="updateForm" style="text-align:left;">
@@ -805,7 +851,7 @@
                 </j:if>
 
                 <j:if test="${it.hasPermission()}">
-                <div style="flex:1; min-width:280px; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;">
+                <div style="flex:1; min-width:260px; max-width:100%; padding:20px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; box-sizing:border-box;">
                     <h2 style="margin-top:0; margin-bottom:12px; font-size:18px; color:#333;">${%import.section.title}</h2>
                     <p style="margin-bottom:16px; color:#666; font-size:14px;">${%import.section.desc}</p>
                     <j:set var="targetName" value="${it.item.fullName}" />
