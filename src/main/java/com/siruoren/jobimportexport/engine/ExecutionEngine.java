@@ -75,6 +75,13 @@ public class ExecutionEngine {
         // ✔ 阶段3：处理根目录 config.xml（更新当前目录任务配置）
         handleRootConfigXml(root, ctx);
 
+        // 本地化状态显示文本
+        for (ImportResult result : results) {
+            if (result.statusEnum != null) {
+                result.status = StatusUtil.getLocalizedStatus(result.statusEnum);
+            }
+        }
+
         return results;
     }
 

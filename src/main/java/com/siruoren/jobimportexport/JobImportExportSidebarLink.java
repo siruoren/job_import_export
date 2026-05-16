@@ -321,7 +321,7 @@ public class JobImportExportSidebarLink implements RootAction {
             if (!accepted) {
                 rsp.setCharacterEncoding("UTF-8");
                 rsp.setContentType("application/json;charset=UTF-8");
-                rsp.getWriter().write("{\"success\":false,\"message\":\"Server is busy, please try again later\"}");
+                rsp.getWriter().write("{\"success\":false,\"message\":\"" + Messages.JobImportExportAction_serverBusy() + "\"}");
                 return;
             }
 
