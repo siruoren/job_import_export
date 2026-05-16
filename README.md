@@ -76,6 +76,7 @@
 | 冲突传播机制 | 上游冲突自动阻断后续路径创建，防止级联错误 |
 | 覆盖前备份 | 自动备份现有配置为 `config.xml.bak` |
 | 权限分级控制 | 菜单和功能按用户权限显示 |
+| 线程池限流 | 统一管理导入任务线程池，服务器繁忙时优雅拒绝任务 |
 
 ---
 
@@ -376,6 +377,9 @@ job_import_export/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── ImportExecutor.java            # 导入任务线程池管理器
+        │   ├── ImportProgress.java            # 导入进度状态
+        │   ├── ProgressManager.java           # 进度管理单例
         │   └── engine/
         │       ├── ImportEngine.java          # 统一导入入口
         │       ├── ExportEngine.java          # 导出引擎

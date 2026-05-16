@@ -318,66 +318,72 @@ public class JobImportExportAction implements Action {
             String redirectUrl = (target instanceof Item) ? Jenkins.get().getRootUrl() + ((Item) target).getUrl() : null;
             org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
 
-            new Thread(() -> {
+            ImportExecutor executor = ImportExecutor.getInstance();
+            boolean accepted = executor.submitTask(() -> {
                 org.springframework.security.core.context.SecurityContext securityContext = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
                 securityContext.setAuthentication(authentication);
                 org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
                 try {
-                int successCount = 0;
-                int failCount = 0;
-                int skipCount = 0;
-                List<ImportResult> results = new ArrayList<>();
-                boolean importSuccess = false;
+                    int successCount = 0;
+                    int failCount = 0;
+                    int skipCount = 0;
+                    List<ImportResult> results = new ArrayList<>();
+                    boolean importSuccess = false;
 
-                SKIP_RELOAD.set(true);
-                try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(tempZip), StandardCharsets.UTF_8)) {
-                    ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
+                    SKIP_RELOAD.set(true);
+                    try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(tempZip), StandardCharsets.UTF_8)) {
+                        ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
 
-                    boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
-                    ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
-                    ctx.currentFolderItem = isSubDirectoryImport ? item : null;
+                        boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
+                        ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
+                        ctx.currentFolderItem = isSubDirectoryImport ? item : null;
 
-                    ImportEngine engine = new ImportEngine();
-                    results = engine.importZipWithProgress(zis, ctx, (result, currentIndex, totalCount) -> {
-                        if (totalCount > 0) {
-                            progressManager.createProgress(batchId, totalCount);
+                        ImportEngine engine = new ImportEngine();
+                        results = engine.importZipWithProgress(zis, ctx, (result, currentIndex, totalCount) -> {
+                            if (totalCount > 0) {
+                                progressManager.createProgress(batchId, totalCount);
+                            }
+                            progressManager.updateProgress(batchId, result.fullPath != null ? result.fullPath : result.finalName, currentIndex, result.status, result.message);
+                        });
+
+                        for (ImportResult result : results) {
+                            if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                                    || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
+                                successCount++;
+                            } else if (result.statusEnum == Status.ERROR) {
+                                failCount++;
+                            } else {
+                                skipCount++;
+                            }
                         }
-                        progressManager.updateProgress(batchId, result.fullPath != null ? result.fullPath : result.finalName, currentIndex, result.status, result.message);
-                    });
-
-                    for (ImportResult result : results) {
-                        if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                                || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
-                            successCount++;
-                        } else if (result.statusEnum == Status.ERROR) {
-                            failCount++;
-                        } else {
-                            skipCount++;
-                        }
-                    }
-                    importSuccess = true;
-                } catch (Exception e) {
-                    progressManager.setErrorResult(batchId, e.getMessage(), successCount, failCount, skipCount, results, dryRun, redirectUrl);
-                } finally {
-                    SKIP_RELOAD.remove();
-                    try { Files.deleteIfExists(tempZip); } catch (Exception ignored) {}
-                }
-
-                if (importSuccess) {
-                    if (!dryRun) {
-                        safeReload();
+                        importSuccess = true;
+                    } catch (Exception e) {
+                        progressManager.setErrorResult(batchId, e.getMessage(), successCount, failCount, skipCount, results, dryRun, redirectUrl);
+                    } finally {
+                        SKIP_RELOAD.remove();
+                        try { Files.deleteIfExists(tempZip); } catch (Exception ignored) {}
                     }
 
-                    String message = dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete();
-                    progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, redirectUrl);
-                }
+                    if (importSuccess) {
+                        if (!dryRun) {
+                            safeReload();
+                        }
 
-                try { Thread.sleep(30000); } catch (InterruptedException ignored) {}
-                progressManager.removeProgress(batchId);
+                        String message = dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete();
+                        progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, redirectUrl);
+                    }
                 } finally {
+                    executor.taskCompleted();
                     org.springframework.security.core.context.SecurityContextHolder.clearContext();
                 }
-            }).start();
+            });
+
+            if (!accepted) {
+                rsp.setCharacterEncoding("UTF-8");
+                rsp.setContentType("application/json;charset=UTF-8");
+                rsp.getWriter().write("{\"success\":false,\"message\":\"Server is busy, please try again later\"}");
+                return;
+            }
 
             rsp.setCharacterEncoding("UTF-8");
             rsp.setContentType("application/json;charset=UTF-8");
