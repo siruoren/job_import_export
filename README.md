@@ -1,17 +1,79 @@
 # Jenkins 任务导入导出插件 (Job Import/Export Plugin)
 
-一个 Jenkins 插件，用于便捷地导入、导出和更新 Jenkins 任务的 XML 配置。
+一个功能强大的 Jenkins 插件，支持便捷地导入、导出和更新 Jenkins 任务的 XML 配置，提供批量操作、Dry Run 预演、多层目录支持等企业级功能。
 
 ---
 
-## 功能概览
+## 功能特性
 
-| 功能 | 入口 | 说明 | 权限要求 |
-|------|------|------|---------|
-| **导出配置** | 每个任务/文件夹页面 | 将当前任务或文件夹的配置导出为 XML 文件 | `Item.READ` |
-| **更新配置** | 每个任务/文件夹页面 | 上传新的 XML 配置文件覆盖当前配置 | `Item.CONFIGURE` |
-| **导入新任务** | 文件夹页面 | 在当前文件夹下创建新任务（支持子文件夹） | `Item.CREATE` |
-| **全局导入任务** | 左侧边栏 | 从侧边栏直接导入任务，支持指定路径 | `Item.CREATE` |
+### 核心功能
+
+| 功能 | 说明 | 入口 |
+|------|------|------|
+| 导出当前配置 | 将当前任务/文件夹配置导出为 XML 文件 | 每个任务/文件夹页面 |
+| 更新配置 | 上传 XML 配置文件覆盖当前任务配置 | 每个任务/文件夹页面 |
+| 导入新任务 | 在当前文件夹下创建新任务 | 文件夹页面 |
+| 全局导入任务 | 从侧边栏直接导入任务 | 左侧边栏 |
+| 批量导入任务 | 上传 ZIP 批量导入多个任务，支持多层目录 | 左侧边栏 |
+| 导出全部任务 | 导出 Jenkins 根目录下所有任务（仅管理员） | 左侧边栏 |
+| 批量导出任务 | 导出当前目录及所有子任务配置 | 文件夹页面 |
+
+### 国际化支持
+
+插件支持英语和中文两种语言，根据浏览器语言自动适配：
+
+| 浏览器语言 | 显示语言 |
+|-----------|---------|
+| 中文（zh-CN, zh） | 简体中文 |
+| 其他语言 | 英语 |
+
+- 页面文本、按钮、提示信息均支持双语切换
+- JavaScript 前端提示也通过 i18n 对象实现动态语言切换
+- Java 后端消息通过 `Messages` 资源文件实现国际化
+
+### 导入进度条
+
+批量导入任务时，弹窗中显示动画进度条：
+- 进度条从 0% 平滑动画过渡到 90%（等待服务器响应）
+- 收到服务器 SSE 进度事件后跳转到实际进度
+- 导入完成后进度条跳转到 100%
+
+### 导出时间戳
+
+导出文件名自动追加导出时间，格式为 `任务名_yyyy-MM-dd_HH-mm-ss.zip`：
+- 时间戳由后端生成，使用服务器本地时间
+- 适用于单个任务导出和批量导出
+
+### 批量导入/导出增强功能
+
+#### 批量导入
+- 支持目录结构和扁平结构：`folder/job/config.xml` 或 `job.xml`
+- 支持 UTF-8 编码，中文目录和任务名完美支持
+- 冲突处理三模式：**跳过** / **覆盖** / **重命名**
+- Dry Run 预演模式，导入前预览结果
+- 实时进度显示（SSE 流）
+- 导入失败恢复机制（断点续传）
+- 插件依赖自动检测
+- **根目录 config.xml 处理**：
+  - 根目录导入：丢弃 ZIP 根目录的 `config.xml`
+  - 子目录导入：使用 ZIP 根目录 `config.xml` 更新当前目录任务配置
+
+#### 批量导出
+- ZIP 包名为当前任务名
+- 可选包含当前目录配置（默认不包含）
+- 不包含当前目录时，子任务直接放在 ZIP 根目录
+- 逐级权限检查，无权限任务自动跳过
+
+### 安全特性
+
+| 特性 | 说明 |
+|------|------|
+| Folder 删除保护 | overwrite 模式下对 Folder 使用 `updateByXml`，避免递归删除子任务 |
+| 动态目录保护 | 禁止覆盖 Multibranch、ComputedFolder 等动态生成的目录 |
+| 路径状态缓存 | 批量导入时维护任务存在性快照，避免状态断层 |
+| 冲突传播机制 | 上游冲突自动阻断后续路径创建，防止级联错误 |
+| 覆盖前备份 | 自动备份现有配置为 `config.xml.bak` |
+| 权限分级控制 | 菜单和功能按用户权限显示 |
 
 ---
 
@@ -19,13 +81,13 @@
 
 ### 方式一：直接安装 HPI 文件
 
-1. 在项目根目录下执行：
+1. 构建插件：
    ```bash
    mvn clean package -Denforcer.skip=true -DskipTests
    ```
-2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`（如 `target/job-import-export-1.0.2.hpi`）
-3. 进入 Jenkins **Manage Jenkins** → **Plugins** → **Advanced settings**
-4. 点击 **Deploy Plugin**，上传 `job-import-export-{version}.hpi` 文件
+2. 生成的插件文件位于：`target/job-import-export-{version}.hpi`
+3. 进入 Jenkins → Manage Jenkins → Plugins → Advanced settings
+4. 点击 Deploy Plugin，上传 `job-import-export-{version}.hpi` 文件
 5. 重启 Jenkins 使插件生效
 
 ### 方式二：手动构建
@@ -37,129 +99,111 @@ source ~/.bashrc  # 加载 Maven 环境变量
 mvn clean package -Denforcer.skip=true -DskipTests
 ```
 
-构建产物：`target/job-import-export-{version}.hpi`（带版本号）
-
 ---
 
 ## 使用说明
 
 ### 1. 导出当前配置
 
-在任意 **Job** 或 **Folder** 页面，点击 **导入/导出配置** 菜单，选择 **导出配置** 按钮即可下载当前配置的 XML 文件。
+在任意 Job 或 Folder 页面，点击 **导入/导出配置** → **导出配置** 按钮即可下载当前配置的 XML 文件。
 
-> **中文文件名支持**：导出的 XML 文件名会保留任务完整名称，支持中文文件名（如 `测试Pipeline.xml`、`发布-生产环境.xml`），并自动处理 Windows 文件系统非法字符。
+> 支持中文文件名，自动处理 Windows 文件系统非法字符（`\\/*?"<>|`）
 
 ### 2. 更新配置
 
-在任意 **Job** 或 **Folder** 页面：
-1. 点击 **导入/导出配置**
+1. 在 Job 或 Folder 页面，点击 **导入/导出配置**
 2. 选择 **更新配置**
 3. 上传 XML 配置文件
 4. 点击 **更新配置**
-5. 弹窗确认：点击「确认」提交更新，点击「取消」返回页面
 
-> **注意**：如果 XML 配置的类型与当前任务类型不匹配（例如尝试用 Freestyle 的配置覆盖 Pipeline 任务），系统会显示友好提示信息引导用户处理。
->
-> **权限要求**：更新配置需要当前用户具有 `Item.CONFIGURE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
+> 如果 XML 配置类型与当前任务类型不匹配，系统会显示友好提示
 
+### 3. 批量导入任务
 
-### 3. 导入新任务到当前目录
+1. **准备 ZIP 文件**：
+   - 支持目录结构：`folder/subfolder/job/config.xml`
+   - 支持扁平结构：`job.xml`
+   - 支持中文目录和任务名
 
-仅在 **Folder 页面** 显示此功能：
-1. 进入目标文件夹
-2. 点击 **导入/导出配置**
-3. 在 **导入新任务到当前目录** 区域：
-   - 输入新任务的名称
-   - 上传 XML 配置文件
-4. 点击 **导入任务**
-5. 弹窗确认：点击「确认」提交创建，点击「取消」返回页面
+2. **选择导入选项**：
+   - Dry Run（预演）：默认开启，验证任务但不实际创建
+   - 冲突处理：
+     - 不处理冲突（默认）：跳过已存在的任务
+     - 覆盖模式：覆盖已存在的任务并自动备份
+     - 重命名模式：自动重命名冲突任务（`test` → `test_1`）
 
-> **中文任务名支持**：完全支持中文任务名称（如 `测试Pipeline`、`发布-生产环境`、`服务_订单中心`）。插件内部使用 RFC 5987 标准处理 URL 编码，确保中文路径在浏览器、Jenkins 内嵌 Jetty 和 Folder 嵌套场景下均能正确工作。
->
-> **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格（`\u3000`）和不间断空格（`\u00A0`），并进行合法性校验（仅禁止文件系统危险字符和控制字符，**完全支持中文任务名**）。不合法字符会提示"任务名称不合法"。
->
-> **权限要求**：导入新任务需要当前用户具有 `Item.CREATE` 权限，权限不足时会提示"请更换具有相应权限的登录用户"。
->
-> **重复任务名**：如果该目录下已存在同名任务，页面会提示"任务名称已存在"，并提示用户需要重新命名和进入任务更新配置。
+3. **导入流程**：
+   - Dry Run 预览 → 确认对话框 → 实际导入
+   - 实时显示导入结果（成功/失败/跳过数量）
 
-### 4. 全局导入任务（侧边栏）
+### 4. 根目录 config.xml 处理
 
-通过 Jenkins 左侧边栏的 **任务导入/导出** 入口，可以在任意页面直接导入新任务：
-- 支持使用 `"folder/job"` 格式指定目标路径
-- 支持自动创建父文件夹
-- 上传 XML 配置文件后 Jenkins 会自动重载
+| 导入场景 | ZIP 根目录 config.xml 处理方式 |
+|---------|------------------------------|
+| 根目录导入 | 直接丢弃 |
+| 子目录导入 | 使用此配置更新当前目录任务配置 |
 
-> **权限要求**：导出需要 `Item.READ` 权限，全局导入需要 Jenkins 根目录的 `Item.CREATE` 权限。无权限时页面不显示对应功能入口。
->
-> **任务名自动清洗**：输入的任务名会自动去除前后空格、全角空格和不间断空格，并进行合法性校验（仅禁止危险字符和控制字符，**完全支持中文任务名**）。
->
-> **重复任务名**：如果指定路径已存在同名任务，会显示友好提示用户需要重新命名和进入任务更新配置。
+### 5. 批量导出任务配置
 
----
+1. 在 Folder 页面，点击 **导入/导出配置** → **批量导出任务**
+2. 可选：勾选「包含当前目录配置」（默认不勾选）
+   - 勾选：导出内容包括当前目录本身和所有子任务
+   - 不勾选：仅导出子任务，ZIP 路径不包含当前目录文件夹
+3. 点击 **执行导出**，自动下载 ZIP 文件
 
-## 功能显示规则
+### 6. 导出全部任务（管理员）
 
-### 按页面类型
-
-| 类型                 | 导入/导出菜单 | 导入新任务 |
-| ------------------ | ------- | ----- |
-| 所有 AbstractItem    | ✅       | 按下面规则 |
-| 根目录 Folder         | ✅       | ✅     |
-| 子 Folder           | ✅       | ✅     |
-| Multibranch        | ✅       | ❌     |
-| OrganizationFolder | ✅       | ❌     |
-| ComputedFolder     | ✅       | ❌     |
-| 根目录 Job            | ✅       | ❌     |
-| Folder 内 Job       | ✅       | ❌     |
-| Freestyle          | ✅       | ❌     |
-| Pipeline           | ✅       | ❌     |
-| Matrix             | ✅       | ❌     |
-
-**核心规则**：
-- ✅ 所有任务/文件夹都显示 **导入/导出配置** 菜单
-- ✅ 只有 **Folder**（根目录和子目录）才显示 **导入新任务** 功能
-- ❌ 所有 **Job** 类型页面均不显示 **导入新任务**
-- ❌ **特殊 Folder**（Multibranch、OrganizationFolder、ComputedFolder）不显示 **导入新任务**
-
-### 按用户权限
-
-| 功能 | 所在页面 | 所需权限 | 无权限时的表现 |
-|------|---------|---------|--------------|
-| 更新配置 | Job/Folder 页面 | `Item.CONFIGURE` | 页面不显示「更新配置」区域 |
-| 导入新任务 | Folder 页面 | `Item.CREATE` | 页面不显示「导入新任务」区域 |
-| 全局导入任务 | 侧边栏页面 | `Item.CREATE` | 页面不显示「导入任务配置」区域 |
-| 导出配置 | 所有页面 | `Item.READ` | 始终显示（后端接口仍做权限校验）|
-
-**兼容性**：
-| 浏览器/部署方式       | 中文文件名 | 非 ROOT 部署 |
-| ------------------- | ----- | ----------- |
-| Chrome              | ✅     | ✅          |
-| Edge                | ✅     | ✅          |
-| Safari              | ✅     | ✅          |
-| Firefox             | ✅     | ✅          |
-| Jenkins 内嵌 Jetty  | ✅     | ✅          |
-| Tomcat 部署         | ✅     | ✅          |
-| Windows             | ✅     | ✅          |
-| Linux               | ✅     | ✅          |
-| macOS               | ✅     | ✅          |
-
-
-**行为规则**：
-| 场景            | 行为             |
-| ------------- | -------------- |
-| 更新普通 Job      | 自动 reload + 跳转 |
-| 更新 Folder     | 自动 reload + 跳转 |
-| 更新后 rename    | 自动进入新名称页面      |
-| 中文任务名         | 正常             |
-| Folder 内 Job  | 正常             |
-| Pipeline Job  | 正常             |
-| Freestyle Job | 正常             |
+通过左侧边栏 **任务导入/导出** 入口，管理员可以导出 Jenkins 根目录下所有任务。
 
 ---
 
 ## 技术架构
 
-### 后端统一 JSON 协议
+### 架构设计
+
+本插件采用 **Tree + DAG + Execution Engine + State Machine** 架构模式：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ImportEngine（统一入口）                    │
+│  ┌──────────────┐    ┌──────────────────┐                      │
+│  │ ZipTreeBuilder│───▶│  ExecutionEngine │                      │
+│  │ （结构构建）   │    │   （递归执行）     │                      │
+│  └──────────────┘    └────────┬─────────┘                      │
+│                               │                                │
+│         ┌─────────────────────┼─────────────────────┐          │
+│         ▼                     ▼                     ▼          │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │ TypeResolver │    │ PathResolver │    │ ImportContext│     │
+│  │ （类型解析）   │    │ （路径解析）   │    │ （状态管理）   │     │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 核心组件
+
+| 组件 | 职责 |
+|------|------|
+| ImportEngine | 统一导入入口，协调 ZipTreeBuilder 和 ExecutionEngine |
+| ExportEngine | 导出引擎，支持包含/排除当前目录配置选项 |
+| ExecutionEngine | 递归执行引擎，深度优先遍历树节点 |
+| PreviewEngine | 预览引擎，通过 dryRun 模式实现预演 |
+| ZipTreeBuilder | 将 ZIP 条目转换为树形结构 |
+| TypeResolver | 根据 `hasConfigXml` 判断节点是 JOB 还是 FOLDER |
+| PathResolver | 处理重命名映射，支持级联传播 |
+| ImportContext | 集中管理 renameMap、createdFolders、dryRun 等状态 |
+
+### 关键设计原则
+
+- **TreeBuilder（结构）**：将线性 ZIP 条目转换为树形结构
+- **Engine（执行）**：统一的递归执行引擎
+- **Context（状态）**：集中式状态管理
+- **Preview == Import**：预览和导入复用同一引擎，通过 `dryRun` 模式区分
+- **Checkpoint（断点）**：支持导入失败后的恢复重试
+
+---
+
+## 后端统一 JSON 协议
 
 本插件采用统一的 JSON 响应协议，确保前后端通信一致：
 
@@ -179,11 +223,13 @@ mvn clean package -Denforcer.skip=true -DskipTests
 **后端实现原则**：
 - 所有接口统一返回 JSON 格式，错误信息通过 Body 返回，**绝不写入 HTTP Header**
 - `sendError()` 已全面替换为 `writeJson()`（避免 Tomcat 将中文错误信息塞入 HTTP Header 导致 `Unicode字符无法编码` 异常）
-- 所有 Action 方法（`doExport`/`doUpdate`/`doImport`）外层均有 `try-catch(Exception e)` 兜底，确保任何异常都不会冒泡到 Jenkins 默认错误处理（`AbstractModelObject/error.jelly`），防止 Stapler 自动往 Header 写入中文异常信息
-- `writeJson()` 封装响应前显式调用 `rsp.setCharacterEncoding("UTF-8")`，确保 `getWriter()` 使用 UTF-8 而非容器默认的 ISO-8859-1
-- 请求端统一调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数，不再进行 ISO-8859-1 中转码
+- 所有 Action 方法外层均有 `try-catch(Exception e)` 兜底，确保任何异常都不会冒泡到 Jenkins 默认错误处理
+- `writeJson()` 封装响应前显式调用 `rsp.setCharacterEncoding("UTF-8")`，确保 `getWriter()` 使用 UTF-8
+- 请求端统一调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数
 
-### 前端防御性解析
+---
+
+## 前端防御性解析
 
 前端采用防御性 JSON 解析策略，确保即使后端返回非 JSON 内容也能优雅处理：
 
@@ -193,9 +239,9 @@ async function safePost(form) {
         method: 'POST',
         body: new FormData(form)
     });
-    
+
     const text = await res.text();
-    
+
     let data;
     try {
         data = JSON.parse(text);
@@ -203,9 +249,9 @@ async function safePost(form) {
         showToast('error', '服务器返回非JSON：' + text);
         return;
     }
-    
+
     showToast(data.success ? 'success' : 'error', data.message);
-    
+
     if (data.success && data.redirect) {
         setTimeout(() => {
             window.location.href = data.redirect;
@@ -217,54 +263,53 @@ async function safePost(form) {
 ### Toast 组件
 
 采用标准可控生命周期的悬浮提示组件：
-- ✅ 自动消失（默认 10 秒）
-- ✅ 可点击手动关闭
-- ✅ 平滑动画过渡
-- ✅ 支持成功/错误/普通三种类型
+- 自动消失（默认 10 秒）
+- 可点击手动关闭
+- 平滑动画过渡
+- 支持成功/错误/普通三种类型
 
-### 页面布局
+---
 
-采用横向三栏布局设计：
+## 页面布局
+
+采用横向三栏布局设计，支持响应式自适应：
 
 **任务/文件夹页面**（JobImportExportAction）：
 - 第一栏：导出当前配置
-- 第二栏：更新当前配置（需 `Item.CONFIGURE` 权限，无权限显示空白）
-- 第三栏：导入新任务（仅 Folder 且需 `Item.CREATE` 权限，无权限显示空白）
+- 第二栏：更新当前配置（需 `Item.CONFIGURE` 权限）
+- 第三栏：导入新任务（仅 Folder 且需 `Item.CREATE` 权限）
 
 **侧边栏全局页面**（JobImportExportSidebarLink）：
-- 第一栏：空白
-- 第二栏：导入任务配置（需 `Item.CREATE` 权限，无权限显示空白）
-- 第三栏：空白
+- 管理员：导出全部任务配置 + 批量导入任务
+- 有创建权限用户：仅批量导入任务
+- 无权限用户：黄色提示框
 
-布局特性：
+**布局特性**：
 - 使用 Flexbox 布局，三栏等宽分配
+- 使用 `flex-wrap: wrap` 和 `min-width` 实现响应式自适应
+- 小屏幕上功能框自动换行堆叠
 - 有功能显示内容，无功能显示空白占位
-- 自适应容器宽度，响应式设计
 
-### 任务创建后的安全流程
+---
 
-创建任务后执行以下三步确保 Jenkins 完全就绪：
+## 中文任务名处理机制
 
-1. **Save** - 确保配置持久化到磁盘
-2. **Sync Reload** - 调用 `Jenkins.get().reload()` 同步重新加载（确保路由注册完成）
-3. **Safe Redirect** - 使用 `Jenkins.get().getRootUrl() + item.getUrl()` 生成完整的绝对重定向 URL（Jenkins 内部已处理编码、路径规则和 context path，同时兼容反向代理和 HTTPS）
+插件对中文任务名采用标准 UTF-8 处理：
 
-### 中文任务名处理机制
-
-插件对中文任务名采用标准 UTF-8 处理，确保正确传递到 Jenkins：
-
-1. **标准编码**：通过 `req.setCharacterEncoding("UTF-8")` 显式设置请求编码，直接从 Stapler 获取 UTF-8 参数
-2. **控制字符检测**：使用 `Character.isISOControl()` 准确检测真正的控制字符（ASCII 0-31, 127-159），不会误伤中文、emoji 或其他 Unicode 字符
-3. **XML 清理**：导入前自动清理 XML 文件中的非法控制字符（\x00-\x08, \x0B, \x0C, \x0E-\x1F），保留合法的换行符和制表符
+1. **标准编码**：`req.setCharacterEncoding("UTF-8")` 显式设置请求编码
+2. **控制字符检测**：使用 `Character.isISOControl()` 准确检测真正的控制字符
+3. **XML 清理**：导入前自动清理 XML 文件中的非法控制字符
 
 **处理流程**：
 ```
-浏览器输入中文 → UTF-8 编码发送 → req.setCharacterEncoding("UTF-8") → 正确获取中文 → 控制字符检测（不误伤中文） → XML 清理 → Jenkins 创建任务
+浏览器输入中文 → UTF-8 编码发送 → req.setCharacterEncoding("UTF-8") → 正确获取中文 → 控制字符检测 → XML 清理 → Jenkins 创建任务
 ```
 
-### XML 控制字符清理机制
+---
 
-插件在导入 XML 配置时会自动清理非法控制字符，确保 Jenkins 能够正确解析：
+## XML 控制字符清理机制
+
+插件在导入 XML 配置时会自动清理非法控制字符：
 
 **清理规则**：
 - 移除非法控制字符：`\x00-\x08`、`\x0B`、`\x0C`、`\x0E-\x1F`
@@ -280,26 +325,40 @@ private InputStream cleanXml(InputStream is) throws IOException {
 }
 ```
 
-**问题根源**：
-- XML 文件可能包含不可见的控制字符（来自 Windows 复制、Notepad++ 错误编码、API 拼接等）
-- Jenkins 内部在解析 XML 时遇到控制字符会抛出异常
-- 这些控制字符与中文无关，是 XML 文件本身的问题
-
 **效果**：
-- ✅ 中文、emoji 等合法 Unicode 字符不会被误伤
-- ✅ XML 中的非法控制字符会被自动清理
-- ✅ 不再有 UTF-8/ISO-8859-1 的混乱转换
-- ✅ 使用标准库方法进行准确的字符检测
+- 中文、emoji 等合法 Unicode 字符不会被误伤
+- XML 中的非法控制字符会被自动清理
+- 不再有 UTF-8/ISO-8859-1 的混乱转换
 
 ---
 
-## 技术栈
+## 行为规则
 
-- **Jenkins 版本**：2.479.2
-- **JDK 版本**：17
-- **构建工具**：Maven 3.x
-- **打包格式**：`.hpi`（Jenkins 插件标准格式）
-- **核心依赖**：Jenkins Core API、Stapler Web 框架
+| 场景 | 行为 |
+| --- | --- |
+| 更新普通 Job | 自动 reload + 跳转 |
+| 更新 Folder | 自动 reload + 跳转 |
+| 更新后 rename | 自动进入新名称页面 |
+| 中文任务名 | 正常 |
+| Folder 内 Job | 正常 |
+| Pipeline Job | 正常 |
+| Freestyle Job | 正常 |
+
+---
+
+## 兼容性
+
+| 浏览器/部署方式 | 中文文件名 | 非 ROOT 部署 |
+| --- | --- | --- |
+| Chrome | ✅ | ✅ |
+| Edge | ✅ | ✅ |
+| Safari | ✅ | ✅ |
+| Firefox | ✅ | ✅ |
+| Jenkins 内嵌 Jetty | ✅ | ✅ |
+| Tomcat 部署 | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+| Linux | ✅ | ✅ |
+| macOS | ✅ | ✅ |
 
 ---
 
@@ -309,18 +368,83 @@ private InputStream cleanXml(InputStream is) throws IOException {
 job_import_export/
 ├── pom.xml                                    # Maven 构建配置
 ├── README.md                                  # 本文档
+├── CHANGELOG.md                               # 变更日志
 └── src/
     └── main/
         ├── java/com/siruoren/jobimportexport/
-        │   ├── JobImportExportAction.java     # 任务导入导出 Action（页面级）
-        │   └── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── JobImportExportAction.java     # 任务导入导出 Action
+        │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   └── engine/
+        │       ├── ImportEngine.java          # 统一导入入口
+        │       ├── ExportEngine.java          # 导出引擎
+        │       ├── ExecutionEngine.java       # 执行引擎
+        │       ├── PreviewEngine.java         # 预览引擎
+        │       ├── diff/
+        │       │   └── DryRunDiffEngine.java # 差异计算
+        │       ├── model/                     # 数据模型
+        │       │   ├── Action.java
+        │       │   ├── Diff.java
+        │       │   ├── DiffResult.java
+        │       │   ├── DryRunResult.java
+        │       │   ├── ExportResult.java
+        │       │   ├── ImportContext.java
+        │       │   ├── ImportResult.java
+        │       │   ├── MissingConfigReport.java
+        │       │   ├── Node.java
+        │       │   ├── NodeAction.java
+        │       │   ├── NodeType.java
+        │       │   ├── RenameRule.java
+        │       │   ├── Status.java
+        │       │   └── TreeNode.java
+        │       ├── tree/
+        │       │   ├── TreeBuilder.java
+        │       │   └── ZipTreeBuilder.java
+        │       ├── resolver/
+        │       │   ├── PathResolver.java
+        │       │   ├── RenameDAGResolver.java
+        │       │   └── TypeResolver.java
+        │       ├── scanner/
+        │       │   └── ConfigScanner.java
+        │       └── state/
+        │           └── ImportStateStore.java
         └── resources/
+            ├── index.jelly
             └── com/siruoren/jobimportexport/
+                ├── Messages.properties              # Java 代码英文资源
+                ├── Messages_zh_CN.properties        # Java 代码中文资源
                 ├── JobImportExportAction/
-                │   └── index.jelly             # 任务/文件夹页面 UI
-                └── JobImportExportSidebarLink/
-                    └── index.jelly             # 侧边栏全局导入页面 UI
+                │   ├── index.jelly
+                │   ├── index.properties             # 页面英文资源
+                │   └── index_zh_CN.properties       # 页面中文资源
+                ├── JobImportExportSidebarLink/
+                │   ├── index.jelly
+                │   ├── index.properties             # 页面英文资源
+                │   └── index_zh_CN.properties       # 页面中文资源
+                └── engine/
+                    ├── Messages.properties          # 引擎英文资源
+                    └── Messages_zh_CN.properties    # 引擎中文资源
 ```
+
+---
+
+## 权限说明
+
+| 功能 | 所需权限 |
+|------|---------|
+| 导出配置 | Item.READ |
+| 更新配置 | Item.CONFIGURE |
+| 导入新任务 | Item.CREATE |
+| 全局批量导入 | Item.CREATE |
+| 导出全部任务 | Jenkins.ADMINISTER |
+| 批量导出任务 | Item.READ（每个任务）|
+
+### 侧边栏权限分级
+
+| 用户权限 | 显示内容 |
+|---------|---------|
+| Jenkins.ADMINISTER | 导出全部任务 + 批量导入任务 |
+| Item.CREATE（非管理员） | 仅批量导入任务 |
+| 无权限 | 菜单不显示 |
 
 ---
 
@@ -331,9 +455,7 @@ job_import_export/
 绑定到每个 `AbstractItem`（Job/Folder）页面的 Action，提供以下功能：
 - `doExport()` — 导出当前配置的 XML 文件
 - `doUpdate()` — 更新当前配置，支持类型不匹配时的友好提示；成功后使用 `Jenkins.get().getRootUrl() + refreshedItem.getUrl()` 生成安全的重定向 URL
-- `doImport()` — 在父目录下创建新任务；成功后使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成安全的重定向 URL
-- `canImportJobs()` — 控制「导入新任务」区域的显示（按类型）
-- `canCreateJob()` — 控制「导入新任务」区域的显示（按 `Item.CREATE` 权限）
+- `doBatchImport()` — 批量导入任务，支持 ZIP 文件；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
 - `hasPermission()` — 控制「更新配置」区域的显示（按 `Item.CONFIGURE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
 
@@ -341,84 +463,98 @@ job_import_export/
 
 Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `doExport()` — 全局导出任务配置
-- `doImport()` — 全局导入任务，支持指定路径；成功后使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成安全的重定向 URL
-- `canCreateJob()` — 控制「导入任务配置」区域的显示（按 `Item.CREATE` 权限）
+- `doBatchImport()` — 全局批量导入任务；成功后使用 `Jenkins.get().getRootUrl() + targetGroup.getUrl()` 生成安全的重定向 URL
+- `hasPermission()` — 控制批量导入区域的显示（按 `Item.CREATE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
+
+### `ImportEngine`
+
+批量导入的核心引擎，协调 ZipTreeBuilder 和 ExecutionEngine：
+- `importZip()` — 解析 ZIP 文件并执行导入
+- `importSingle()` — 单任务导入入口
+
+### `ExportEngine`
+
+批量导出的核心引擎：
+- `exportAll()` — 导出 Jenkins 根目录下所有任务并打包为 ZIP
+- `exportFromGroup()` — 导出指定目录下所有任务并打包为 ZIP，支持 `includeCurrentConfig` 参数控制是否包含当前目录配置
+- `exportFromGroup(ItemGroup, OutputStream, boolean)` — 带参数的导出方法，`includeCurrentConfig=false` 时仅导出子任务且 ZIP 路径不包含当前目录
+- 逐级检查 `Item.READ` 权限，无权限的任务标记为跳过
+
+### `ExecutionEngine`
+
+递归执行引擎，深度优先遍历树节点：
+- `execute()` — 执行导入流程（创建目录 → 创建任务 → 更新配置）
+- `createFolder()` — 创建目录，支持 dryRun 模式
+- `createOrUpdateJob()` — 创建或更新任务，支持覆盖/重命名模式
+- `backup()` — 备份现有配置为 `config.xml.bak`
+- `handleRootConfigXml()` — 处理 ZIP 根目录的 config.xml，用于更新当前目录配置
+
+### `ZipTreeBuilder`
+
+将 ZIP 条目转换为树形结构：
+- `build()` — 构建树形结构，检测根目录 config.xml
+- `resolveType()` — 根据是否包含 config.xml 判断节点类型（FOLDER/JOB）
+- 支持多层嵌套目录结构解析
+
+### `ImportContext`
+
+状态上下文，集中管理导入状态：
+- `renameMap` — 重命名映射表，支持级联传播
+- `createdFolders` — 已创建目录集合
+- `dryRun` — 是否为预演模式
+- `parentTypeErrors` — 父任务类型错误集合
+- `applyRootConfigToCurrentFolder` — 是否应用根目录 config.xml 到当前目录
+- `currentFolderItem` — 当前导入目录的 Item 引用
+- `rootConfigResults` — 根目录 config.xml 处理结果列表
+
+### `Status`
+
+导入状态枚举：
+- `CREATE_FOLDER` / `CREATE_JOB` — 新建成功
+- `OVERWRITE_FOLDER` / `OVERWRITE_JOB` — 覆盖成功
+- `RENAME_FOLDER` / `RENAME_JOB` — 重命名成功
+- `UPDATE_CONFIG` — 更新目录任务配置成功
+- `SKIP_EXISTS` / `SKIP_EMPTY` — 跳过
+- `REUSE_FOLDER` — 目录复用
+- `ERROR` — 错误
 
 ---
 
 ## 常见问题
 
-### Q: 为什么某些页面看不到「导入新任务」？
+### Q: 为什么批量导入支持多层目录结构？
 
-「导入新任务」的显示受两个条件限制：
-1. **页面类型**：只有 **Folder** 类型的页面才会显示此功能。Job 页面（包括 Freestyle、Pipeline 等）不显示。
-2. **用户权限**：当前用户必须拥有目标目录的 `Item.CREATE` 权限。权限不足时，即使 Folder 页面也不会显示该功能入口。
+插件采用 Tree + ExecutionEngine 架构，将 ZIP 文件解析为树形结构后深度优先遍历执行导入：
+- 支持任意深度的嵌套目录
+- 支持父目录重命名后自动级联传播到子任务路径
+- 支持目录类型检测（有无 config.xml）
+- 支持预演模式下的虚拟目录状态缓存
 
-同理，「更新配置」功能需要当前用户对目标任务拥有 `Item.CONFIGURE` 权限，无权限时页面不会显示该区域。
+### Q: 覆盖已存在的任务会备份吗？
 
-### Q: 为什么导入/导出支持中文任务名？
+是的，覆盖模式会自动备份现有配置。备份文件命名为 `config.xml.bak`，与原配置文件在同一目录下。
 
-本插件针对 Jenkins 中文场景做了专项优化：
-- **HTTP Header 编码**：导出文件名使用 RFC 5987 标准（`filename*=`），兼容现代浏览器和 IE
-- **URL 重定向**：导入/更新后重定向统一使用 `Jenkins.get().getRootUrl() + item.getUrl()` 生成完整绝对 URL（Jenkins 内部已处理编码、路径规则、context path 和反向代理），避免手动拼接导致的重复编码或特殊字符丢失
-- **请求参数编码**：`doImport` 显式调用 `req.setCharacterEncoding("UTF-8")`，直接从 Stapler 获取 UTF-8 参数，不再进行 ISO-8859-1 → UTF-8 中转码
-- **响应编码安全**：`writeJson()` 封装响应前显式调用 `rsp.setCharacterEncoding("UTF-8")`，确保 `getWriter()` 使用 UTF-8 而非容器默认的 ISO-8859-1，彻底避免中文乱码
-- **HTTP Header 中文隔离**：所有错误提示统一通过 JSON Body 返回，**绝不往 HTTP Header 写入中文**，避免 Tomcat 因 Header 仅支持 ISO-8859-1 而抛出 `Unicode字符无法编码` 异常
-- **Windows 文件名安全**：自动替换 `\\/*?"<>|` 等非法字符
-- **Jelly 页面编码**：所有表单添加 `accept-charset="UTF-8"`，Jelly 页面添加 `escape-by-default`
+### Q: 导入时提示「任务类型不匹配」怎么办？
 
-这些修复确保在 Tomcat、Jetty、Windows Jenkins、Folder 嵌套、Multibranch 等复杂环境下中文均能正常工作。
+当导入的目录（无 config.xml）与已存在的普通任务同名时，系统会报告类型不匹配错误。这是为了防止将普通任务误覆盖为目录，或反之。
 
-### Q: 更新配置时提示「任务类型不匹配」怎么办？
+### Q: 批量导入的结果统计中，「成功」「跳过」「失败」是如何定义的？
 
-如果 XML 配置的类型与当前任务类型不匹配（例如尝试用 Freestyle 的配置覆盖 Pipeline 任务），系统会显示友好提示信息引导用户处理。此类跨类型的配置覆盖需要谨慎操作，建议确认后再进行。
+| 分类 | 包含的状态 |
+|------|-----------|
+| 成功 | CREATE_FOLDER、CREATE_JOB、OVERWRITE_FOLDER、OVERWRITE_JOB、UPDATE_CONFIG |
+| 跳过 | SKIP_EXISTS、SKIP_EMPTY、REUSE_FOLDER、RENAME_FOLDER、RENAME_JOB |
+| 失败 | ERROR |
 
-### Q: 提示「当前用户无权限」怎么办？
+---
 
-本插件对所有操作都进行了权限检查：
+## 技术栈
 
-| 操作 | 所需权限 | 提示信息 |
-|------|---------|---------|
-| 导出配置 | `Item.READ` | 请更换具有 Item.READ 权限的登录用户 |
-| 更新配置 | `Item.CONFIGURE` | 请更换具有 Item.CONFIGURE 权限的登录用户 |
-| 导入新任务 | `Item.CREATE` | 请更换具有 Item.CREATE 权限的登录用户 |
-
-请联系 Jenkins 管理员为您分配相应权限，或切换到有权限的用户账号进行操作。
-
-### Q: 导入时提示「任务名称不合法」怎么办？
-
-插件在导入新任务时会自动清洗和校验任务名称：
-- **自动去除**：前后普通空格、全角空格（中文输入法空格）、不间断空格（`&nbsp;`）
-- **合法性校验**：使用 Java 标准库 `Character.isISOControl()` 进行安全校验，**完全支持中文任务名**，仅禁止以下危险字符和模式：
-  - 文件系统危险字符：`\`、`/`、`*`、`?`、`"`、`>`、`<`、`|`、`:`
-  - 控制字符（ASCII 0-31 和 127-159，使用 `Character.isISOControl()` 准确检测）
-  - 长度超过 200 个字符
-  - 空字符串或纯空格
-
-**技术说明**：
-- 使用 `Character.isISOControl()` 方法准确检测真正的控制字符，不会误伤中文、emoji 或其他 Unicode 字符
-- 不再使用正则表达式 `\x00-\x1F` 进行检测，避免误伤 UTF-16 代理字符和非 BMP 字符
-- 中文、英文、数字、emoji、下划线、连字符、点号等均为安全字符，可正常使用
-
-**解决方法**：使用符合常规文件命名规范的任务名称。中文、字母、数字、下划线、连字符、点号等均为安全字符，可正常使用。
-
-### Q: 导入时提示「任务名称已存在」怎么办？
-
-如果目标目录下已存在同名任务，页面会显示友好提示，提供两个选项：
-- **重新命名** — 使用新的任务名称重新导入
-- **进入任务更新配置** — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置
-
-### Q: 为什么导入后有时会出现 404？
-
-Jenkins 创建任务后，路由注册存在异步延迟。本插件已实现企业级安全流程：
-1. 创建任务后调用 `save()` 确保持久化
-2. 调用 `Jenkins.get().reload()` 同步重新加载（确保 Jenkins 完全注册新任务路由）
-3. 使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成完整绝对重定向 URL（Jenkins 内部已处理编码、路径规则和 context path，同时兼容反向代理和 HTTPS）
-
-前端收到重定向后会延迟 300ms 再跳转，确保 Jenkins 完全就绪。
-
-早期版本手动拼接 `/job/xxx`、使用 `req.getContextPath()` 或对 URL 进行二次编码，导致中文任务名在 Tomcat 下出现 `%25` 双重编码或路径错误，现已统一使用 `Jenkins.get().getRootUrl() + item.getUrl()` 修复。
+- Jenkins 版本：2.479.2
+- JDK 版本：17
+- 构建工具：Maven 3.x
+- 打包格式：`.hpi`（Jenkins 插件标准格式）
 
 ---
 
@@ -431,7 +567,7 @@ mvn clean package -Denforcer.skip=true -DskipTests
 # 仅编译
 mvn compile
 
-# 运行测试（需要完整 Jakarta Servlet API 环境）
+# 运行测试
 mvn test
 ```
 
@@ -439,17 +575,11 @@ mvn test
 
 ## 许可证
 
-本插件采用**自定义非商业许可**：
-
-- ✅ 允许自由使用、复制、修改和二次分发
-- ❌ **禁止用于任何商业用途**（包括但不限于产生收入、盈利或以商业目的的活动）
-- 使用本插件须保留原始版权声明
-
-如需商业使用授权，请联系项目维护者。
+MIT License
 
 ---
 
 ## 维护者
 
-- 项目归属：`com.siruoren:job-import-export`
-- 版本：`1.0.2`
+- 项目：com.siruoren:job-import-export
+- 版本：2.0.0

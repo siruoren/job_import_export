@@ -1,16 +1,25 @@
 package com.siruoren.jobimportexport;
 
+import com.siruoren.jobimportexport.engine.ImportEngine;
+import com.siruoren.jobimportexport.engine.ExportEngine;
+import com.siruoren.jobimportexport.engine.model.ImportContext;
+import com.siruoren.jobimportexport.engine.model.ImportResult;
+import com.siruoren.jobimportexport.engine.model.ExportResult;
+import com.siruoren.jobimportexport.engine.model.Status;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractItem;
 import hudson.model.Action;
+import hudson.model.Item;
+import hudson.model.ItemGroup;
+import hudson.model.Items;
 import hudson.model.Job;
 import hudson.model.TopLevelItem;
 import hudson.model.TopLevelItemDescriptor;
-import hudson.model.ItemGroup;
-import hudson.model.Item;
-import hudson.model.Items;
+import hudson.model.*;
 import hudson.security.AccessControlled;
+import hudson.PluginWrapper;
+import hudson.PluginManager;
 import jenkins.model.ModifiableTopLevelItemGroup;
 import jenkins.model.TransientActionFactory;
 import jenkins.model.Jenkins;
@@ -24,19 +33,30 @@ import javax.xml.transform.stream.StreamSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
 import org.jvnet.hudson.reactor.ReactorException;
-import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipInputStream;
+import java.util.Collections;
+import java.util.Collection;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class JobImportExportAction implements Action {
 
     private final AbstractItem item;
+    private static final ThreadLocal<Boolean> SKIP_RELOAD = new ThreadLocal<>();
 
     public JobImportExportAction(AbstractItem item) {
         this.item = item;
@@ -49,7 +69,7 @@ public class JobImportExportAction implements Action {
 
     @Override
     public String getDisplayName() {
-        return "导入/导出配置";
+        return Messages.JobImportExportAction_displayName();
     }
 
     @Override
@@ -73,18 +93,6 @@ public class JobImportExportAction implements Action {
         return item.getParent() instanceof Jenkins;
     }
 
-    public boolean canImportJobs() {
-        if (!(item instanceof ItemGroup) || item instanceof Job) {
-            return false;
-        }
-
-        if (isSpecialFolder(item)) {
-            return false;
-        }
-
-        return true;
-    }
-
     public boolean hasPermission() {
         if (item instanceof AccessControlled) {
             return ((AccessControlled) item).hasPermission(Item.CONFIGURE);
@@ -92,80 +100,52 @@ public class JobImportExportAction implements Action {
         return false;
     }
 
+    public boolean isFolder() {
+        return item instanceof ItemGroup;
+    }
+
+    public boolean canImportJobs() {
+        return isFolder();
+    }
+
     public boolean canCreateJob() {
-        ItemGroup<?> target = getImportTarget();
-
-        if (target == null) {
-            return false;
+        if (item instanceof AccessControlled) {
+            return ((AccessControlled) item).hasPermission(Item.CREATE);
         }
-
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            return false;
-        }
-
-        if (target instanceof AccessControlled) {
-            if (!((AccessControlled) target).hasPermission(Item.CREATE)) {
-                return false;
-            }
-        }
-
-        for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(target)) {
-                return true;
-            }
-        }
-
         return false;
     }
 
-    public List<TopLevelItemDescriptor> getSupportedJobTypes() {
-        List<TopLevelItemDescriptor> result = new ArrayList<>();
-
-        ItemGroup<?> target = getImportTarget();
-
-        if (target == null) {
-            return result;
-        }
-
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            return result;
-        }
-
-        for (TopLevelItemDescriptor d : Items.all()) {
-            if (d.isApplicableIn(target)) {
-                result.add(d);
-            }
-        }
-
-        return result;
+    public boolean hasAdminPermission() {
+        return Jenkins.get().hasPermission(Jenkins.ADMINISTER);
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
         try {
             item.checkPermission(Item.READ);
 
-        String fileName = item.getFullName()
-                .replaceAll("[\\\\/:*?\"<>|]", "_")
-                + ".xml";
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            String baseName = item.getFullName()
+                    .replaceAll("[\\\\/:*?\"<>|]", "_");
+            String fileName = baseName + "_" + timestamp + ".xml";
 
-        String encodedFileName = java.net.URLEncoder.encode(
-                fileName,
-                "UTF-8")
-                .replace("+", "%20");
+            String encodedFileName = java.net.URLEncoder.encode(
+                    fileName,
+                    "UTF-8")
+                    .replace("+", "%20");
 
-        rsp.setContentType("application/xml;charset=UTF-8");
-        rsp.setHeader("Content-Disposition", "attachment; "
-                + "filename=\""
-                + encodedFileName
-                + "\"; "
-                + "filename*=UTF-8''"
-                + encodedFileName);
+            rsp.setContentType("application/xml;charset=UTF-8");
+            rsp.setHeader("Content-Disposition", "attachment; "
+                    + "filename=\""
+                    + encodedFileName
+                    + "\"; "
+                    + "filename*=UTF-8''"
+                    + encodedFileName);
 
-        Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-        if (!Files.exists(configFile)) {
-            writeJson(rsp, false, "配置文件不存在", null);
-            return;
-        }
+            Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+            if (!Files.exists(configFile)) {
+                writeJson(rsp, false, Messages.JobImportExportAction_noConfigFile(), null);
+                return;
+            }
 
             try (OutputStream out = rsp.getOutputStream()) {
                 Files.copy(configFile, out);
@@ -178,7 +158,55 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_exportFailed(msg)) + "\",\"redirect\":null}"
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    @RequirePOST
+    public void doBatchExport(StaplerRequest req, StaplerResponse rsp) {
+        try {
+            if (item instanceof AccessControlled) {
+                if (!((AccessControlled) item).hasPermission(Item.READ)) {
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionRead(), null);
+                    return;
+                }
+            }
+
+            ItemGroup<?> targetGroup;
+            if (item instanceof ItemGroup) {
+                targetGroup = (ItemGroup<?>) item;
+            } else {
+                writeJson(rsp, false, Messages.JobImportExportAction_notFolder(), null);
+                return;
+            }
+
+            ExportEngine exportEngine = new ExportEngine();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            boolean includeCurrentConfig = Boolean.parseBoolean(req.getParameter("includeCurrentConfig"));
+            ExportResult summary = exportEngine.exportFromGroup(targetGroup, baos, includeCurrentConfig);
+            List<ExportResult> results = exportEngine.getResults();
+
+            byte[] zipData = baos.toByteArray();
+            String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
+
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+            String zipFileName = item.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + "_" + timestamp + ".zip";
+
+            writeExportJson(rsp, true, summary.message, base64Zip, results, zipFileName);
+
+        } catch (Exception e) {
+            if (!rsp.isCommitted()) {
+                try {
+                    rsp.reset();
+                    rsp.setCharacterEncoding("UTF-8");
+                    rsp.setContentType("application/json;charset=UTF-8");
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    rsp.getWriter().write(
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_batchExportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -190,53 +218,47 @@ public class JobImportExportAction implements Action {
     public void doUpdate(StaplerRequest req, StaplerResponse rsp) {
         try {
             if (item instanceof AccessControlled) {
-            if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
-                writeJson(rsp, false, "无权限：当前用户没有更新此任务配置的权限", null);
+                if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionUpdate(), null);
+                    return;
+                }
+            }
+
+            FileItem fileItem = req.getFileItem("xmlFile");
+
+            if (fileItem == null || fileItem.getSize() == 0) {
+                writeJson(rsp, false, Messages.JobImportExportAction_noFileSelected(), null);
                 return;
             }
-        }
 
-        FileItem fileItem = req.getFileItem("xmlFile");
+            byte[] fileContent = readAll(fileItem.getInputStream());
 
-        if (fileItem == null || fileItem.getSize() == 0) {
-            writeJson(rsp, false, "请选择 XML 文件", null);
-            return;
-        }
-
-
-        byte[] fileContent = new byte[(int) fileItem.getSize()];
-        try (InputStream is = fileItem.getInputStream()) {
-            is.read(fileContent);
-        }
-
-        try {
-            try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(fileContent)) {
-                item.updateByXml(new StreamSource(bais));
+            try {
+                try (InputStream safeStream = safeXml(fileContent)) {
+                    item.updateByXml(new StreamSource(safeStream));
+                }
+            } catch (IOException e) {
+                if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
+                    writeJson(rsp, false, Messages.JobImportExportAction_typeMismatch(e.getMessage()), null);
+                    return;
+                } else {
+                    writeJson(rsp, false, Messages.JobImportExportAction_xmlParseFailed(e.getMessage()), null);
+                    return;
+                }
             }
-        } catch (IOException e) {
-            if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
-   
-                writeJson(rsp, false, "任务类型不匹配：" + e.getMessage() + "\n\n请确认任务类型是否匹配后重试。", null);
-                return;
 
-            } else {
-                writeJson(rsp, false, "XML解析失败：" + e.getMessage(), null);
-                return;
+            item.doReload();
+
+            AbstractItem refreshedItem =
+                    (AbstractItem) Jenkins.get()
+                            .getItemByFullName(item.getFullName());
+
+            String redirectUrl = null;
+            if (refreshedItem != null) {
+                redirectUrl = Jenkins.get().getRootUrl() + refreshedItem.getUrl();
             }
-        }
 
-        item.doReload();
-
-        AbstractItem refreshedItem =
-                (AbstractItem) Jenkins.get()
-                        .getItemByFullName(item.getFullName());
-
-        String redirectUrl = null;
-        if (refreshedItem != null) {
-            redirectUrl = Jenkins.get().getRootUrl() + refreshedItem.getUrl();
-        }
-
-            writeJson(rsp, true, "更新成功", redirectUrl);
+            writeJson(rsp, true, Messages.JobImportExportAction_updateSuccess(), redirectUrl);
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
                 try {
@@ -245,7 +267,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("更新失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_updateFailed(msg)) + "\",\"redirect\":null}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -254,93 +276,75 @@ public class JobImportExportAction implements Action {
     }
 
     @RequirePOST
-    public void doImport(StaplerRequest req, StaplerResponse rsp) {
+    public void doBatchImport(StaplerRequest req, StaplerResponse rsp) {
         try {
             req.setCharacterEncoding("UTF-8");
             rsp.setCharacterEncoding("UTF-8");
 
-            String jobName = req.getParameter("jobName");
-            if (jobName != null) {
-                try {
-                    byte[] bytes = jobName.getBytes("ISO-8859-1");
-                    jobName = new String(bytes, "UTF-8");
-                } catch (Exception e) {
-                }
-            }            
-            
-            jobName = sanitizeJobName(jobName);
+            FileItem fileItem = req.getFileItem("zipFile");
 
-        if (jobName == null) {
-            writeJson(rsp, false, "任务名称不能为空", null);
-            return;
-        }
-
-        try {
-            validateJobName(jobName);
-        } catch (Exception e) {
-            writeJson(rsp, false, "任务名称不合法：" + e.getMessage(), null);
-            return;
-        }
-
-        FileItem fileItem = req.getFileItem("xmlFile");
-
-        if (fileItem == null || fileItem.getSize() == 0) {
-            writeJson(rsp, false, "请选择 XML 文件", null);
-            return;
-        }
-
-        ItemGroup<?> target = getImportTarget();
-
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            writeJson(rsp, false, "当前目录不支持创建任务", null);
-            return;
-        }
-
-        ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
-
-        if (itemGroup instanceof AccessControlled) {
-            if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
-                writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
+            if (fileItem == null || fileItem.getSize() == 0) {
+                writeJson(rsp, false, Messages.JobImportExportAction_noZipFile(), null);
                 return;
             }
-        }
 
-        Item existingItem = Jenkins.get().getItemByFullName(buildFullName(jobName));
-        if (existingItem != null) {
-            String fullPath = Jenkins.get().getRootUrl() + existingItem.getUrl() + "jobImportExport";
-            writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
-            return;
-        }
+            boolean overwrite = Boolean.parseBoolean(req.getParameter("overwrite"));
+            boolean rename = Boolean.parseBoolean(req.getParameter("rename"));
+            boolean dryRun = Boolean.parseBoolean(req.getParameter("dryRun"));
 
-        try (InputStream is = fileItem.getInputStream()) {
-            TopLevelItem newItem = itemGroup.createProjectFromXML(jobName, cleanXml(is));
+            ItemGroup<?> target = (item instanceof ItemGroup) ? (ItemGroup<?>) item : item.getParent();
 
-            newItem.save();
-
-            Jenkins.get().reload();
-
-            String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
-
-            writeJson(rsp, true, "任务创建成功", redirectUrl);
-            } catch (Exception e) {
-
-                String msg = e.getMessage();
-
-                if (msg == null || msg.trim().isEmpty()) {
-                    msg = e.getClass().getSimpleName();
-                }
-
-                msg = msg.replaceAll("[\\r\\n]", " ");
-
-                writeJson(
-                        rsp,
-                        false,
-                        "导入失败：" + msg,
-                        null
-                );
-
+            if (!(target instanceof ModifiableTopLevelItemGroup)) {
+                writeJson(rsp, false, Messages.JobImportExportAction_cannotCreateJob(), null);
                 return;
             }
+
+            ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
+
+            if (itemGroup instanceof AccessControlled) {
+                if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
+                    writeJson(rsp, false, Messages.JobImportExportAction_noPermissionCreate(), null);
+                    return;
+                }
+            }
+
+            List<ImportResult> results;
+            int successCount = 0;
+            int failCount = 0;
+            int skipCount = 0;
+
+            SKIP_RELOAD.set(true);
+
+            try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
+                ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
+
+                boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
+                ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
+                ctx.currentFolderItem = isSubDirectoryImport ? item : null;
+
+                ImportEngine engine = new ImportEngine();
+                results = engine.importZip(zis, ctx);
+
+                for (ImportResult result : results) {
+                    if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                            || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
+                        successCount++;
+                    } else if (result.statusEnum == Status.ERROR) {
+                        failCount++;
+                    } else {
+                        skipCount++;
+                    }
+                }
+            } finally {
+                SKIP_RELOAD.remove();
+            }
+
+            if (!dryRun) {
+                safeReload();
+            }
+
+            writeBatchJson(rsp, true, dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete(), successCount, failCount, skipCount, results, dryRun);
+
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
                 try {
@@ -349,7 +353,7 @@ public class JobImportExportAction implements Action {
                     rsp.setContentType("application/json;charset=UTF-8");
                     String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                        "{\"success\":false,\"message\":\"" + escapeJson(Messages.JobImportExportAction_batchImportFailed(msg)) + "\"}"
                     );
                 } catch (Exception ignored) {
                 }
@@ -378,6 +382,129 @@ public class JobImportExportAction implements Action {
         rsp.getWriter().write(json);
     }
 
+    private void writeBatchJson(
+            StaplerResponse rsp,
+            boolean success,
+            String message,
+            int successCount,
+            int failCount,
+            int skipCount,
+            List<ImportResult> results,
+            boolean dryRun) throws IOException {
+
+        rsp.setCharacterEncoding("UTF-8");
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder details = new StringBuilder("[");
+        boolean first = true;
+        for (ImportResult result : results) {
+            if (!first) {
+                details.append(",");
+            }
+            first = false;
+            details.append("{\"jobPath\":\"")
+                   .append(escapeJson(result.displayPath != null ? result.displayPath : result.jobName))
+                   .append("\",\"finalName\":\"")
+                   .append(escapeJson(result.finalName))
+                   .append("\",\"fullPath\":\"")
+                   .append(escapeJson(result.fullPath != null ? result.fullPath : result.finalName))
+                   .append("\",\"status\":\"")
+                   .append(result.status)
+                   .append("\",\"message\":\"")
+                   .append(escapeJson(result.message))
+                   .append("\"");
+
+            if (!result.missingPlugins.isEmpty()) {
+                details.append(",\"missingPlugins\":[");
+                boolean firstPlugin = true;
+                for (String plugin : result.missingPlugins) {
+                    if (!firstPlugin) {
+                        details.append(",");
+                    }
+                    firstPlugin = false;
+                    details.append("\"")
+                           .append(escapeJson(plugin))
+                           .append("\"");
+                }
+                details.append("]");
+            }
+
+            details.append("}");
+        }
+        details.append("]");
+
+        String json = "{"
+                + "\"success\":" + success + ","
+                + "\"message\":\"" + escapeJson(message) + "\","
+                + "\"dryRun\":" + dryRun + ","
+                + "\"total\":" + (successCount + failCount + skipCount) + ","
+                + "\"successCount\":" + successCount + ","
+                + "\"failCount\":" + failCount + ","
+                + "\"skipCount\":" + skipCount + ","
+                + "\"details\":" + details.toString()
+                + "}";
+
+        rsp.getWriter().write(json);
+    }
+
+    private void writeExportJson(
+            StaplerResponse rsp,
+            boolean success,
+            String message,
+            String zipData,
+            List<ExportResult> results,
+            String zipFileName) throws IOException {
+
+        rsp.setCharacterEncoding("UTF-8");
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder details = new StringBuilder("[");
+        if (results != null) {
+            boolean first = true;
+            for (ExportResult result : results) {
+                if (!first) {
+                    details.append(",");
+                }
+                first = false;
+                details.append("{\"jobPath\":\"")
+                       .append(escapeJson(result.jobPath))
+                       .append("\",\"fullPath\":\"")
+                       .append(escapeJson(result.fullPath))
+                       .append("\",\"status\":\"")
+                       .append(result.status)
+                       .append("\",\"message\":\"")
+                       .append(escapeJson(result.message))
+                       .append("\"}");
+            }
+        }
+        details.append("]");
+
+        int exported = 0;
+        int skipped = 0;
+        int errors = 0;
+        if (results != null) {
+            for (ExportResult r : results) {
+                if ("EXPORTED".equals(r.status)) exported++;
+                else if ("SKIPPED".equals(r.status)) skipped++;
+                else errors++;
+            }
+        }
+
+        String json = "{"
+                + "\"success\":" + success + ","
+                + "\"message\":\"" + escapeJson(message) + "\","
+                + "\"total\":" + (exported + skipped + errors) + ","
+                + "\"successCount\":" + exported + ","
+                + "\"skipCount\":" + skipped + ","
+                + "\"failCount\":" + errors + ","
+                + "\"zipData\":\"" + (zipData != null ? zipData : "") + "\","
+                + "\"zipFileName\":\"" + escapeJson(zipFileName != null ? zipFileName : "jenkins-jobs-export.zip") + "\","
+                + "\"details\":" + details.toString()
+                + "}";
+
+        rsp.getWriter().write(json);
+    }
+
     private String escapeJson(String s) {
         if (s == null) {
             return "";
@@ -390,42 +517,27 @@ public class JobImportExportAction implements Action {
                 .replace("\r", "");
     }
 
-    private String buildFullName(String jobName) {
-        ItemGroup<?> target = getImportTarget();
+    private String buildFullName(ItemGroup<?> target, String name) {
+        if (target == null) {
+            return name;
+        }
+
+        String parentPath = "";
 
         if (target instanceof AbstractItem) {
-            return ((AbstractItem) target).getFullName() + "/" + jobName;
+            parentPath = ((AbstractItem) target).getFullName();
         }
 
-        return jobName;
-    }
-
-    private ItemGroup<?> getImportTarget() {
-        if (!canImportJobs()) {
-            return null;
+        if (parentPath == null || parentPath.trim().isEmpty()) {
+            return name;
         }
 
-        return (ItemGroup<?>) item;
+        return parentPath + "/" + name;
     }
 
     private static boolean isSpecialFolder(AbstractItem item) {
         String name = item.getClass().getName();
         return name.startsWith("jenkins.branch.") || name.contains("ComputedFolder");
-    }
-
-    private void reloadItem(AbstractItem target) throws IOException {
-        try {
-            target.onLoad(
-                    target.getParent(),
-                    target.getName()
-            );
-        } catch (Exception e) {
-            throw new IOException(
-                    "任务 Reload 失败: "
-                            + e.getMessage(),
-                    e
-            );
-        }
     }
 
     private String sanitizeJobName(String name) {
@@ -441,50 +553,100 @@ public class JobImportExportAction implements Action {
 
     private void validateJobName(String jobName) {
         if (jobName == null || jobName.trim().isEmpty()) {
-            throw new IllegalArgumentException("任务名称不能为空");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameEmpty());
         }
-        
+
         jobName = jobName.trim().replace('\u3000', ' ');
-        
+
         for (int i = 0; i < jobName.length(); i++) {
             char c = jobName.charAt(i);
-            
+
             if (Character.isISOControl(c)) {
-                throw new IllegalArgumentException("任务名称包含非法控制字符");
+                throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameControlChars());
             }
         }
-        
+
         if (jobName.matches(".*[\\\\/:*?\"<>|].*")) {
-            throw new IllegalArgumentException("任务名称包含非法字符：\\ / : * ? \" < > |");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameIllegalChars());
         }
-        
+
         if (jobName.length() > 200) {
-            throw new IllegalArgumentException("任务名称过长");
+            throw new IllegalArgumentException(Messages.JobImportExportAction_jobNameTooLong());
         }
     }
 
-    private InputStream cleanXml(InputStream is) throws IOException {
-        String xml = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-        
+    private byte[] readAll(InputStream is) throws IOException {
+        return is.readAllBytes();
+    }
+
+    private InputStream safeXml(byte[] bytes) {
+        String xml = new String(bytes, StandardCharsets.UTF_8);
         xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
-        
-        return new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+        return new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void safeReload() {
+        if (!Boolean.TRUE.equals(SKIP_RELOAD.get())) {
+            try {
+                Jenkins.get().reload();
+            } catch (IOException | InterruptedException | ReactorException e) {
+            }
+        }
+    }
+
+    private List<String> checkMissingPlugins(String xml) {
+        List<String> missing = new ArrayList<>();
+
+        PluginManager pluginManager = Jenkins.get().getPluginManager();
+
+        Pattern pattern = Pattern.compile(
+                "plugin=\"([^\"]+)\""
+        );
+
+        Matcher matcher = pattern.matcher(xml);
+
+        Set<String> checked = new HashSet<>();
+
+        while (matcher.find()) {
+
+            String pluginExpr = matcher.group(1);
+
+            String shortName = pluginExpr;
+
+            int idx = pluginExpr.indexOf('@');
+
+            if (idx > 0) {
+                shortName = pluginExpr.substring(0, idx);
+            }
+
+            if (checked.contains(shortName)) {
+                continue;
+            }
+
+            checked.add(shortName);
+
+            PluginWrapper plugin =
+                    pluginManager.getPlugin(shortName);
+
+            if (plugin == null) {
+                missing.add(shortName);
+            }
+        }
+
+        return missing;
     }
 
     @Extension
     public static class Factory extends TransientActionFactory<AbstractItem> {
-        @Override
-        public Class<AbstractItem> type() {
-            return AbstractItem.class;
-        }
 
         @Override
         public Collection<? extends Action> createFor(AbstractItem target) {
-            if (target == null) {
-                return Collections.emptyList();
-            }
-
             return Collections.singleton(new JobImportExportAction(target));
+        }
+
+        @Override
+        public Class<AbstractItem> type() {
+            return AbstractItem.class;
         }
     }
 }
