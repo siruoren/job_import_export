@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [2.0.1] - 2026-05-16
+
+### 新增功能
+
+- **进度显示全称路径**：进度条中显示任务的全称路径（如 `myFolder/subFolder/myJob`），而非相对路径（如 `subFolder/myJob`）
+
+### 修复
+
+- **进度条不动（致命错误）**：
+  - 修复 `ExecutionEngine.addResult()` 方法内部递归调用自己导致 `StackOverflowError`，后台线程崩溃后进度永远不会更新
+  - 修复 `JobImportExportAction/index.jelly` 中 SSE URL 路径重复问题（`${it.getUrlName()}/progress` 在已包含 `urlName` 的页面路径下导致 404）
+  - 修复 `ImportProgress` 所有字段缺少 `volatile`，导致跨线程写入后读线程看不到新值
+  - 修复 `doProgress` SSE 端点用 while 循环阻塞 Jetty 请求线程 120 秒，多页面同时导入时线程池耗尽
+  - 将 SSE 长连接改为短轮询 JSON 接口，前端用 `setInterval` 每 500ms 轮询，每次请求立即返回不阻塞线程
+- **No permission to create job**：修复后台线程中 `Authentication` 上下文丢失问题，在 `new Thread()` 启动前保存当前用户认证，线程内恢复，线程结束时清理
+- **预演阶段卡住**：修复 `completeProgress()` 和 `setResult()` 之间的竞态条件——`completeProgress` 先设置 `status="DONE"`，前端轮询命中 `status==DONE` 但 `resultReady==false`，执行提前停止轮询；将 `status`、`overallProgress`、`resultReady` 合并到 `setResult()` 的同一个 `synchronized` 方法中原子设置
+- **预演阶段显示跳转按钮**：修复预演（dryRun）完成后也显示跳转按钮的问题，增加 `!result.dryRun` 条件
+- **跳转链接包含多余路径**：修复 `redirectUrl` 使用相对路径导致前端 `location.href` 解析错误的问题，改为使用 `Jenkins.get().getRootUrl() + url` 绝对路径；redirect 指向导入目标 `target` 而非 `item`
+
 ## [2.0.0] - 2026-05-16
 
 ### 新增功能
