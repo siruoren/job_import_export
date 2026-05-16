@@ -25,11 +25,27 @@ public class ExecutionEngine {
 
     private List<ImportResult> results = new ArrayList<>();
     
-    // 阶段1：收集所有需要创建的路径
     private List<String> folderPathsToCreate = new ArrayList<>();
     private Map<String, TreeNode> jobNodesToCreate = new LinkedHashMap<>();
-    // 跟踪 FOLDER_WITH_CONFIG 类型的路径（用于覆盖模式）
     private Map<String, TreeNode> folderWithConfigToCreate = new LinkedHashMap<>();
+
+    public interface ProgressCallback {
+        void onResult(ImportResult result, int currentIndex, int totalCount);
+    }
+
+    private ProgressCallback progressCallback;
+    private int estimatedTotal = 0;
+
+    public void setProgressCallback(ProgressCallback callback) {
+        this.progressCallback = callback;
+    }
+
+    private void addResult(ImportResult result) {
+        results.add(result);
+        if (progressCallback != null) {
+            progressCallback.onResult(result, results.size(), estimatedTotal);
+        }
+    }
 
     public List<ImportResult> execute(TreeNode root, ImportContext ctx) {
         results.clear();
@@ -39,10 +55,13 @@ public class ExecutionEngine {
 
         prepareRootConfigFromMatchingFolder(root, ctx);
 
-        // ✔ 阶段0：收集所有路径（用于后续 rename 计算）
         collectPaths(root, "", ctx);
 
-        // ✔ 阶段0.5：预扫描所有冲突，收集完整的 renameMap（按深度排序）
+        estimatedTotal = folderPathsToCreate.size() + jobNodesToCreate.size();
+        if (root.rootConfigXml != null && root.rootConfigXml.length > 0 && ctx.applyRootConfigToCurrentFolder) {
+            estimatedTotal++;
+        }
+
         if (ctx.autoRename) {
             collectAllRenames(root, ctx);
         }
@@ -137,7 +156,7 @@ public class ExecutionEngine {
             }
         }
 
-        results.add(result);
+        addResult(result);
         ctx.rootConfigResults.add(result);
     }
 
@@ -273,7 +292,7 @@ public class ExecutionEngine {
             // 权限检查
             ImportResult permissionError = checkPermissionForPath(path, resolvedPath, ctx);
             if (permissionError != null) {
-                results.add(permissionError);
+                addResult(permissionError);
                 continue;
             }
             
@@ -345,7 +364,7 @@ public class ExecutionEngine {
                     }
                 }
                 result.success = true;
-                results.add(result);
+                addResult(result);
                 continue;
             }
 
@@ -363,7 +382,7 @@ public class ExecutionEngine {
                         result.status = "SKIP_EXISTS";
                         result.skipped = true;
                         result.message = Messages.ExecutionEngine_dirExistsSkipped();
-                        results.add(result);
+                        addResult(result);
                     }
                 } else {
                     ImportResult result = createFolderResult(path, resolvedPath, ctx);
@@ -379,7 +398,7 @@ public class ExecutionEngine {
                         result.skipped = true;
                         result.message = Messages.ExecutionEngine_dirExistsReuse();
                     }
-                    results.add(result);
+                    addResult(result);
                 }
                 ctx.createdFolders.add(fullPath);
                 continue;
@@ -408,7 +427,7 @@ public class ExecutionEngine {
                 result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
                 ctx.parentTypeErrors.add(resolvedPath);
             }
-            results.add(result);
+            addResult(result);
         }
     }
     
@@ -425,7 +444,7 @@ public class ExecutionEngine {
                 result.success = false;
                 result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
                 ctx.parentTypeErrors.add(path);
-                results.add(result);
+                addResult(result);
                 return;
             }
         }
@@ -451,7 +470,7 @@ public class ExecutionEngine {
             ctx.parentTypeErrors.add(path);
         }
 
-        results.add(result);
+        addResult(result);
         ctx.createdFolders.add(getFullPath(path, ctx));
     }
     
@@ -505,7 +524,7 @@ public class ExecutionEngine {
                 result.success = false;
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentTypeErrorSkip(parentErrorPath);
-                results.add(result);
+                addResult(result);
                 continue;
             }
 
@@ -518,7 +537,7 @@ public class ExecutionEngine {
                 result.success = false;
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentPermissionErrorSkip(parentErrorPath);
-                results.add(result);
+                addResult(result);
                 continue;
             }
 
@@ -531,20 +550,20 @@ public class ExecutionEngine {
                 result.status = "SKIP_EXISTS";
                 result.skipped = true;
                 result.message = Messages.ExecutionEngine_parentDirExistsSkipped();
-                results.add(result);
+                addResult(result);
                 continue;
             }
 
             // 权限检查
             ImportResult permissionError = checkPermissionForPath(originalPath, resolvedPath, ctx);
             if (permissionError != null) {
-                results.add(permissionError);
+                addResult(permissionError);
                 continue;
             }
 
             ImportResult result = createResult(node, resolvedPath, ctx);
             processJob(node, resolvedPath, result, ctx);
-            results.add(result);
+            addResult(result);
         }
     }
     

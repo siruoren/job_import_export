@@ -132,8 +132,6 @@
                 };
 
                 async function submit(form, extra = {}) {
-                    JenkinsModal.setLoading(true);
-
                     try {
                         const fd = new FormData(form);
                         Object.entries(extra).forEach(([k, v]) => fd.set(k, v));
@@ -152,33 +150,14 @@
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setLoading(false);
-
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
+                        if (result.async &amp;&amp; result.batchId) {
+                            showProgressBar();
+                            var progressBar = document.getElementById('importProgressBar');
+                            var progressText = document.getElementById('importProgressText');
+                            listenProgress(result.batchId, progressBar, progressText, form);
+                        } else {
+                            showImportResult(result, form);
                         }
-
-                        if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0) {
-                            buttons.unshift({
-                                text: i18n.confirmImport,
-                                type: 'primary',
-                                onClick: () => confirmRealImport(form)
-                            });
-                        }
-
-                        JenkinsModal.setFooter(buttons);
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
@@ -192,8 +171,6 @@
                 }
 
                 async function submitWithoutDryRun(form) {
-                    JenkinsModal.setLoading(true);
-
                     try {
                         const fd = new FormData(form);
                         fd.set('dryRun', 'false');
@@ -212,25 +189,14 @@
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setLoading(false);
-
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
+                        if (result.async &amp;&amp; result.batchId) {
+                            showProgressBar();
+                            var progressBar = document.getElementById('importProgressBar');
+                            var progressText = document.getElementById('importProgressText');
+                            listenProgress(result.batchId, progressBar, progressText, form);
+                        } else {
+                            showImportResult(result, form);
                         }
-
-                        JenkinsModal.setFooter(buttons);
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
@@ -460,7 +426,7 @@
                     }]);
                 }
 
-                async function confirmRealImport(form) {
+                function showProgressBar() {
                     JenkinsModal.setContent(
                         '<div style="text-align:center; padding:20px;">' +
                         '<p style="margin-bottom:16px; font-size:14px; color:#333;">' + i18n.importing + '</p>' +
@@ -472,16 +438,13 @@
                     );
                     JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(false);
+                }
+
+                async function confirmRealImport(form) {
+                    showProgressBar();
 
                     var progressBar = document.getElementById('importProgressBar');
                     var progressText = document.getElementById('importProgressText');
-                    var progressInterval = setInterval(function() {
-                        var currentWidth = parseFloat(progressBar.style.width) || 0;
-                        if (currentWidth &lt; 90) {
-                            var increment = (90 - currentWidth) * 0.08 + 0.5;
-                            progressBar.style.width = Math.min(currentWidth + increment, 90) + '%';
-                        }
-                    }, 300);
 
                     try {
                         const fd = new FormData(form);
@@ -498,56 +461,102 @@
                             body: fd
                         });
 
-                        clearInterval(progressInterval);
-                        progressBar.style.width = '100%';
-
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
-                        }
-
-                        JenkinsModal.setFooter(buttons);
-
-                        if (result.success) {
-                            showToast('success', result.message || i18n.importSuccess);
+                        if (result.async &amp;&amp; result.batchId) {
+                            listenProgress(result.batchId, progressBar, progressText, form);
                         } else {
-                            showToast('error', result.message || i18n.importFailed);
+                            progressBar.style.width = '100%';
+                            if (progressText) progressText.textContent = '';
+                            showImportResult(result, form);
                         }
 
                     } catch (e) {
-                        clearInterval(progressInterval);
                         JenkinsModal.setLoading(false);
                         showToast('error', i18n.importError.replace('{0}', e));
                     }
                 }
 
-                function listenProgress(batchId) {
-                    const es = new EventSource('${it.getUrlName()}/progress?batchId=' + batchId);
+                function showImportResult(result, form) {
+                    JenkinsModal.setContent(renderResult(result));
 
-                    es.onmessage = e => {
-                        const data = JSON.parse(e.data);
-                        showToast('info', i18n.progressStatus.replace('{0}', data.overallProgress).replace('{1}', data.currentJob));
+                    const buttons = [{
+                        text: i18n.close,
+                        type: 'default',
+                        onClick: () => JenkinsModal.close()
+                    }];
 
-                        if (data.status === 'DONE') {
-                            es.close();
-                        }
-                    };
+                    if (result.redirect &amp;&amp; !result.dryRun) {
+                        buttons.push({
+                            text: i18n.jump,
+                            type: 'primary',
+                            onClick: () => location.href = result.redirect
+                        });
+                    }
 
-                    es.onerror = () => es.close();
+                    if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0 &amp;&amp; form) {
+                        buttons.unshift({
+                            text: i18n.confirmImport,
+                            type: 'primary',
+                            onClick: () => confirmRealImport(form)
+                        });
+                    }
+
+                    JenkinsModal.setFooter(buttons);
+
+                    if (result.success) {
+                        showToast('success', result.message || i18n.importSuccess);
+                    } else {
+                        showToast('error', result.message || i18n.importFailed);
+                    }
+                }
+
+                function listenProgress(batchId, progressBar, progressText, form) {
+                    var pollTimer = null;
+
+                    function poll() {
+                        fetch('progress?batchId=' + batchId)
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (data.status === 'NOT_FOUND') {
+                                    clearInterval(pollTimer);
+                                    return;
+                                }
+
+                                if (progressBar &amp;&amp; data.overallProgress != null) {
+                                    progressBar.style.width = data.overallProgress + '%';
+                                }
+                                if (progressText) {
+                                    progressText.textContent = i18n.progressStatus.replace('{0}', data.overallProgress).replace('{1}', data.currentJob);
+                                }
+
+                                if (data.resultReady) {
+                                    clearInterval(pollTimer);
+                                    progressBar.style.width = '100%';
+                                    if (progressText) progressText.textContent = '';
+
+                                    var result = {
+                                        success: data.status !== 'ERROR',
+                                        message: data.resultMessage,
+                                        dryRun: data.dryRun,
+                                        total: data.successCount + data.failCount + data.skipCount,
+                                        successCount: data.successCount,
+                                        failCount: data.failCount,
+                                        skipCount: data.skipCount,
+                                        redirect: data.redirect,
+                                        details: data.details
+                                    };
+                                    showImportResult(result, form);
+                                }
+                            })
+                            .catch(function() {
+                                clearInterval(pollTimer);
+                            });
+                    }
+
+                    pollTimer = setInterval(poll, 500);
+                    poll();
                 }
 
                 function renderExportResult(r) {

@@ -308,42 +308,80 @@ public class JobImportExportAction implements Action {
                 }
             }
 
-            List<ImportResult> results;
-            int successCount = 0;
-            int failCount = 0;
-            int skipCount = 0;
+            String batchId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            ProgressManager progressManager = ProgressManager.getInstance();
+            progressManager.createProgress(batchId, 0);
 
-            SKIP_RELOAD.set(true);
+            Path tempZip = Files.createTempFile("jenkins-import-", ".zip");
+            Files.copy(fileItem.getInputStream(), tempZip, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
-                ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
+            String redirectUrl = (target instanceof Item) ? Jenkins.get().getRootUrl() + ((Item) target).getUrl() : null;
+            org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
 
-                boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
-                ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
-                ctx.currentFolderItem = isSubDirectoryImport ? item : null;
+            new Thread(() -> {
+                org.springframework.security.core.context.SecurityContext securityContext = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+                securityContext.setAuthentication(authentication);
+                org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
+                try {
+                int successCount = 0;
+                int failCount = 0;
+                int skipCount = 0;
+                List<ImportResult> results = new ArrayList<>();
+                boolean importSuccess = false;
 
-                ImportEngine engine = new ImportEngine();
-                results = engine.importZip(zis, ctx);
+                SKIP_RELOAD.set(true);
+                try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(tempZip), StandardCharsets.UTF_8)) {
+                    ImportContext ctx = new ImportContext(dryRun, overwrite, rename, itemGroup);
 
-                for (ImportResult result : results) {
-                    if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                            || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
-                        successCount++;
-                    } else if (result.statusEnum == Status.ERROR) {
-                        failCount++;
-                    } else {
-                        skipCount++;
+                    boolean isSubDirectoryImport = (item instanceof ItemGroup) && !(item.getParent() instanceof Jenkins);
+                    ctx.applyRootConfigToCurrentFolder = isSubDirectoryImport;
+                    ctx.currentFolderItem = isSubDirectoryImport ? item : null;
+
+                    ImportEngine engine = new ImportEngine();
+                    results = engine.importZipWithProgress(zis, ctx, (result, currentIndex, totalCount) -> {
+                        if (totalCount > 0) {
+                            progressManager.createProgress(batchId, totalCount);
+                        }
+                        progressManager.updateProgress(batchId, result.finalName, currentIndex, result.status, result.message);
+                    });
+
+                    for (ImportResult result : results) {
+                        if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                                || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
+                            successCount++;
+                        } else if (result.statusEnum == Status.ERROR) {
+                            failCount++;
+                        } else {
+                            skipCount++;
+                        }
                     }
+                    importSuccess = true;
+                } catch (Exception e) {
+                    progressManager.setErrorResult(batchId, e.getMessage(), successCount, failCount, skipCount, results, dryRun, redirectUrl);
+                } finally {
+                    SKIP_RELOAD.remove();
+                    try { Files.deleteIfExists(tempZip); } catch (Exception ignored) {}
                 }
-            } finally {
-                SKIP_RELOAD.remove();
-            }
 
-            if (!dryRun) {
-                safeReload();
-            }
+                if (importSuccess) {
+                    if (!dryRun) {
+                        safeReload();
+                    }
 
-            writeBatchJson(rsp, true, dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete(), successCount, failCount, skipCount, results, dryRun);
+                    String message = dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete();
+                    progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, redirectUrl);
+                }
+
+                try { Thread.sleep(30000); } catch (InterruptedException ignored) {}
+                progressManager.removeProgress(batchId);
+                } finally {
+                    org.springframework.security.core.context.SecurityContextHolder.clearContext();
+                }
+            }).start();
+
+            rsp.setCharacterEncoding("UTF-8");
+            rsp.setContentType("application/json;charset=UTF-8");
+            rsp.getWriter().write("{\"success\":true,\"batchId\":\"" + batchId + "\",\"async\":true}");
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -382,6 +420,64 @@ public class JobImportExportAction implements Action {
         rsp.getWriter().write(json);
     }
 
+    public void doProgress(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        req.setCharacterEncoding("UTF-8");
+        rsp.setContentType("application/json;charset=UTF-8");
+        rsp.setCharacterEncoding("UTF-8");
+
+        String batchId = req.getParameter("batchId");
+        if (batchId == null || batchId.isEmpty()) {
+            rsp.getWriter().write("{\"status\":\"NOT_FOUND\"}");
+            return;
+        }
+
+        ProgressManager progressManager = ProgressManager.getInstance();
+        ImportProgress progress = progressManager.getProgress(batchId);
+
+        if (progress == null) {
+            rsp.getWriter().write("{\"status\":\"NOT_FOUND\"}");
+            return;
+        }
+
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"batchId\":\"").append(escapeJson(progress.getBatchId())).append("\",");
+        json.append("\"currentJob\":\"").append(escapeJson(progress.getCurrentJob() != null ? progress.getCurrentJob() : "")).append("\",");
+        json.append("\"currentJobIndex\":").append(progress.getCurrentJobIndex()).append(",");
+        json.append("\"totalJobs\":").append(progress.getTotalJobs()).append(",");
+        json.append("\"overallProgress\":").append(progress.getOverallProgress()).append(",");
+        json.append("\"status\":\"").append(escapeJson(progress.getStatus())).append("\",");
+        json.append("\"message\":\"").append(escapeJson(progress.getMessage() != null ? progress.getMessage() : "")).append("\"");
+
+        if (progress.isResultReady()) {
+            json.append(",\"resultReady\":true");
+            json.append(",\"resultMessage\":\"").append(escapeJson(progress.getResultMessage() != null ? progress.getResultMessage() : "")).append("\"");
+            json.append(",\"successCount\":").append(progress.getSuccessCount());
+            json.append(",\"failCount\":").append(progress.getFailCount());
+            json.append(",\"skipCount\":").append(progress.getSkipCount());
+            json.append(",\"dryRun\":").append(progress.isDryRun());
+            json.append(",\"redirect\":\"").append(escapeJson(progress.getRedirect() != null ? progress.getRedirect() : "")).append("\"");
+            json.append(",\"details\":[");
+            List<ImportResult> details = progress.getDetails();
+            for (int i = 0; i < details.size(); i++) {
+                ImportResult r = details.get(i);
+                if (i > 0) json.append(",");
+                json.append("{");
+                json.append("\"jobPath\":\"").append(escapeJson(r.displayPath != null ? r.displayPath : r.jobName)).append("\",");
+                json.append("\"finalName\":\"").append(escapeJson(r.finalName)).append("\",");
+                json.append("\"fullPath\":\"").append(escapeJson(r.fullPath != null ? r.fullPath : r.finalName)).append("\",");
+                json.append("\"status\":\"").append(escapeJson(r.status)).append("\",");
+                json.append("\"message\":\"").append(escapeJson(r.message)).append("\"");
+                json.append("}");
+            }
+            json.append("]");
+        }
+
+        json.append("}");
+
+        rsp.getWriter().write(json.toString());
+    }
+
     private void writeBatchJson(
             StaplerResponse rsp,
             boolean success,
@@ -390,7 +486,8 @@ public class JobImportExportAction implements Action {
             int failCount,
             int skipCount,
             List<ImportResult> results,
-            boolean dryRun) throws IOException {
+            boolean dryRun,
+            String batchId) throws IOException {
 
         rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
@@ -441,6 +538,7 @@ public class JobImportExportAction implements Action {
                 + "\"successCount\":" + successCount + ","
                 + "\"failCount\":" + failCount + ","
                 + "\"skipCount\":" + skipCount + ","
+                + "\"batchId\":\"" + escapeJson(batchId != null ? batchId : "") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 

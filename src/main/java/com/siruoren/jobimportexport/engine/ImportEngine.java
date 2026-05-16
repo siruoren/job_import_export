@@ -24,6 +24,26 @@ public class ImportEngine {
         return executionEngine.execute(root, ctx);
     }
 
+    public List<ImportResult> importZipWithProgress(ZipInputStream zipInputStream, ImportContext ctx, ExecutionEngine.ProgressCallback callback) throws IOException {
+        TreeNode root = treeBuilder.buildTree(zipInputStream);
+        executionEngine.setProgressCallback(callback);
+        try {
+            return executionEngine.execute(root, ctx);
+        } finally {
+            executionEngine.setProgressCallback(null);
+        }
+    }
+
+    public List<ImportResult> importZipWithProgress(List<String> zipPaths, ImportContext ctx, ExecutionEngine.ProgressCallback callback) {
+        TreeNode root = treeBuilder.buildTree(zipPaths);
+        executionEngine.setProgressCallback(callback);
+        try {
+            return executionEngine.execute(root, ctx);
+        } finally {
+            executionEngine.setProgressCallback(null);
+        }
+    }
+
     public TreeNode buildTree(List<String> zipPaths) {
         return treeBuilder.buildTree(zipPaths);
     }
