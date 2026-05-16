@@ -342,7 +342,7 @@ public class JobImportExportAction implements Action {
                         if (totalCount > 0) {
                             progressManager.createProgress(batchId, totalCount);
                         }
-                        progressManager.updateProgress(batchId, result.finalName, currentIndex, result.status, result.message);
+                        progressManager.updateProgress(batchId, result.fullPath != null ? result.fullPath : result.finalName, currentIndex, result.status, result.message);
                     });
 
                     for (ImportResult result : results) {
