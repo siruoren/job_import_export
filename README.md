@@ -47,56 +47,201 @@
 | `progress` | GET | 查询导入进度 | - |
 | `list` | GET | 列出Job/文件夹列表 | Item.READ |
 
+#### API 快速入门
+
+**API 文档页面**：访问 `${JENKINS_URL}/jobImportExport/api/` 即可查看可视化 API 文档，支持在线测试。只需输入用户名密码，系统自动处理认证和 CSRF crumb。
+
 #### API 调用示例
 
+**1. 设置环境变量（推荐）**
+
 ```bash
-# 导出单个Job配置
-curl -X POST -u user:apiToken \
-  "http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"
+# 设置 Jenkins 连接信息
+JENKINS_URL="http://localhost:8080/jenkins"
+USERNAME="admin"
+PASSWORD="admin"
 
-# 导出文件夹（可选包含当前文件夹配置）
-curl -X POST -u user:apiToken \
-  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true"
+# 获取 CSRF crumb（兼容 Linux/macOS）
+CRUMB=$(curl -s -u ${USERNAME}:${PASSWORD} "${JENKINS_URL}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+```
 
-# 导出全部
-curl -X POST -u user:apiToken \
-  "http://jenkins/jobImportExport/api/exportAll"
+**2. 导出功能**
 
-# 导入ZIP文件
-curl -X POST -u user:apiToken \
+```bash
+# 导出单个任务配置（返回 JSON）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-folder/my-job"
+
+# 导出单个任务并直接下载 XML
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-job&download=true" \
+  -o job-config.xml
+
+# 导出文件夹（包含当前文件夹配置）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true"
+
+# 导出文件夹并直接下载 ZIP（推荐）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true&download=true" \
+  -o my-folder-backup.zip
+
+# 导出全部任务（管理员权限）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportAll?download=true" \
+  -o jenkins-full-backup.zip
+```
+
+**3. 导入功能**
+
+```bash
+# 预演导入（不实际创建，仅检查）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
   -F "zipFile=@jobs.zip" \
   -F "overwrite=false" \
   -F "rename=true" \
-  -F "dryRun=false" \
-  -F "targetFolder=my-folder" \
-  "http://jenkins/jobImportExport/api/import"
+  "${JENKINS_URL}/jobImportExport/api/preview"
 
-# 预演导入
-curl -X POST -u user:apiToken \
+# 导入到根目录
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
   -F "zipFile=@jobs.zip" \
   -F "overwrite=false" \
   -F "rename=true" \
-  -F "targetFolder=my-folder" \
-  "http://jenkins/jobImportExport/api/preview"
+  "${JENKINS_URL}/jobImportExport/api/import"
 
-# 更新Job配置（支持文件上传或直接传XML内容）
-curl -X POST -u user:apiToken \
+# 导入到指定文件夹
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=true" \
+  -F "rename=false" \
+  -F "targetFolder=target-folder" \
+  "${JENKINS_URL}/jobImportExport/api/import"
+```
+
+**4. 更新与查询**
+
+```bash
+# 更新任务配置（上传文件）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
   -F "job=my-job" \
   -F "xmlFile=@config.xml" \
-  "http://jenkins/jobImportExport/api/updateJob"
+  "${JENKINS_URL}/jobImportExport/api/updateJob"
 
-# 或直接传递XML内容
-curl -X POST -u user:apiToken \
-  -d "job=my-job&configXml=<project>...</project>" \
-  "http://jenkins/jobImportExport/api/updateJob"
+# 更新任务配置（直接传XML内容）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -d "job=my-job&configXml=<project><description>Updated job</description></project>" \
+  "${JENKINS_URL}/jobImportExport/api/updateJob"
 
 # 查询导入进度
-curl -u user:apiToken \
-  "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+curl -u ${USERNAME}:${PASSWORD} \
+  "${JENKINS_URL}/jobImportExport/api/progress?batchId=abc12345"
 
-# 列出Job
-curl -u user:apiToken \
-  "http://jenkins/jobImportExport/api/list?folder=my-folder"
+# 列出任务
+curl -u ${USERNAME}:${PASSWORD} \
+  "${JENKINS_URL}/jobImportExport/api/list?folder=my-folder"
+```
+
+#### 完整功能案例
+
+**案例 1：Jenkins 任务迁移**
+
+```bash
+# 从源 Jenkins 导出生产环境任务
+JENKINS_SOURCE="http://source-jenkins:8080"
+CRUMB_SOURCE=$(curl -s -u admin:token "${JENKINS_SOURCE}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_SOURCE}" \
+  "${JENKINS_SOURCE}/jobImportExport/api/exportFolder?folder=production&includeCurrentConfig=true&download=true" \
+  -o production-backup.zip
+
+# 导入到目标 Jenkins
+JENKINS_TARGET="http://target-jenkins:8080"
+CRUMB_TARGET=$(curl -s -u admin:token "${JENKINS_TARGET}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+# 先预演
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_TARGET}" \
+  -F "zipFile=@production-backup.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_TARGET}/jobImportExport/api/preview"
+
+# 确认无误后执行导入
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_TARGET}" \
+  -F "zipFile=@production-backup.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_TARGET}/jobImportExport/api/import"
+```
+
+**案例 2：定时备份 Jenkins 任务**
+
+创建 `jenkins-backup.sh` 脚本：
+
+```bash
+#!/bin/bash
+# Jenkins 定时备份脚本
+
+JENKINS_URL="http://localhost:8080/jenkins"
+USERNAME="admin"
+PASSWORD="your-api-token"
+BACKUP_DIR="/backup/jenkins"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# 创建备份目录
+mkdir -p ${BACKUP_DIR}
+
+# 获取 crumb
+CRUMB=$(curl -s -u ${USERNAME}:${PASSWORD} "${JENKINS_URL}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+# 导出全部任务
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportAll?download=true" \
+  -o "${BACKUP_DIR}/jenkins_backup_${DATE}.zip"
+
+# 保留最近 7 天的备份
+find ${BACKUP_DIR} -name "jenkins_backup_*.zip" -mtime +7 -delete
+
+echo "Backup completed: jenkins_backup_${DATE}.zip"
+```
+
+添加到 cron 定时任务：
+```bash
+# 每天凌晨 2 点执行备份
+0 2 * * * /path/to/jenkins-backup.sh >> /var/log/jenkins-backup.log 2>&1
+```
+
+**案例 3：批量更新任务配置**
+
+```bash
+# 导出任务配置
+curl -X POST -u admin:admin \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-job&download=true" \
+  -o original-config.xml
+
+# 修改配置（示例：更新描述）
+sed -i 's/<description>.*<\/description>/<description>Updated by API<\/description>/g' original-config.xml
+
+# 重新导入
+curl -X POST -u admin:admin \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -F "job=my-job" \
+  -F "xmlFile=@original-config.xml" \
+  "${JENKINS_URL}/jobImportExport/api/updateJob"
 ```
 
 #### API 响应格式

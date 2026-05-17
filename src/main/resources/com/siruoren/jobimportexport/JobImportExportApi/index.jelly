@@ -58,6 +58,17 @@
                 <h1>${%page.heading}</h1>
                 <p class="subtitle">${%page.subtitle}</p>
 
+                <div style="display: flex; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px;">Jenkins Username</label>
+                        <input type="text" id="jenkins-username" placeholder="admin" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;" />
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px;">Jenkins Password/API Token</label>
+                        <input type="password" id="jenkins-password" placeholder="admin or api-token" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;" />
+                    </div>
+                </div>
+
                 <div class="info-box">${%info.crumb}</div>
                 <div class="warn-box">${%info.permission}</div>
 
@@ -78,14 +89,20 @@
                             <tr><td>job</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%exportJob.param.job}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Export job config</span>
+<span class="cmt"># Export job config (returns JSON)</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
-  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job"</span>
+
+<span class="cmt"># Export and download XML file directly</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job&amp;download=true"</span> \
+  -o <span class="str">"job-config.xml"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -123,27 +140,41 @@
                             <tr><td>includeCurrentConfig</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%exportFolder.param.includeCurrentConfig}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Export folder</span>
+<span class="cmt"># Export folder (returns JSON with Base64 ZIP)</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
-  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true"</span>
+
+<span class="cmt"># Export folder and download ZIP directly (recommended)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true&amp;download=true"</span> \
+  -o <span class="str">"folder-export.zip"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
-  "message": "Export successful",
+  "message": "Export complete: 6 succeeded, 0 skipped, 0 failed",
   "sourceFolder": "my-folder",
-  "includeCurrentConfig": false,
-  "total": 10,
-  "successCount": 8,
-  "skipCount": 2,
+  "includeCurrentConfig": true,
+  "total": 6,
+  "successCount": 6,
+  "skipCount": 0,
   "failCount": 0,
   "zipData": "UEsDBAoAAAAA...",
   "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
-  "details": [...]
+  "details": [
+    {
+      "jobPath": "my-folder",
+      "fullPath": "my-folder",
+      "status": "Exported",
+      "statusCode": "EXPORTED",
+      "message": "Exported current directory job configuration"
+    }
+  ]
 }</div>
                         <button class="try-it-btn" onclick="toggleTryIt('exportFolder')">${%label.tryIt}</button>
                         <div class="try-it-panel" id="tryit-exportFolder">
@@ -172,23 +203,29 @@
                         <p>${%exportAll.detail}</p>
                         <p><strong>${%label.permission}：</strong><span class="permission-badge perm-admin">Jenkins.ADMINISTER</span></p>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Export all jobs</span>
+<span class="cmt"># Export all jobs (returns JSON with Base64 ZIP)</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
-  <span class="url">"${rootURL}/jobImportExport/api/exportAll"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/exportAll"</span>
+
+<span class="cmt"># Export all jobs and download ZIP directly</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportAll?download=true"</span> \
+  -o <span class="str">"all-jobs.zip"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
-  "message": "Export successful",
+  "message": "Export complete: 10 succeeded, 0 skipped, 0 failed",
   "sourceFolder": "root",
   "includeCurrentConfig": false,
   "total": 10,
-  "successCount": 8,
-  "skipCount": 2,
+  "successCount": 10,
+  "skipCount": 0,
   "failCount": 0,
   "zipData": "UEsDBAoAAAAA...",
   "zipFileName": "jenkins-all-jobs_2026-05-17_12-00-00.zip",
@@ -223,11 +260,19 @@
                             <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Import jobs</span>
+<span class="cmt"># Import jobs (basic)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
+  <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
+  <span class="flag">-F</span> <span class="str">"rename=true"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/import"</span>
+
+<span class="cmt"># Import with all options</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
@@ -295,11 +340,11 @@
                             <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Preview import</span>
+<span class="cmt"># Preview import (dry-run mode)</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
@@ -362,21 +407,21 @@
                             <tr><td>configXml</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%updateJob.param.configXml}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
 <span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
-  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
 
-<span class="cmt"># Upload XML file</span>
+<span class="cmt"># Update job by uploading XML file</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
-  <span class="flag">-F</span> <span class="str">"job=my-job"</span> \
+  <span class="flag">-F</span> <span class="str">"job=my-folder/my-job"</span> \
   <span class="flag">-F</span> <span class="str">"xmlFile=@config.xml"</span> \
   <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span>
 
-<span class="cmt"># Or pass XML content directly</span>
+<span class="cmt"># Update job by passing XML content directly</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
   -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
-  <span class="flag">-d</span> <span class="str">"job=my-job&amp;configXml=&lt;project&gt;...&lt;/project&gt;"</span> \
+  <span class="flag">-d</span> <span class="str">"job=my-folder/my-job&amp;configXml=&lt;project&gt;...&lt;/project&gt;"</span> \
   <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
@@ -513,6 +558,27 @@
                 var jenkinsRootUrl = '${rootURL}';
                 var apiBaseUrl = jenkinsRootUrl + '/jobImportExport/api';
 
+                function getAuthHeader() {
+                    var username = document.getElementById('jenkins-username').value;
+                    var password = document.getElementById('jenkins-password').value;
+                    if (username && password) {
+                        var credentials = username + ':' + password;
+                        var auth = btoa(unescape(encodeURIComponent(credentials)));
+                        return 'Basic ' + auth;
+                    }
+                    return null;
+                }
+
+                function fetchWithAuth(url, options) {
+                    options = options || {};
+                    options.headers = options.headers || {};
+                    var authHeader = getAuthHeader();
+                    if (authHeader) {
+                        options.headers['Authorization'] = authHeader;
+                    }
+                    return fetch(url, options);
+                }
+
                 function toggleSection(name) {
                     var section = document.getElementById('section-' + name);
                     if (section) section.classList.toggle('expanded');
@@ -540,7 +606,7 @@
                         });
                         var url = endpoint + (params.length > 0 ? '?' + params.join('&amp;') : '');
 
-                        fetch(url, { method: 'GET' })
+                        fetchWithAuth(url, { method: 'GET' })
                             .then(function(r) { return r.text(); })
                             .then(function(text) {
                                 try {
@@ -579,17 +645,17 @@
                             }
                         });
 
-                        fetch(jenkinsRootUrl + '/crumbIssuer/api/json')
+                        fetchWithAuth(jenkinsRootUrl + '/crumbIssuer/api/json')
                             .then(function(r) { return r.json(); })
                             .then(function(crumbData) {
                                 var headers = {};
-                                if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
+                                if (crumbData && crumbData.crumbRequestField && crumbData.crumb) {
                                     headers[crumbData.crumbRequestField] = crumbData.crumb;
                                 }
-                                return fetch(endpoint, { method: 'POST', body: fd, headers: headers });
+                                return fetchWithAuth(endpoint, { method: 'POST', body: fd, headers: headers });
                             })
                             .catch(function() {
-                                return fetch(endpoint, { method: 'POST', body: fd });
+                                return fetchWithAuth(endpoint, { method: 'POST', body: fd });
                             })
                             .then(function(r) { return r.text(); })
                             .then(function(text) {
