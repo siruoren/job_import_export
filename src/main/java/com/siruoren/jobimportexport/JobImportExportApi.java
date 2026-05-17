@@ -8,11 +8,9 @@ import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.Status;
 import com.siruoren.jobimportexport.engine.model.LocaleHolder;
 import com.siruoren.jobimportexport.util.JsonUtil;
-import hudson.Extension;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
-import hudson.model.RootAction;
 import hudson.security.AccessControlled;
 import jenkins.model.Jenkins;
 import jenkins.model.ModifiableTopLevelItemGroup;
@@ -29,7 +27,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -39,23 +36,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.zip.ZipInputStream;
 
-@Extension
-public class JobImportExportApi implements RootAction {
-
-    @Override
-    public String getIconFileName() {
-        return null;
-    }
-
-    @Override
-    public String getDisplayName() {
-        return "Job Import/Export API";
-    }
-
-    @Override
-    public String getUrlName() {
-        return "jobImportExport/api";
-    }
+public class JobImportExportApi {
 
     public Object getIndex() {
         return this;
@@ -82,7 +63,7 @@ public class JobImportExportApi implements RootAction {
 
             item.checkPermission(Item.READ);
 
-            Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+            Path configFile = Path.of(item.getRootDir().getAbsolutePath(), "config.xml");
             if (!Files.exists(configFile)) {
                 writeError(rsp, 404, Messages.JobImportExportAction_noConfigFile());
                 return;
@@ -443,27 +424,17 @@ public class JobImportExportApi implements RootAction {
             try (InputStream safeStream = safeXml(xmlBytes)) {
                 item.updateByXml(new StreamSource(safeStream));
             } catch (IOException e) {
-                if (e.getMessage() != null && e.getMessage().contains("Expecting class")) {
-                    writeError(rsp, 400, Messages.JobImportExportAction_typeMismatch(e.getMessage()));
-                    return;
-                } else {
-                    writeError(rsp, 400, Messages.JobImportExportAction_xmlParseFailed(e.getMessage()));
-                    return;
-                }
+                writeError(rsp, 500, Messages.JobImportExportAction_updateFailed(e.getMessage()));
+                return;
             }
-
-            item.doReload();
-
-            AbstractItem refreshedItem = Jenkins.get().getItemByFullName(jobName, AbstractItem.class);
-            String redirectUrl = refreshedItem != null ? Jenkins.get().getRootUrl() + refreshedItem.getUrl() : null;
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("message", Messages.JobImportExportAction_updateSuccess());
             result.put("job", jobName);
             result.put("jobType", item instanceof ItemGroup ? "folder" : "job");
-            result.put("jobUrl", redirectUrl);
-            result.put("redirect", redirectUrl);
+            result.put("jobUrl", Jenkins.get().getRootUrl() + item.getUrl());
+            result.put("redirect", Jenkins.get().getRootUrl() + item.getUrl());
             rsp.getWriter().write(JsonUtil.toJson(result));
 
         } catch (Exception e) {
@@ -478,7 +449,7 @@ public class JobImportExportApi implements RootAction {
         try {
             String batchId = req.getParameter("batchId");
             if (batchId == null || batchId.isEmpty()) {
-                writeError(rsp, 400, Messages.JobImportExportApi_missingParam("batchId"));
+                writeError(rsp, 400, Messages.JobImportExportSidebarLink_missingBatchId());
                 return;
             }
 
@@ -486,32 +457,33 @@ public class JobImportExportApi implements RootAction {
             ImportProgress progress = progressManager.getProgress(batchId);
 
             if (progress == null) {
-                Map<String, Object> result = new LinkedHashMap<>();
-                result.put("status", "NOT_FOUND");
-                result.put("message", Messages.JobImportExportApi_progressNotFound(batchId));
-                rsp.getWriter().write(JsonUtil.toJson(result));
+                writeError(rsp, 404, Messages.JobImportExportApi_progressNotFound(batchId));
                 return;
             }
 
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("batchId", progress.getBatchId());
-            result.put("currentJob", progress.getCurrentJob());
+            result.put("batchId", batchId);
+            result.put("currentJob", progress.getCurrentJob() != null ? progress.getCurrentJob() : "");
             result.put("currentJobIndex", progress.getCurrentJobIndex());
             result.put("totalJobs", progress.getTotalJobs());
             result.put("overallProgress", progress.getOverallProgress());
-            result.put("status", progress.getStatus());
-            result.put("message", progress.getMessage());
+            result.put("status", progress.getStatus() != null ? progress.getStatus() : "");
+            result.put("message", progress.getMessage() != null ? progress.getMessage() : "");
 
             if (progress.isResultReady()) {
                 result.put("resultReady", true);
-                result.put("resultMessage", progress.getResultMessage());
+                result.put("resultMessage", progress.getResultMessage() != null ? progress.getResultMessage() : "");
                 result.put("total", progress.getSuccessCount() + progress.getFailCount() + progress.getSkipCount());
                 result.put("successCount", progress.getSuccessCount());
                 result.put("failCount", progress.getFailCount());
                 result.put("skipCount", progress.getSkipCount());
                 result.put("dryRun", progress.isDryRun());
-                result.put("redirect", progress.getRedirect());
-                result.put("details", buildImportDetails(progress.getDetails()));
+                if (progress.getRedirect() != null) {
+                    result.put("redirect", progress.getRedirect());
+                }
+                if (progress.getDetails() != null) {
+                    result.put("details", buildImportDetails(progress.getDetails()));
+                }
             }
 
             rsp.getWriter().write(JsonUtil.toJson(result));
@@ -527,6 +499,7 @@ public class JobImportExportApi implements RootAction {
 
         try {
             String folder = req.getParameter("folder");
+
             ItemGroup<?> target;
 
             if (folder != null && !folder.isEmpty()) {

@@ -81,6 +81,10 @@ public class JobImportExportSidebarLink implements RootAction {
         return this;
     }
 
+    public JobImportExportApi getApi() {
+        return new JobImportExportApi();
+    }
+
     public boolean hasPermission() {
         return Jenkins.get().hasPermission(Item.CREATE);
     }

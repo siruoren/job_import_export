@@ -20,9 +20,13 @@
 
 ### REST API
 
-插件提供完整的 REST API 接口，支持外部工具程序化地调用导入/导出功能。
+插件提供完整的 REST API 接口，支持外部工具程序化调用导入/导出功能。
 
-**API 路径前缀**：`/jobImportExport/api/`
+**API 文档页面**：可通过 Jenkins 侧边栏「API 文档」入口访问 `http://jenkins/jobImportExport/api/`，提供 Swagger 风格的可视化 API 文档：
+- 支持在线「Try it out」功能，直接填写参数并发送请求查看响应
+- 包含完整的参数说明、cURL 示例、响应示例
+- 权限徽章显示各端点所需权限
+- 支持中英双语自动切换
 
 #### API 权限说明
 

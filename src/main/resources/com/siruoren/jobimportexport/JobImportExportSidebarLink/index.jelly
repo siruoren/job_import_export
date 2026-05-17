@@ -886,6 +886,23 @@
                 </div>
             </j:if>
 
+            <div style="width:100%; margin-top:20px; padding:16px; background-color:#e3f2fd; border:1px solid #b3d9ff; border-radius:6px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-size:20px;">📡</span>
+                    <div style="flex:1;">
+                        <h3 style="margin:0 0 4px 0; font-size:14px; color:#1565c0;">${%api.section.title}</h3>
+                        <p style="margin:0; font-size:12px; color:#1976d2;">${%api.section.desc}</p>
+                    </div>
+                    <a href="${rootURL}/jobImportExport/api/" 
+                       target="_blank"
+                       style="display:inline-block; padding:6px 14px; background:#1976d2; color:#fff; border-radius:4px; font-size:13px; font-weight:500; text-decoration:none; transition:background .2s;"
+                       onmouseover="this.style.background='#1565c0'"
+                       onmouseout="this.style.background='#1976d2'">
+                        ${%api.btn}
+                    </a>
+                </div>
+            </div>
+
             </div>
         </l:main-panel>
     </l:layout>

@@ -22,7 +22,11 @@ A powerful Jenkins plugin that enables convenient importing, exporting, and upda
 
 The plugin provides a complete REST API interface, supporting external tools to programmatically call import/export functions.
 
-**API Path Prefix**: `/jobImportExport/api/`
+**API Documentation Page**: Accessible via Jenkins sidebar "API Documentation" link at `http://jenkins/jobImportExport/api/`, providing Swagger-style visual API documentation:
+- Supports "Try it out" feature - fill parameters and send requests directly to see responses
+- Includes complete parameter descriptions, cURL examples, and response examples
+- Permission badges show required permissions for each endpoint
+- Auto-switch between English and Chinese based on Jenkins locale
 
 #### API Permission Notes
 
