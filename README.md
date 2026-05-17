@@ -43,7 +43,7 @@
 | `exportAll` | POST | 导出所有Job为ZIP（Base64编码） | Jenkins.ADMINISTER |
 | `import` | POST | 从ZIP文件导入Job | Item.CREATE |
 | `preview` | POST | 预演导入（dry-run模式） | Item.CREATE |
-| `updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
+| `updateJob` | POST | 更新Job的config.xml（需用xmlFile参数） | Item.CONFIGURE |
 | `progress` | GET | 查询导入进度 | - |
 | `list` | GET | 列出Job/文件夹列表 | Item.READ |
 
@@ -53,7 +53,96 @@
 
 #### API 调用示例
 
-**1. 设置环境变量（推荐）**
+> **推荐使用 Python requests 库**：curl 命令在某些环境下 POST 请求的 crumb 验证存在兼容性问题，建议使用 Python requests 库的会话方式。
+
+**1. Python requests 库（推荐）**
+
+```python
+import requests
+import json
+
+# 配置
+JENKINS_URL = "http://localhost:8080/jenkins"
+USERNAME = "admin"
+PASSWORD = "admin"
+
+# 创建会话，自动处理认证
+session = requests.Session()
+session.auth = (USERNAME, PASSWORD)
+
+def get_crumb():
+    """获取 CSRF crumb"""
+    resp = session.get(f"{JENKINS_URL}/crumbIssuer/api/json")
+    data = resp.json()
+    return data['crumb'], data['crumbRequestField']
+
+def api_call(method, endpoint, params=None, data=None, files=None):
+    """统一 API 调用方法"""
+    crumb, crumb_field = get_crumb()
+    headers = {crumb_field: crumb}
+    
+    if method == "GET":
+        resp = session.get(f"{JENKINS_URL}{endpoint}", headers=headers, params=params)
+    elif files:
+        resp = session.post(f"{JENKINS_URL}{endpoint}", headers=headers, data=data, files=files, params=params)
+    else:
+        resp = session.post(f"{JENKINS_URL}{endpoint}", headers=headers, data=data, params=params)
+    
+    return resp.json()
+
+# 列出任务列表
+result = api_call("GET", "/jobImportExport/api/list")
+print(f"任务总数: {result['totalCount']}")
+
+# 导出单个任务（返回 JSON）
+result = api_call("POST", "/jobImportExport/api/exportJob", params={"job": "my-job"})
+print(f"配置XML: {result['configXml']}")
+
+# 导出文件夹并下载 ZIP
+resp = requests.get(f"{JENKINS_URL}/jobImportExport/api/exportFolder", 
+                    auth=(USERNAME, PASSWORD), params={"folder": "my-folder", "download": "true"})
+with open("backup.zip", "wb") as f:
+    f.write(resp.content)
+
+# 导出全部任务（管理员）
+resp = requests.get(f"{JENKINS_URL}/jobImportExport/api/exportAll",
+                    auth=(USERNAME, PASSWORD), params={"download": "true"})
+with open("full-backup.zip", "wb") as f:
+    f.write(resp.content)
+
+# 预演导入（dry-run）
+with open("jobs.zip", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/preview",
+                      data={"overwrite": "false", "rename": "true"},
+                      files={"zipFile": ("jobs.zip", f, "application/zip")})
+print(f"将导入 {result['total']} 个任务")
+
+# 执行导入（异步）
+with open("jobs.zip", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/import",
+                      data={"overwrite": "false", "rename": "true"},
+                      files={"zipFile": ("jobs.zip", f, "application/zip")})
+    batch_id = result['batchId']
+    print(f"导入已提交，batchId: {batch_id}")
+
+# 查询导入进度
+import time
+while True:
+    result = api_call("GET", "/jobImportExport/api/progress", params={"batchId": batch_id})
+    print(f"进度: {result['overallProgress']}% - {result['message']}")
+    if result['status'] == "DONE":
+        break
+    time.sleep(1)
+
+# 更新任务配置（使用 xmlFile 参数）
+with open("config.xml", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/updateJob",
+                      data={"job": "my-job"},
+                      files={"xmlFile": ("config.xml", f, "application/xml")})
+print(f"更新结果: {result['message']}")
+```
+
+**2. curl 命令（备选，注意兼容性问题）**
 
 ```bash
 # 设置 Jenkins 连接信息
@@ -61,13 +150,9 @@ JENKINS_URL="http://localhost:8080/jenkins"
 USERNAME="admin"
 PASSWORD="admin"
 
-# 获取 CSRF crumb（兼容 Linux/macOS）
+# 获取 CSRF crumb
 CRUMB=$(curl -s -u ${USERNAME}:${PASSWORD} "${JENKINS_URL}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
-```
 
-**2. 导出功能**
-
-```bash
 # 导出单个任务配置（返回 JSON）
 curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
@@ -79,12 +164,7 @@ curl -X POST -u ${USERNAME}:${PASSWORD} \
   "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-job&download=true" \
   -o job-config.xml
 
-# 导出文件夹（包含当前文件夹配置）
-curl -X POST -u ${USERNAME}:${PASSWORD} \
-  -H "Jenkins-Crumb: ${CRUMB}" \
-  "${JENKINS_URL}/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true"
-
-# 导出文件夹并直接下载 ZIP（推荐）
+# 导出文件夹并直接下载 ZIP
 curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
   "${JENKINS_URL}/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true&download=true" \
@@ -95,11 +175,7 @@ curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
   "${JENKINS_URL}/jobImportExport/api/exportAll?download=true" \
   -o jenkins-full-backup.zip
-```
 
-**3. 导入功能**
-
-```bash
 # 预演导入（不实际创建，仅检查）
 curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
@@ -108,7 +184,7 @@ curl -X POST -u ${USERNAME}:${PASSWORD} \
   -F "rename=true" \
   "${JENKINS_URL}/jobImportExport/api/preview"
 
-# 导入到根目录
+# 执行导入
 curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
   -F "zipFile=@jobs.zip" \
@@ -116,30 +192,11 @@ curl -X POST -u ${USERNAME}:${PASSWORD} \
   -F "rename=true" \
   "${JENKINS_URL}/jobImportExport/api/import"
 
-# 导入到指定文件夹
-curl -X POST -u ${USERNAME}:${PASSWORD} \
-  -H "Jenkins-Crumb: ${CRUMB}" \
-  -F "zipFile=@jobs.zip" \
-  -F "overwrite=true" \
-  -F "rename=false" \
-  -F "targetFolder=target-folder" \
-  "${JENKINS_URL}/jobImportExport/api/import"
-```
-
-**4. 更新与查询**
-
-```bash
-# 更新任务配置（上传文件）
+# 更新任务配置（必须使用 xmlFile 参数上传文件）
 curl -X POST -u ${USERNAME}:${PASSWORD} \
   -H "Jenkins-Crumb: ${CRUMB}" \
   -F "job=my-job" \
   -F "xmlFile=@config.xml" \
-  "${JENKINS_URL}/jobImportExport/api/updateJob"
-
-# 更新任务配置（直接传XML内容）
-curl -X POST -u ${USERNAME}:${PASSWORD} \
-  -H "Jenkins-Crumb: ${CRUMB}" \
-  -d "job=my-job&configXml=<project><description>Updated job</description></project>" \
   "${JENKINS_URL}/jobImportExport/api/updateJob"
 
 # 查询导入进度
@@ -148,7 +205,7 @@ curl -u ${USERNAME}:${PASSWORD} \
 
 # 列出任务
 curl -u ${USERNAME}:${PASSWORD} \
-  "${JENKINS_URL}/jobImportExport/api/list?folder=my-folder"
+  "${JENKINS_URL}/jobImportExport/api/list"
 ```
 
 #### 完整功能案例
@@ -226,22 +283,46 @@ echo "Backup completed: jenkins_backup_${DATE}.zip"
 
 **案例 3：批量更新任务配置**
 
-```bash
-# 导出任务配置
-curl -X POST -u admin:admin \
-  -H "Jenkins-Crumb: ${CRUMB}" \
-  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-job&download=true" \
-  -o original-config.xml
+```python
+import requests
 
-# 修改配置（示例：更新描述）
-sed -i 's/<description>.*<\/description>/<description>Updated by API<\/description>/g' original-config.xml
+session = requests.Session()
+session.auth = ("admin", "admin")
 
-# 重新导入
-curl -X POST -u admin:admin \
-  -H "Jenkins-Crumb: ${CRUMB}" \
-  -F "job=my-job" \
-  -F "xmlFile=@original-config.xml" \
-  "${JENKINS_URL}/jobImportExport/api/updateJob"
+def get_crumb():
+    resp = session.get("http://localhost:8080/jenkins/crumbIssuer/api/json")
+    data = resp.json()
+    return data['crumb'], data['crumbRequestField']
+
+# 1. 导出任务配置
+crumb, crumb_field = get_crumb()
+resp = session.post(
+    "http://localhost:8080/jenkins/jobImportExport/api/exportJob",
+    headers={crumb_field: crumb},
+    params={"job": "my-job"}
+)
+config_xml = resp.json()["configXml"]
+print(f"原始配置长度: {len(config_xml)}")
+
+# 2. 修改配置（示例：更新描述）
+config_xml = config_xml.replace(
+    "<description>Original</description>",
+    "<description>Updated by API at 2026-05-17</description>"
+)
+
+# 3. 更新任务配置（使用 xmlFile 参数）
+crumb, crumb_field = get_crumb()  # 重新获取 crumb
+with open("/tmp/temp-config.xml", "w") as f:
+    f.write(config_xml)
+
+with open("/tmp/temp-config.xml", "rb") as f:
+    resp = session.post(
+        "http://localhost:8080/jenkins/jobImportExport/api/updateJob",
+        headers={crumb_field: crumb},
+        data={"job": "my-job"},
+        files={"xmlFile": ("config.xml", f, "application/xml")}
+    )
+print(f"更新结果: {resp.json()}")
 ```
 
 #### API 响应格式

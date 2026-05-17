@@ -592,7 +592,6 @@
                 function tryApi(name) {
                     var endpoint = apiBaseUrl + '/' + name;
                     var resultEl = document.getElementById('tryit-' + name + '-result');
-
                     var isGet = (name === 'progress' || name === 'list');
 
                     if (isGet) {
@@ -645,30 +644,36 @@
                             }
                         });
 
-                        fetchWithAuth(jenkinsRootUrl + '/crumbIssuer/api/json')
-                            .then(function(r) { return r.json(); })
-                            .then(function(crumbData) {
-                                var headers = {};
-                                if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
-                                    headers[crumbData.crumbRequestField] = crumbData.crumb;
-                                }
-                                return fetchWithAuth(endpoint, { method: 'POST', body: fd, headers: headers });
-                            })
-                            .catch(function() {
-                                return fetchWithAuth(endpoint, { method: 'POST', body: fd });
-                            })
-                            .then(function(r) { return r.text(); })
-                            .then(function(text) {
-                                try {
-                                    var json = JSON.parse(text);
-                                    resultEl.innerHTML = '<pre>' + JSON.stringify(json, null, 2) + '</pre>';
-                                } catch(e) {
-                                    resultEl.innerHTML = '<pre>' + text + '</pre>';
-                                }
-                            })
-                            .catch(function(e) {
-                                resultEl.innerHTML = '<pre style="color:#e06c75">Error: ' + e.message + '</pre>';
-                            });
+                        // 自动获取 crumb 并调用 API
+                        var username = document.getElementById('jenkins-username').value || 'admin';
+                        var password = document.getElementById('jenkins-password').value || 'admin';
+                        var authHeader = 'Basic ' + btoa(unescape(encodeURIComponent(username + ':' + password)));
+
+                        // 先获取 crumb（带认证）
+                        fetch(jenkinsRootUrl + '/crumbIssuer/api/json', {
+                            headers: { 'Authorization': authHeader }
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(crumbData) {
+                            var headers = { 'Authorization': authHeader };
+                            if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
+                                headers[crumbData.crumbRequestField] = crumbData.crumb;
+                            }
+                            // 调用实际 API
+                            return fetch(endpoint, { method: 'POST', body: fd, headers: headers });
+                        })
+                        .then(function(r) { return r.text(); })
+                        .then(function(text) {
+                            try {
+                                var json = JSON.parse(text);
+                                resultEl.innerHTML = '<pre>' + JSON.stringify(json, null, 2) + '</pre>';
+                            } catch(e) {
+                                resultEl.innerHTML = '<pre>' + text + '</pre>';
+                            }
+                        })
+                        .catch(function(e) {
+                            resultEl.innerHTML = '<pre style="color:#e06c75">Error: ' + e.message + '</pre>';
+                        });
                     }
                 }
             </script>

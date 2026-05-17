@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [2.0.3] - 2026-05-17
+
+### 验证
+
+- **REST API 接口验证通过**：所有 8 个 API 端点已在实际 Jenkins 环境（`http://localhost:8080/jenkins`）测试通过
+  - `list` (GET)：列出任务列表，返回树形结构
+  - `progress` (GET)：查询导入进度，支持异步状态跟踪
+  - `exportJob` (POST)：导出单个任务配置XML
+  - `exportFolder` (POST)：导出文件夹（含所有子任务）
+  - `exportAll` (POST)：导出全部任务为ZIP
+  - `import` (POST)：批量导入任务（异步执行）
+  - `preview` (POST)：预演导入（dry-run模式）
+  - `updateJob` (POST)：更新任务配置（需使用 xmlFile 参数上传文件）
+
+### 文档更新
+
+- **API 使用说明增强**：README 中新增 Python requests 库调用示例，提供更可靠的认证和请求方式
+- **curl 注意事项说明**：curl 命令在 POST 请求中 crumb 验证存在兼容性问题，建议使用 Python requests 库
+
 ## [2.0.2] - 2026-05-17
 
 ### 新增功能
