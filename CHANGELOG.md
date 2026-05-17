@@ -17,6 +17,20 @@
   - 导入接口支持异步执行，返回 `batchId` 用于进度查询
   - 所有接口均包含权限检查，确保安全性
 
+### 改进
+
+- **API 权限检查与 Web 页面统一**：所有 API 端点使用 `checkPermission()` 进行权限校验，与 Web 页面行为完全一致
+  - `preview` 端点权限从 `Item.READ` 修正为 `Item.CREATE`，与 Web 页面导入预览保持一致
+  - 权限不足时由 Jenkins 框架统一处理（返回 403），而非自定义 JSON 错误
+- **API 响应信息完善**：各端点 JSON 输出补充了更丰富的上下文信息
+  - `exportJob`：新增 `fullName`、`jobType`（folder/job）、`jobUrl` 字段
+  - `exportFolder`/`exportAll`：新增 `sourceFolder`、`includeCurrentConfig` 字段
+  - `import`：即时返回新增 `targetFolder`、`overwrite`、`rename`、`dryRun` 参数回显及 `progressUrl` 进度查询链接
+  - `preview`：新增 `targetFolder`、`overwrite`、`rename` 参数回显
+  - `updateJob`：新增 `jobType`、`jobUrl`、`redirect` 字段
+  - `progress`：完成时新增 `total` 汇总字段
+  - `list`：新增 `totalCount` 字段
+
 ### 新增 API 端点
 
 | 端点 | 方法 | 功能 | 权限 |
@@ -25,7 +39,7 @@
 | `/jobImportExport/api/exportFolder` | POST | 导出文件夹为ZIP（Base64） | Item.READ |
 | `/jobImportExport/api/exportAll` | POST | 导出所有Job为ZIP（Base64） | Jenkins.ADMINISTER |
 | `/jobImportExport/api/import` | POST | 从ZIP导入Job | Item.CREATE |
-| `/jobImportExport/api/preview` | POST | 预演导入（dry-run） | Item.READ |
+| `/jobImportExport/api/preview` | POST | 预演导入（dry-run） | Item.CREATE |
 | `/jobImportExport/api/updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
 | `/jobImportExport/api/progress` | GET | 查询导入进度 | - |
 | `/jobImportExport/api/list` | GET | 列出Job/文件夹 | Item.READ |

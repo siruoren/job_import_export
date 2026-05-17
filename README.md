@@ -24,6 +24,12 @@
 
 **API 路径前缀**：`/jobImportExport/api/`
 
+#### API 权限说明
+
+所有 API 端点的权限检查与 Web 页面完全一致，使用 Jenkins 标准的 `checkPermission()` 机制：
+- 权限不足时由 Jenkins 框架统一返回 403 错误
+- 所有 POST 端点均需携带 Jenkins CRUMB（CSRF 防护）
+
 #### API 端点一览
 
 | 端点 | 方法 | 功能 | 权限 |
@@ -32,7 +38,7 @@
 | `exportFolder` | POST | 导出文件夹为ZIP（Base64编码） | Item.READ |
 | `exportAll` | POST | 导出所有Job为ZIP（Base64编码） | Jenkins.ADMINISTER |
 | `import` | POST | 从ZIP文件导入Job | Item.CREATE |
-| `preview` | POST | 预演导入（dry-run模式） | Item.READ |
+| `preview` | POST | 预演导入（dry-run模式） | Item.CREATE |
 | `updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
 | `progress` | GET | 查询导入进度 | - |
 | `list` | GET | 列出Job/文件夹列表 | Item.READ |
@@ -44,9 +50,9 @@
 curl -X POST -u user:apiToken \
   "http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"
 
-# 导出文件夹
+# 导出文件夹（可选包含当前文件夹配置）
 curl -X POST -u user:apiToken \
-  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder"
+  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true"
 
 # 导出全部
 curl -X POST -u user:apiToken \
@@ -66,12 +72,18 @@ curl -X POST -u user:apiToken \
   -F "zipFile=@jobs.zip" \
   -F "overwrite=false" \
   -F "rename=true" \
+  -F "targetFolder=my-folder" \
   "http://jenkins/jobImportExport/api/preview"
 
-# 更新Job配置
+# 更新Job配置（支持文件上传或直接传XML内容）
 curl -X POST -u user:apiToken \
   -F "job=my-job" \
   -F "xmlFile=@config.xml" \
+  "http://jenkins/jobImportExport/api/updateJob"
+
+# 或直接传递XML内容
+curl -X POST -u user:apiToken \
+  -d "job=my-job&configXml=<project>...</project>" \
   "http://jenkins/jobImportExport/api/updateJob"
 
 # 查询导入进度
@@ -85,36 +97,164 @@ curl -u user:apiToken \
 
 #### API 响应格式
 
-所有 API 统一返回 JSON 格式：
+所有 API 统一返回 JSON 格式，错误响应：
 
 ```json
 {
-  "success": true,
-  "message": "操作成功",
-  "errorCode": 200
+  "success": false,
+  "message": "错误描述",
+  "errorCode": 403
 }
 ```
 
-**导出类接口**（返回 Base64 数据）：
+**exportJob 响应**：
+```json
+{
+  "success": true,
+  "job": "my-folder/my-job",
+  "fullName": "my-folder/my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "configXml": "<project>...</project>"
+}
+```
+
+**exportFolder / exportAll 响应**：
 ```json
 {
   "success": true,
   "message": "导出成功",
+  "sourceFolder": "my-folder",
+  "includeCurrentConfig": false,
+  "total": 10,
+  "successCount": 8,
+  "skipCount": 2,
+  "failCount": 0,
   "zipData": "UEsDBAoAAAAA...",
   "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
-  "successCount": 10,
-  "failCount": 0,
-  "details": [...]
+  "details": [
+    {
+      "jobPath": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "已导出",
+      "statusCode": "EXPORTED",
+      "message": ""
+    }
+  ]
 }
 ```
 
-**导入类接口**（异步返回 batchId）：
+**import 响应**（异步，即时返回）：
 ```json
 {
   "success": true,
   "batchId": "abc12345",
   "async": true,
-  "message": "导入任务已提交"
+  "message": "导入任务已提交",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "dryRun": false,
+  "progressUrl": "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+}
+```
+
+**preview 响应**：
+```json
+{
+  "success": true,
+  "dryRun": true,
+  "message": "预演完成",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "total": 5,
+  "successCount": 3,
+  "failCount": 0,
+  "skipCount": 2,
+  "details": [
+    {
+      "jobPath": "my-job",
+      "finalName": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "将创建",
+      "statusCode": "CREATE_JOB",
+      "message": ""
+    }
+  ]
+}
+```
+
+**updateJob 响应**：
+```json
+{
+  "success": true,
+  "message": "更新成功",
+  "job": "my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-job/",
+  "redirect": "http://jenkins/job/my-job/"
+}
+```
+
+**progress 响应**（进行中）：
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 3,
+  "totalJobs": 10,
+  "overallProgress": 30,
+  "status": "RUNNING",
+  "message": "正在导入 my-folder/my-job"
+}
+```
+
+**progress 响应**（已完成）：
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 10,
+  "totalJobs": 10,
+  "overallProgress": 100,
+  "status": "DONE",
+  "message": "完成",
+  "resultReady": true,
+  "resultMessage": "批量导入完成",
+  "total": 10,
+  "successCount": 8,
+  "failCount": 0,
+  "skipCount": 2,
+  "dryRun": false,
+  "redirect": "http://jenkins/job/my-folder/",
+  "details": [...]
+}
+```
+
+**list 响应**：
+```json
+{
+  "success": true,
+  "folder": "my-folder",
+  "totalCount": 5,
+  "items": [
+    {
+      "name": "my-job",
+      "fullName": "my-folder/my-job",
+      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "type": "job",
+      "className": "FreeStyleProject"
+    },
+    {
+      "name": "sub-folder",
+      "fullName": "my-folder/sub-folder",
+      "url": "http://jenkins/job/my-folder/job/sub-folder/",
+      "type": "folder",
+      "className": "WorkflowMultiBranchProject",
+      "children": [...]
+    }
+  ]
 }
 ```
 
@@ -548,6 +688,14 @@ job_import_export/
 | 全局批量导入 | Item.CREATE |
 | 导出全部任务 | Jenkins.ADMINISTER |
 | 批量导出任务 | Item.READ（每个任务）|
+| API: exportJob | Item.READ |
+| API: exportFolder | Item.READ |
+| API: exportAll | Jenkins.ADMINISTER |
+| API: import | Item.CREATE |
+| API: preview | Item.CREATE |
+| API: updateJob | Item.CONFIGURE |
+| API: progress | - |
+| API: list | Item.READ |
 
 ### 侧边栏权限分级
 

@@ -24,6 +24,12 @@ The plugin provides a complete REST API interface, supporting external tools to 
 
 **API Path Prefix**: `/jobImportExport/api/`
 
+#### API Permission Notes
+
+All API endpoints use permission checks consistent with the web UI, using Jenkins standard `checkPermission()` mechanism:
+- Insufficient permissions are handled by the Jenkins framework, returning 403 errors uniformly
+- All POST endpoints require Jenkins CRUMB (CSRF protection)
+
 #### API Endpoints
 
 | Endpoint | Method | Function | Permission |
@@ -32,7 +38,7 @@ The plugin provides a complete REST API interface, supporting external tools to 
 | `exportFolder` | POST | Export folder as ZIP (Base64 encoded) | Item.READ |
 | `exportAll` | POST | Export all jobs as ZIP (Base64 encoded) | Jenkins.ADMINISTER |
 | `import` | POST | Import jobs from ZIP file | Item.CREATE |
-| `preview` | POST | Preview import (dry-run mode) | Item.READ |
+| `preview` | POST | Preview import (dry-run mode) | Item.CREATE |
 | `updateJob` | POST | Update job's config.xml | Item.CONFIGURE |
 | `progress` | GET | Query import progress | - |
 | `list` | GET | List jobs/folders | Item.READ |
@@ -44,9 +50,9 @@ The plugin provides a complete REST API interface, supporting external tools to 
 curl -X POST -u user:apiToken \
   "http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"
 
-# Export folder
+# Export folder (optional include current folder config)
 curl -X POST -u user:apiToken \
-  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder"
+  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true"
 
 # Export all
 curl -X POST -u user:apiToken \
@@ -66,12 +72,18 @@ curl -X POST -u user:apiToken \
   -F "zipFile=@jobs.zip" \
   -F "overwrite=false" \
   -F "rename=true" \
+  -F "targetFolder=my-folder" \
   "http://jenkins/jobImportExport/api/preview"
 
-# Update job config
+# Update job config (supports file upload or direct XML content)
 curl -X POST -u user:apiToken \
   -F "job=my-job" \
   -F "xmlFile=@config.xml" \
+  "http://jenkins/jobImportExport/api/updateJob"
+
+# Or pass XML content directly
+curl -X POST -u user:apiToken \
+  -d "job=my-job&configXml=<project>...</project>" \
   "http://jenkins/jobImportExport/api/updateJob"
 
 # Query import progress
@@ -85,36 +97,164 @@ curl -u user:apiToken \
 
 #### API Response Format
 
-All APIs uniformly return JSON format:
+All APIs uniformly return JSON format. Error response:
 
 ```json
 {
-  "success": true,
-  "message": "Operation successful",
-  "errorCode": 200
+  "success": false,
+  "message": "Error description",
+  "errorCode": 403
 }
 ```
 
-**Export APIs** (returns Base64 data):
+**exportJob response**:
+```json
+{
+  "success": true,
+  "job": "my-folder/my-job",
+  "fullName": "my-folder/my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "configXml": "<project>...</project>"
+}
+```
+
+**exportFolder / exportAll response**:
 ```json
 {
   "success": true,
   "message": "Export successful",
+  "sourceFolder": "my-folder",
+  "includeCurrentConfig": false,
+  "total": 10,
+  "successCount": 8,
+  "skipCount": 2,
+  "failCount": 0,
   "zipData": "UEsDBAoAAAAA...",
   "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
-  "successCount": 10,
-  "failCount": 0,
-  "details": [...]
+  "details": [
+    {
+      "jobPath": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "Exported",
+      "statusCode": "EXPORTED",
+      "message": ""
+    }
+  ]
 }
 ```
 
-**Import APIs** (async returns batchId):
+**import response** (async, immediate return):
 ```json
 {
   "success": true,
   "batchId": "abc12345",
   "async": true,
-  "message": "Import task submitted"
+  "message": "Import task submitted",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "dryRun": false,
+  "progressUrl": "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+}
+```
+
+**preview response**:
+```json
+{
+  "success": true,
+  "dryRun": true,
+  "message": "Preview complete",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "total": 5,
+  "successCount": 3,
+  "failCount": 0,
+  "skipCount": 2,
+  "details": [
+    {
+      "jobPath": "my-job",
+      "finalName": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "Will create",
+      "statusCode": "CREATE_JOB",
+      "message": ""
+    }
+  ]
+}
+```
+
+**updateJob response**:
+```json
+{
+  "success": true,
+  "message": "Update successful",
+  "job": "my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-job/",
+  "redirect": "http://jenkins/job/my-job/"
+}
+```
+
+**progress response** (in progress):
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 3,
+  "totalJobs": 10,
+  "overallProgress": 30,
+  "status": "RUNNING",
+  "message": "Importing my-folder/my-job"
+}
+```
+
+**progress response** (completed):
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 10,
+  "totalJobs": 10,
+  "overallProgress": 100,
+  "status": "DONE",
+  "message": "Complete",
+  "resultReady": true,
+  "resultMessage": "Batch import complete",
+  "total": 10,
+  "successCount": 8,
+  "failCount": 0,
+  "skipCount": 2,
+  "dryRun": false,
+  "redirect": "http://jenkins/job/my-folder/",
+  "details": [...]
+}
+```
+
+**list response**:
+```json
+{
+  "success": true,
+  "folder": "my-folder",
+  "totalCount": 5,
+  "items": [
+    {
+      "name": "my-job",
+      "fullName": "my-folder/my-job",
+      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "type": "job",
+      "className": "FreeStyleProject"
+    },
+    {
+      "name": "sub-folder",
+      "fullName": "my-folder/sub-folder",
+      "url": "http://jenkins/job/my-folder/job/sub-folder/",
+      "type": "folder",
+      "className": "WorkflowMultiBranchProject",
+      "children": [...]
+    }
+  ]
 }
 ```
 
@@ -549,6 +689,14 @@ job_import_export/
 | Global Batch Import | Item.CREATE |
 | Export All Jobs | Jenkins.ADMINISTER |
 | Batch Export Jobs | Item.READ (per job) |
+| API: exportJob | Item.READ |
+| API: exportFolder | Item.READ |
+| API: exportAll | Jenkins.ADMINISTER |
+| API: import | Item.CREATE |
+| API: preview | Item.CREATE |
+| API: updateJob | Item.CONFIGURE |
+| API: progress | - |
+| API: list | Item.READ |
 
 ### Sidebar Permission Levels
 
