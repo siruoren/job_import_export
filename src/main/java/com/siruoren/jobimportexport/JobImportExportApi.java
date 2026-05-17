@@ -45,7 +45,6 @@ public class JobImportExportApi {
     @RequirePOST
     public void doExportJob(StaplerRequest req, StaplerResponse rsp) throws IOException {
         rsp.setCharacterEncoding("UTF-8");
-        rsp.setContentType("application/json;charset=UTF-8");
 
         try {
             String jobName = req.getParameter("job");
@@ -53,6 +52,8 @@ public class JobImportExportApi {
                 writeError(rsp, 400, Messages.JobImportExportApi_missingParam("job"));
                 return;
             }
+
+            boolean download = "true".equalsIgnoreCase(req.getParameter("download"));
 
             Jenkins jenkins = Jenkins.get();
             AbstractItem item = jenkins.getItemByFullName(jobName, AbstractItem.class);
@@ -71,14 +72,22 @@ public class JobImportExportApi {
 
             String xmlContent = new String(Files.readAllBytes(configFile), StandardCharsets.UTF_8);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("success", true);
-            result.put("job", jobName);
-            result.put("fullName", item.getFullName());
-            result.put("jobType", item instanceof ItemGroup ? "folder" : "job");
-            result.put("jobUrl", Jenkins.get().getRootUrl() + item.getUrl());
-            result.put("configXml", xmlContent);
-            rsp.getWriter().write(JsonUtil.toJson(result));
+            if (download) {
+                String fileName = sanitizeFileName(jobName) + ".xml";
+                rsp.setContentType("application/xml;charset=UTF-8");
+                rsp.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+                rsp.getWriter().write(xmlContent);
+            } else {
+                rsp.setContentType("application/json;charset=UTF-8");
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("success", true);
+                result.put("job", jobName);
+                result.put("fullName", item.getFullName());
+                result.put("jobType", item instanceof ItemGroup ? "folder" : "job");
+                result.put("jobUrl", Jenkins.get().getRootUrl() + item.getUrl());
+                result.put("configXml", xmlContent);
+                rsp.getWriter().write(JsonUtil.toJson(result));
+            }
 
         } catch (Exception e) {
             writeError(rsp, 500, Messages.JobImportExportAction_exportFailed(e.getMessage()));
@@ -88,7 +97,6 @@ public class JobImportExportApi {
     @RequirePOST
     public void doExportFolder(StaplerRequest req, StaplerResponse rsp) throws IOException {
         rsp.setCharacterEncoding("UTF-8");
-        rsp.setContentType("application/json;charset=UTF-8");
 
         try {
             String folderName = req.getParameter("folder");
@@ -96,6 +104,8 @@ public class JobImportExportApi {
                 writeError(rsp, 400, Messages.JobImportExportApi_missingParam("folder"));
                 return;
             }
+
+            boolean download = "true".equalsIgnoreCase(req.getParameter("download"));
 
             Jenkins jenkins = Jenkins.get();
             AbstractItem item = jenkins.getItemByFullName(folderName, AbstractItem.class);
@@ -119,12 +129,20 @@ public class JobImportExportApi {
             List<ExportResult> results = exportEngine.getResults();
 
             byte[] zipData = baos.toByteArray();
-            String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
             String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
-            String zipFileName = item.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + "_" + timestamp + ".zip";
+            String zipFileName = sanitizeFileName(item.getName()) + "_" + timestamp + ".zip";
 
-            writeExportResult(rsp, true, summary.message, base64Zip, results, zipFileName, item.getFullName(), includeCurrentConfig);
+            if (download) {
+                rsp.setContentType("application/zip");
+                rsp.setHeader("Content-Disposition", "attachment; filename=\"" + zipFileName + "\"");
+                rsp.getOutputStream().write(zipData);
+                rsp.getOutputStream().flush();
+            } else {
+                rsp.setContentType("application/json;charset=UTF-8");
+                String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
+                writeExportResult(rsp, true, summary.message, base64Zip, results, zipFileName, item.getFullName(), includeCurrentConfig);
+            }
 
         } catch (Exception e) {
             writeError(rsp, 500, Messages.JobImportExportAction_batchExportFailed(e.getMessage()));
@@ -134,9 +152,10 @@ public class JobImportExportApi {
     @RequirePOST
     public void doExportAll(StaplerRequest req, StaplerResponse rsp) throws IOException {
         rsp.setCharacterEncoding("UTF-8");
-        rsp.setContentType("application/json;charset=UTF-8");
 
         try {
+            boolean download = "true".equalsIgnoreCase(req.getParameter("download"));
+
             Jenkins jenkins = Jenkins.get();
             jenkins.checkPermission(Jenkins.ADMINISTER);
 
@@ -146,12 +165,20 @@ public class JobImportExportApi {
             List<ExportResult> results = exportEngine.getResults();
 
             byte[] zipData = baos.toByteArray();
-            String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
 
             String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
             String zipFileName = "jenkins-all-jobs_" + timestamp + ".zip";
 
-            writeExportResult(rsp, true, summary.message, base64Zip, results, zipFileName, "root", false);
+            if (download) {
+                rsp.setContentType("application/zip");
+                rsp.setHeader("Content-Disposition", "attachment; filename=\"" + zipFileName + "\"");
+                rsp.getOutputStream().write(zipData);
+                rsp.getOutputStream().flush();
+            } else {
+                rsp.setContentType("application/json;charset=UTF-8");
+                String base64Zip = java.util.Base64.getEncoder().encodeToString(zipData);
+                writeExportResult(rsp, true, summary.message, base64Zip, results, zipFileName, "root", false);
+            }
 
         } catch (Exception e) {
             writeError(rsp, 500, Messages.JobImportExportAction_exportFailed(e.getMessage()));
@@ -652,5 +679,12 @@ public class JobImportExportApi {
         String xml = new String(bytes, StandardCharsets.UTF_8);
         xml = xml.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
         return new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String sanitizeFileName(String name) {
+        if (name == null) {
+            return "unnamed";
+        }
+        return name.replaceAll("[^a-zA-Z0-9\\-_\\.]", "_");
     }
 }

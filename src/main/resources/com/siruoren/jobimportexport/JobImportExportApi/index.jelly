@@ -66,7 +66,7 @@
                     <div class="api-section-header" onclick="toggleSection('exportJob')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/exportJob</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportJob</span>
                         <span class="endpoint-desc">${%exportJob.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -78,8 +78,14 @@
                             <tr><td>job</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%exportJob.param.job}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="kw">curl</span> -X POST -u user:apiToken \
-  <span class="url">"http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"</span></div>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Export job config</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -104,7 +110,7 @@
                     <div class="api-section-header" onclick="toggleSection('exportFolder')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/exportFolder</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportFolder</span>
                         <span class="endpoint-desc">${%exportFolder.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -117,8 +123,14 @@
                             <tr><td>includeCurrentConfig</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%exportFolder.param.includeCurrentConfig}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="kw">curl</span> -X POST -u user:apiToken \
-  <span class="url">"http://jenkins/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true"</span></div>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Export folder</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -153,15 +165,21 @@
                     <div class="api-section-header" onclick="toggleSection('exportAll')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/exportAll</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportAll</span>
                         <span class="endpoint-desc">${%exportAll.desc}</span>
                     </div>
                     <div class="api-section-body">
                         <p>${%exportAll.detail}</p>
                         <p><strong>${%label.permission}：</strong><span class="permission-badge perm-admin">Jenkins.ADMINISTER</span></p>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="kw">curl</span> -X POST -u user:apiToken \
-  <span class="url">"http://jenkins/jobImportExport/api/exportAll"</span></div>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Export all jobs</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportAll"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -189,7 +207,7 @@
                     <div class="api-section-header" onclick="toggleSection('import')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/import</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/import</span>
                         <span class="endpoint-desc">${%import.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -205,13 +223,19 @@
                             <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="kw">curl</span> -X POST -u user:apiToken \
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Import jobs</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
   <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
   <span class="flag">-F</span> <span class="str">"rename=true"</span> \
   <span class="flag">-F</span> <span class="str">"dryRun=false"</span> \
   <span class="flag">-F</span> <span class="str">"targetFolder=my-folder"</span> \
-  <span class="url">"http://jenkins/jobImportExport/api/import"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/import"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -222,7 +246,7 @@
   "overwrite": false,
   "rename": true,
   "dryRun": false,
-  "progressUrl": "http://jenkins/.../progress?batchId=abc12345"
+  "progressUrl": "${rootURL}/jobImportExport/api/progress?batchId=abc12345"
 }</div>
                         <button class="try-it-btn" onclick="toggleTryIt('import')">${%label.tryIt}</button>
                         <div class="try-it-panel" id="tryit-import">
@@ -256,7 +280,7 @@
                     <div class="api-section-header" onclick="toggleSection('preview')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/preview</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/preview</span>
                         <span class="endpoint-desc">${%preview.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -271,12 +295,18 @@
                             <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="kw">curl</span> -X POST -u user:apiToken \
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Preview import</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
   <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
   <span class="flag">-F</span> <span class="str">"rename=true"</span> \
   <span class="flag">-F</span> <span class="str">"targetFolder=my-folder"</span> \
-  <span class="url">"http://jenkins/jobImportExport/api/preview"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/preview"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -318,7 +348,7 @@
                     <div class="api-section-header" onclick="toggleSection('updateJob')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-post">POST</span>
-                        <span class="endpoint-path">/jobImportExport/api/updateJob</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/updateJob</span>
                         <span class="endpoint-desc">${%updateJob.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -332,16 +362,22 @@
                             <tr><td>configXml</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%updateJob.param.configXml}</td></tr>
                         </table>
                         <h4>${%label.curlExample}</h4>
-                        <div class="code-block"><span class="cmt"># Upload XML file</span>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | <span class="kw">grep</span> -oP <span class="str">'"crumb":"\K[^"]+'</span>)
+
+<span class="cmt"># Upload XML file</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-F</span> <span class="str">"job=my-job"</span> \
   <span class="flag">-F</span> <span class="str">"xmlFile=@config.xml"</span> \
-  <span class="url">"http://jenkins/jobImportExport/api/updateJob"</span>
+  <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span>
 
 <span class="cmt"># Or pass XML content directly</span>
 <span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
   <span class="flag">-d</span> <span class="str">"job=my-job&amp;configXml=&lt;project&gt;...&lt;/project&gt;"</span> \
-  <span class="url">"http://jenkins/jobImportExport/api/updateJob"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -370,7 +406,7 @@
                     <div class="api-section-header" onclick="toggleSection('progress')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-get">GET</span>
-                        <span class="endpoint-path">/jobImportExport/api/progress</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/progress</span>
                         <span class="endpoint-desc">${%progress.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -383,7 +419,7 @@
                         </table>
                         <h4>${%label.curlExample}</h4>
                         <div class="code-block"><span class="kw">curl</span> -u user:apiToken \
-  <span class="url">"http://jenkins/jobImportExport/api/progress?batchId=abc12345"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/progress?batchId=abc12345"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "batchId": "abc12345",
@@ -409,7 +445,7 @@
                     <div class="api-section-header" onclick="toggleSection('list')">
                         <span class="toggle-arrow">▶</span>
                         <span class="method-badge method-get">GET</span>
-                        <span class="endpoint-path">/jobImportExport/api/list</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/list</span>
                         <span class="endpoint-desc">${%list.desc}</span>
                     </div>
                     <div class="api-section-body">
@@ -422,7 +458,7 @@
                         </table>
                         <h4>${%label.curlExample}</h4>
                         <div class="code-block"><span class="kw">curl</span> -u user:apiToken \
-  <span class="url">"http://jenkins/jobImportExport/api/list?folder=my-folder"</span></div>
+  <span class="url">"${rootURL}/jobImportExport/api/list?folder=my-folder"</span></div>
                         <h4>${%label.response}</h4>
                         <div class="response-block">{
   "success": true,
@@ -474,6 +510,9 @@
             </div>
 
             <script>
+                var jenkinsRootUrl = '${rootURL}';
+                var apiBaseUrl = jenkinsRootUrl + '/jobImportExport/api';
+
                 function toggleSection(name) {
                     var section = document.getElementById('section-' + name);
                     if (section) section.classList.toggle('expanded');
@@ -485,10 +524,7 @@
                 }
 
                 function tryApi(name) {
-                    var baseUrl = document.querySelector('meta[name="crumb.url"]') 
-                        ? new URL(document.querySelector('meta[name="crumb.url"]').content).origin 
-                        : window.location.origin;
-                    var endpoint = baseUrl + '/jobImportExport/api/' + name;
+                    var endpoint = apiBaseUrl + '/' + name;
                     var resultEl = document.getElementById('tryit-' + name + '-result');
 
                     var isGet = (name === 'progress' || name === 'list');
@@ -543,7 +579,18 @@
                             }
                         });
 
-                        fetch(endpoint, { method: 'POST', body: fd })
+                        fetch(jenkinsRootUrl + '/crumbIssuer/api/json')
+                            .then(function(r) { return r.json(); })
+                            .then(function(crumbData) {
+                                var headers = {};
+                                if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
+                                    headers[crumbData.crumbRequestField] = crumbData.crumb;
+                                }
+                                return fetch(endpoint, { method: 'POST', body: fd, headers: headers });
+                            })
+                            .catch(function() {
+                                return fetch(endpoint, { method: 'POST', body: fd });
+                            })
                             .then(function(r) { return r.text(); })
                             .then(function(text) {
                                 try {
