@@ -8,4 +8,8 @@
                point="jenkins.model.TransientActionFactory">
         <instance class="com.siruoren.jobimportexport.JobImportExportAction$Factory"/>
     </extension>
+    <extension name="Job Import/Export API" 
+               point="hudson.model.RootAction">
+        <instance class="com.siruoren.jobimportexport.JobImportExportApi"/>
+    </extension>
 </plugin>

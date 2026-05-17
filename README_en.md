@@ -18,6 +18,106 @@ A powerful Jenkins plugin that enables convenient importing, exporting, and upda
 | Export All Jobs | Export all jobs under Jenkins root (admin only) | Left sidebar |
 | Batch Export Jobs | Export current directory and all sub-jobs | Folder pages |
 
+### REST API
+
+The plugin provides a complete REST API interface, supporting external tools to programmatically call import/export functions.
+
+**API Path Prefix**: `/jobImportExport/api/`
+
+#### API Endpoints
+
+| Endpoint | Method | Function | Permission |
+|----------|--------|----------|------------|
+| `exportJob` | POST | Export single job's config.xml | Item.READ |
+| `exportFolder` | POST | Export folder as ZIP (Base64 encoded) | Item.READ |
+| `exportAll` | POST | Export all jobs as ZIP (Base64 encoded) | Jenkins.ADMINISTER |
+| `import` | POST | Import jobs from ZIP file | Item.CREATE |
+| `preview` | POST | Preview import (dry-run mode) | Item.READ |
+| `updateJob` | POST | Update job's config.xml | Item.CONFIGURE |
+| `progress` | GET | Query import progress | - |
+| `list` | GET | List jobs/folders | Item.READ |
+
+#### API Usage Examples
+
+```bash
+# Export single job config
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"
+
+# Export folder
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder"
+
+# Export all
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportAll"
+
+# Import ZIP file
+curl -X POST -u user:apiToken \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  -F "dryRun=false" \
+  -F "targetFolder=my-folder" \
+  "http://jenkins/jobImportExport/api/import"
+
+# Preview import
+curl -X POST -u user:apiToken \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "http://jenkins/jobImportExport/api/preview"
+
+# Update job config
+curl -X POST -u user:apiToken \
+  -F "job=my-job" \
+  -F "xmlFile=@config.xml" \
+  "http://jenkins/jobImportExport/api/updateJob"
+
+# Query import progress
+curl -u user:apiToken \
+  "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+
+# List jobs
+curl -u user:apiToken \
+  "http://jenkins/jobImportExport/api/list?folder=my-folder"
+```
+
+#### API Response Format
+
+All APIs uniformly return JSON format:
+
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "errorCode": 200
+}
+```
+
+**Export APIs** (returns Base64 data):
+```json
+{
+  "success": true,
+  "message": "Export successful",
+  "zipData": "UEsDBAoAAAAA...",
+  "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
+  "successCount": 10,
+  "failCount": 0,
+  "details": [...]
+}
+```
+
+**Import APIs** (async returns batchId):
+```json
+{
+  "success": true,
+  "batchId": "abc12345",
+  "async": true,
+  "message": "Import task submitted"
+}
+```
+
 ### Internationalization (i18n) Support
 
 The plugin supports both English and Chinese languages, automatically adapting based on browser language:
@@ -382,6 +482,7 @@ job_import_export/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # Job import/export Action
         │   ├── JobImportExportSidebarLink.java # Sidebar global entry
+        │   ├── JobImportExportApi.java        # REST API interface
         │   ├── ImportExecutor.java            # Import task thread pool manager
         │   ├── ImportProgress.java            # Import progress state
         │   ├── ProgressManager.java           # Progress manager singleton

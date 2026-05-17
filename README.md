@@ -18,6 +18,106 @@
 | 导出全部任务 | 导出 Jenkins 根目录下所有任务（仅管理员） | 左侧边栏 |
 | 批量导出任务 | 导出当前目录及所有子任务配置 | 文件夹页面 |
 
+### REST API
+
+插件提供完整的 REST API 接口，支持外部工具程序化地调用导入/导出功能。
+
+**API 路径前缀**：`/jobImportExport/api/`
+
+#### API 端点一览
+
+| 端点 | 方法 | 功能 | 权限 |
+|------|------|------|------|
+| `exportJob` | POST | 导出单个Job的config.xml | Item.READ |
+| `exportFolder` | POST | 导出文件夹为ZIP（Base64编码） | Item.READ |
+| `exportAll` | POST | 导出所有Job为ZIP（Base64编码） | Jenkins.ADMINISTER |
+| `import` | POST | 从ZIP文件导入Job | Item.CREATE |
+| `preview` | POST | 预演导入（dry-run模式） | Item.READ |
+| `updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
+| `progress` | GET | 查询导入进度 | - |
+| `list` | GET | 列出Job/文件夹列表 | Item.READ |
+
+#### API 调用示例
+
+```bash
+# 导出单个Job配置
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportJob?job=my-folder/my-job"
+
+# 导出文件夹
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportFolder?folder=my-folder"
+
+# 导出全部
+curl -X POST -u user:apiToken \
+  "http://jenkins/jobImportExport/api/exportAll"
+
+# 导入ZIP文件
+curl -X POST -u user:apiToken \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  -F "dryRun=false" \
+  -F "targetFolder=my-folder" \
+  "http://jenkins/jobImportExport/api/import"
+
+# 预演导入
+curl -X POST -u user:apiToken \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "http://jenkins/jobImportExport/api/preview"
+
+# 更新Job配置
+curl -X POST -u user:apiToken \
+  -F "job=my-job" \
+  -F "xmlFile=@config.xml" \
+  "http://jenkins/jobImportExport/api/updateJob"
+
+# 查询导入进度
+curl -u user:apiToken \
+  "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+
+# 列出Job
+curl -u user:apiToken \
+  "http://jenkins/jobImportExport/api/list?folder=my-folder"
+```
+
+#### API 响应格式
+
+所有 API 统一返回 JSON 格式：
+
+```json
+{
+  "success": true,
+  "message": "操作成功",
+  "errorCode": 200
+}
+```
+
+**导出类接口**（返回 Base64 数据）：
+```json
+{
+  "success": true,
+  "message": "导出成功",
+  "zipData": "UEsDBAoAAAAA...",
+  "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
+  "successCount": 10,
+  "failCount": 0,
+  "details": [...]
+}
+```
+
+**导入类接口**（异步返回 batchId）：
+```json
+{
+  "success": true,
+  "batchId": "abc12345",
+  "async": true,
+  "message": "导入任务已提交"
+}
+```
+
 ### 国际化支持
 
 插件支持英语和中文两种语言，根据浏览器语言自动适配：
@@ -381,6 +481,7 @@ job_import_export/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── JobImportExportApi.java        # REST API 接口
         │   ├── ImportExecutor.java            # 导入任务线程池管理器
         │   ├── ImportProgress.java            # 导入进度状态
         │   ├── ProgressManager.java           # 进度管理单例

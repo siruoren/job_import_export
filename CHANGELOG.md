@@ -5,6 +5,31 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [2.0.2] - 2026-05-17
+
+### 新增功能
+
+- **REST API 接口**：新增 `JobImportExportApi` 类，提供完整的 REST API 端点，使外部工具可以程序化地调用插件功能
+  - API 路径前缀：`/jobImportExport/api/`
+  - 所有接口统一返回 JSON 格式，包含 `success`、`message`、`errorCode` 字段
+  - 支持 `exportJob`、`exportFolder`、`exportAll`、`import`、`preview`、`updateJob`、`progress`、`list` 等端点
+  - 支持 Base64 编码的 ZIP 数据传输，便于与外部系统集成
+  - 导入接口支持异步执行，返回 `batchId` 用于进度查询
+  - 所有接口均包含权限检查，确保安全性
+
+### 新增 API 端点
+
+| 端点 | 方法 | 功能 | 权限 |
+|------|------|------|------|
+| `/jobImportExport/api/exportJob` | POST | 导出单个Job的config.xml | Item.READ |
+| `/jobImportExport/api/exportFolder` | POST | 导出文件夹为ZIP（Base64） | Item.READ |
+| `/jobImportExport/api/exportAll` | POST | 导出所有Job为ZIP（Base64） | Jenkins.ADMINISTER |
+| `/jobImportExport/api/import` | POST | 从ZIP导入Job | Item.CREATE |
+| `/jobImportExport/api/preview` | POST | 预演导入（dry-run） | Item.READ |
+| `/jobImportExport/api/updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
+| `/jobImportExport/api/progress` | GET | 查询导入进度 | - |
+| `/jobImportExport/api/list` | GET | 列出Job/文件夹 | Item.READ |
+
 ## [2.0.1] - 2026-05-17
 
 ### 新增功能
