@@ -561,7 +561,7 @@
                 function getAuthHeader() {
                     var username = document.getElementById('jenkins-username').value;
                     var password = document.getElementById('jenkins-password').value;
-                    if (username && password) {
+                    if (username &amp;&amp; password) {
                         var credentials = username + ':' + password;
                         var auth = btoa(unescape(encodeURIComponent(credentials)));
                         return 'Basic ' + auth;
@@ -649,7 +649,7 @@
                             .then(function(r) { return r.json(); })
                             .then(function(crumbData) {
                                 var headers = {};
-                                if (crumbData && crumbData.crumbRequestField && crumbData.crumb) {
+                                if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
                                     headers[crumbData.crumbRequestField] = crumbData.crumb;
                                 }
                                 return fetchWithAuth(endpoint, { method: 'POST', body: fd, headers: headers });
