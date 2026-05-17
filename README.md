@@ -579,7 +579,30 @@ mvn compile
 
 # 运行测试
 mvn test
+
+# 运行指定测试类
+mvn test -Dtest=StatusUtilTest
+mvn test -Dtest=ImportResultTest,ExportResultTest
 ```
+
+---
+
+## 测试覆盖
+
+### 单元测试（67 个测试用例）
+
+| 测试类 | 测试数 | 覆盖内容 |
+|--------|--------|---------|
+| `StatusUtilTest` | 21 | 状态码本地化、null/empty 处理、未知状态码 |
+| `ImportResultTest` | 18 | `setStatusEnum()` / `setStatus()` 方法、双字段一致性、构造函数 |
+| `ExportResultTest` | 14 | 构造器本地化、statusCode/status 分离、success/skipped 标记 |
+| `LocaleHolderTest` | 14 | ThreadLocal 存储、线程隔离、clear/overwrite |
+
+### 测试框架
+
+- **JUnit 5**：使用 junit-jupiter-api 和 junit-jupiter-engine 5.10.0
+- **测试命令**：`mvn test -Denforcer.skip=true`
+- **测试结果**：所有 67 个测试用例均通过
 
 ---
 

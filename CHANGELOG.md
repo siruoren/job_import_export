@@ -44,6 +44,15 @@
 - **轮询间隔优化**：将前端轮询间隔从 500ms 调整为 800ms，减少服务器请求压力，同时用户体验几乎不受影响
 - **内存泄漏防护**：在 `ProgressManager` 中添加自动清理机制，当结果准备好 10 分钟后自动删除该进度记录，防止长时间运行后内存泄漏
 
+### 测试覆盖
+
+- **新增单元测试**：共 67 个测试用例，覆盖本地化核心功能
+  - `StatusUtilTest`：21 个测试，覆盖状态码本地化、null/empty 处理、未知状态码
+  - `ImportResultTest`：18 个测试，覆盖 `setStatusEnum()` / `setStatus()` 方法、双字段一致性
+  - `ExportResultTest`：14 个测试，覆盖构造器本地化、statusCode/status 分离
+  - `LocaleHolderTest`：14 个测试，覆盖 ThreadLocal 存储、线程隔离
+- **测试框架**：使用 JUnit 5（junit-jupiter-api/junit-jupiter-engine 5.10.0）
+
 ### 修复
 
 - **进度条不动（致命错误）**：

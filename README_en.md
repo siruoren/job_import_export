@@ -514,3 +514,46 @@ State context, centralized management of import state:
 - `renameMap` — Rename mapping table with cascade propagation support
 - `createdFolders` — Set of created directories
 - `dryRun` — Whether in preview mode
+
+---
+
+## Build and Test
+
+### Build Commands
+
+```bash
+# Full build with tests
+mvn clean package -Denforcer.skip=true
+
+# Build without tests
+mvn clean package -Denforcer.skip=true -DskipTests
+
+# Compile only
+mvn compile
+
+# Run tests
+mvn test
+
+# Run specific test classes
+mvn test -Dtest=StatusUtilTest
+mvn test -Dtest=ImportResultTest,ExportResultTest
+```
+
+---
+
+## Test Coverage
+
+### Unit Tests (67 test cases)
+
+| Test Class | Number of Tests | Coverage |
+|------------|-----------------|----------|
+| `StatusUtilTest` | 21 | Status code localization, null/empty handling, unknown status codes |
+| `ImportResultTest` | 18 | `setStatusEnum()` / `setStatus()` methods, field consistency, constructors |
+| `ExportResultTest` | 14 | Constructor localization, statusCode/status separation, success/skipped flags |
+| `LocaleHolderTest` | 14 | ThreadLocal storage, thread isolation, clear/overwrite operations |
+
+### Test Framework
+
+- **JUnit 5**: Uses junit-jupiter-api and junit-jupiter-engine 5.10.0
+- **Test Command**: `mvn test -Denforcer.skip=true`
+- **Test Results**: All 67 test cases pass
