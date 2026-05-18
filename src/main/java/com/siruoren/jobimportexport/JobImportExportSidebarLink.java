@@ -7,6 +7,7 @@ import hudson.model.Item;
 import hudson.model.ItemGroup;
 import hudson.model.RootAction;
 import hudson.model.TopLevelItem;
+import hudson.model.TopLevelItemDescriptor;
 import hudson.security.AccessControlled;
 import jenkins.model.Jenkins;
 import jenkins.model.ModifiableTopLevelItemGroup;
@@ -14,6 +15,7 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 import org.apache.commons.fileupload.FileItem;
+import com.siruoren.jobimportexport.service.SecureXmlParser;
 
 import javax.servlet.ServletException;
 import java.io.IOException;
@@ -846,9 +848,35 @@ public class JobImportExportSidebarLink implements RootAction {
             }
 
             String jobName = name.replace(".config.xml", "");
-            try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
-                ((ModifiableTopLevelItemGroup) base)
-                        .createProjectFromXML(jobName, cleanXml(in));
+            try {
+                TopLevelItemDescriptor descriptor = SecureXmlParser.determineJobDescriptor(xmlBytes);
+                if (descriptor == null) {
+                    ImportResult r = new ImportResult(name);
+                    r.setStatusEnum(Status.ERROR);
+                    r.message = Messages.JobImportExportSidebarLink_unknownJobType();
+                    results.add(r);
+                    return;
+                }
+                ModifiableTopLevelItemGroup modifiableGroup = (ModifiableTopLevelItemGroup) base;
+                TopLevelItem newItem = modifiableGroup.createProject(descriptor, jobName, false);
+                try {
+                    byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(xmlBytes);
+                    try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
+                        ((AbstractItem) newItem).updateByXml(new javax.xml.transform.stream.StreamSource(in));
+                    }
+                    ((AbstractItem) newItem).save();
+                } catch (Exception e) {
+                    try {
+                        newItem.delete();
+                    } catch (Exception ignored) {}
+                    throw e;
+                }
+            } catch (Exception e) {
+                ImportResult r = new ImportResult(name);
+                r.setStatusEnum(Status.ERROR);
+                r.message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                results.add(r);
+                return;
             }
         }
 
@@ -1381,7 +1409,8 @@ public class JobImportExportSidebarLink implements RootAction {
 
                     if (existingItem instanceof ItemGroup) {
                         if (isFolderConfig(xmlBytes)) {
-                            try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
+                            byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfigNoDisable(xmlBytes);
+                            try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
                                 abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                                 abstractItem.save();
                             }
@@ -1393,7 +1422,8 @@ public class JobImportExportSidebarLink implements RootAction {
                             existingItem.delete();
                         }
                     } else {
-                        try (InputStream in = new ByteArrayInputStream(xmlBytes)) {
+                        byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(xmlBytes);
+                        try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
                             abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                             abstractItem.save();
                         }
@@ -1413,12 +1443,31 @@ public class JobImportExportSidebarLink implements RootAction {
                 }
             }
 
-            try (InputStream xmlStream = new ByteArrayInputStream(xmlBytes)) {
-                TopLevelItem newItem = ((ModifiableTopLevelItemGroup) targetGroup).createProjectFromXML(
-                        result.finalName,
-                        cleanXml(xmlStream)
-                );
-                newItem.save();
+            try {
+                TopLevelItemDescriptor descriptor = SecureXmlParser.determineJobDescriptor(xmlBytes);
+                if (descriptor == null) {
+                    result.setStatus("ERROR");
+                    result.message = Messages.JobImportExportSidebarLink_unknownJobType();
+                    return result;
+                }
+                ModifiableTopLevelItemGroup modifiableGroup = (ModifiableTopLevelItemGroup) targetGroup;
+                TopLevelItem newItem = modifiableGroup.createProject(descriptor, result.finalName, false);
+                try {
+                    byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(xmlBytes);
+                    try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
+                        ((AbstractItem) newItem).updateByXml(new javax.xml.transform.stream.StreamSource(in));
+                    }
+                    newItem.save();
+                } catch (Exception e) {
+                    try {
+                        newItem.delete();
+                    } catch (Exception ignored) {}
+                    throw e;
+                }
+            } catch (Exception e) {
+                result.setStatus("ERROR");
+                result.message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                return result;
             }
 
             result.success = true;

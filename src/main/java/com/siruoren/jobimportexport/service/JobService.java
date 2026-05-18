@@ -5,15 +5,21 @@ import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
 import hudson.model.TopLevelItem;
+import hudson.model.TopLevelItemDescriptor;
 import jenkins.model.Jenkins;
 import jenkins.model.ModifiableTopLevelItemGroup;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 public class JobService {
+
+    private static final Logger LOGGER = Logger.getLogger(JobService.class.getName());
 
     private static final Pattern INVALID_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9_\\-]*$");
 
@@ -34,9 +40,37 @@ public class JobService {
             throw new IOException(Messages.JobService_dirNotSupportCreateJob());
         }
 
-        TopLevelItem item = ((ModifiableTopLevelItemGroup) targetGroup)
-                .createProjectFromXML(jobName, xmlStream);
-        item.save();
+        byte[] xmlBytes = xmlStream.readAllBytes();
+
+        try {
+            TopLevelItemDescriptor descriptor = SecureXmlParser.determineJobDescriptor(xmlBytes);
+            if (descriptor == null) {
+                throw new IOException(Messages.JobService_unknownJobType());
+            }
+
+            ModifiableTopLevelItemGroup modifiableGroup = (ModifiableTopLevelItemGroup) targetGroup;
+            TopLevelItem item = modifiableGroup.createProject(descriptor, jobName, false);
+
+            try {
+                byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(xmlBytes);
+                try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
+                    ((AbstractItem) item).updateByXml(new javax.xml.transform.stream.StreamSource(in));
+                }
+                ((AbstractItem) item).save();
+            } catch (Exception e) {
+                try {
+                    item.delete();
+                } catch (Exception deleteEx) {
+                    LOGGER.log(Level.WARNING, "Failed to cleanup partially created job: {0}", deleteEx.getMessage());
+                }
+                throw new IOException(Messages.JobService_createJobFailed(e.getMessage()), e);
+            }
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(Messages.JobService_createJobFailed(e.getMessage()), e);
+        }
+
         return true;
     }
 

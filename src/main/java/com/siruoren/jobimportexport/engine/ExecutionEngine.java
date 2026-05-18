@@ -3,10 +3,13 @@ package com.siruoren.jobimportexport.engine;
 import com.siruoren.jobimportexport.engine.model.*;
 import com.siruoren.jobimportexport.engine.resolver.RenameDAGResolver;
 import com.siruoren.jobimportexport.engine.resolver.TypeResolver;
+import com.siruoren.jobimportexport.service.SecureXmlParser;
 import hudson.model.AbstractItem;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
 import hudson.model.Job;
+import hudson.model.TopLevelItem;
+import hudson.model.TopLevelItemDescriptor;
 import jenkins.model.Jenkins;
 import jenkins.model.ModifiableTopLevelItemGroup;
 
@@ -17,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ExecutionEngine {
 
@@ -636,7 +641,6 @@ public class ExecutionEngine {
 
     private void handleOverwrite(Item existingItem, TreeNode node, String path, ImportResult result, ImportContext ctx) {
         if (ctx.dryRun) {
-            // 在 Dry Run 模式下，检查任务类型是否匹配
             if (existingItem instanceof Job) {
                 String existingType = getJobTypeFromItemClass(existingItem.getClass());
                 String newType = getJobTypeFromXml(node.configXml);
@@ -645,7 +649,6 @@ public class ExecutionEngine {
                     result.setStatusEnum(Status.ERROR);
                     result.success = false;
                     result.message = Messages.ExecutionEngine_jobTypeMismatchCannotOverwrite(existingType, newType);
-                    // 标记此路径为类型错误，子任务将被跳过
                     ctx.parentTypeErrors.add(path);
                     return;
                 }
@@ -654,10 +657,11 @@ public class ExecutionEngine {
             try {
                 backupConfig(existingItem);
                 if (existingItem instanceof AbstractItem) {
-                    try (InputStream in = new ByteArrayInputStream(node.configXml)) {
+                    byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(node.configXml);
+                    try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
                         ((AbstractItem) existingItem).updateByXml(new StreamSource(in));
-                        ((AbstractItem) existingItem).save();
                     }
+                    ((AbstractItem) existingItem).save();
                 } else {
                     existingItem.delete();
                     createJobDirect(path, node.configXml, ctx);
@@ -760,13 +764,37 @@ public class ExecutionEngine {
         String jobName = getLastPathSegment(path);
 
         ItemGroup parentGroup = ensureParentFolders(folderPath, ctx);
-        if (parentGroup instanceof ModifiableTopLevelItemGroup) {
-            try (InputStream xmlStream = new ByteArrayInputStream(configXml)) {
-                ((ModifiableTopLevelItemGroup) parentGroup).createProjectFromXML(jobName, xmlStream);
-                ctx.createdJobs.add(getFullPath(path, ctx));
+        if (!(parentGroup instanceof ModifiableTopLevelItemGroup)) {
+            throw new Exception(Messages.ExecutionEngine_createFailed("Parent group does not support creating jobs"));
+        }
+
+        ModifiableTopLevelItemGroup modifiableGroup = (ModifiableTopLevelItemGroup) parentGroup;
+
+        TopLevelItemDescriptor descriptor = SecureXmlParser.determineJobDescriptor(configXml);
+        if (descriptor == null) {
+            throw new Exception(Messages.ExecutionEngine_createFailed(Messages.ExecutionEngine_unknownJobType()));
+        }
+
+        TopLevelItem item = modifiableGroup.createProject(descriptor, jobName, false);
+
+        try {
+            byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(configXml);
+            try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
+                ((AbstractItem) item).updateByXml(new StreamSource(in));
             }
+            ((AbstractItem) item).save();
+            ctx.createdJobs.add(getFullPath(path, ctx));
+        } catch (Exception e) {
+            try {
+                item.delete();
+            } catch (Exception deleteEx) {
+                LOGGER.log(Level.WARNING, "Failed to cleanup partially created job: {0}", deleteEx.getMessage());
+            }
+            throw e;
         }
     }
+
+    private static final Logger LOGGER = Logger.getLogger(ExecutionEngine.class.getName());
 
     private ItemGroup ensureParentFolders(String folderPath, ImportContext ctx) throws Exception {
         if (folderPath == null || folderPath.isEmpty()) {
