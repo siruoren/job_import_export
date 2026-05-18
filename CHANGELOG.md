@@ -9,6 +9,11 @@
 
 ### 新增
 
+- **GitHub Actions CI 工作流**：新增 `.github/workflows/build.yml`
+  - 所有分支 push 和 PR 都触发构建
+  - Maven 构建打包
+  - 上传 `.hpi` 插件包作为构建产物
+
 - **API 单元测试**：新增 `JobImportExportApiTest` 测试类，包含 8 个测试方法，覆盖 REST API 的主要功能点
   - 验证 API 类实例化
   - 验证通过 SidebarLink 获取 API 实例
