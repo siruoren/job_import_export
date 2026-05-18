@@ -5,7 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [2.0.3] - 2026-05-17
+## [2.0.3] - 2026-05-18
+
+### 新增
+
+- **API 单元测试**：新增 `JobImportExportApiTest` 测试类，包含 8 个测试方法，覆盖 REST API 的主要功能点
+  - 验证 API 类实例化
+  - 验证通过 SidebarLink 获取 API 实例
+  - 验证所有 API 端点方法存在（list、exportJob、exportFolder、exportAll、progress、updateJob、import、preview）
+  - 验证 URL 路由配置
+
+### 测试覆盖
+
+- **测试用例总数**：从 67 个增加到 75 个
+- **新增测试类**：`JobImportExportApiTest`（8 个测试方法）
 
 ### 验证
 
@@ -109,11 +122,12 @@
 
 ### 测试覆盖
 
-- **新增单元测试**：共 67 个测试用例，覆盖本地化核心功能
+- **新增单元测试**：共 76 个测试用例，覆盖本地化核心功能和 REST API
   - `StatusUtilTest`：21 个测试，覆盖状态码本地化、null/empty 处理、未知状态码
   - `ImportResultTest`：18 个测试，覆盖 `setStatusEnum()` / `setStatus()` 方法、双字段一致性
   - `ExportResultTest`：14 个测试，覆盖构造器本地化、statusCode/status 分离
   - `LocaleHolderTest`：14 个测试，覆盖 ThreadLocal 存储、线程隔离
+  - `JobImportExportApiTest`：9 个测试，覆盖 REST API 接口（list、exportJob、exportFolder、exportAll、progress、updateJob）
 - **测试框架**：使用 JUnit 5（junit-jupiter-api/junit-jupiter-engine 5.10.0）
 
 ### 修复

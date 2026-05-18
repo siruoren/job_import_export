@@ -552,6 +552,31 @@ print(f"更新结果: {resp.json()}")
 | 权限分级控制 | 菜单和功能按用户权限显示 |
 | 线程池限流 | 统一管理导入任务线程池，服务器繁忙时优雅拒绝任务 |
 
+### 测试覆盖
+
+插件提供完善的单元测试覆盖，使用 JUnit 5 测试框架：
+
+| 测试类 | 测试数量 | 覆盖范围 |
+|--------|----------|----------|
+| `StatusUtilTest` | 21 | 状态码本地化、null/empty 处理、未知状态码 |
+| `ImportResultTest` | 18 | `setStatusEnum()` / `setStatus()` 方法、双字段一致性 |
+| `ExportResultTest` | 14 | 构造器本地化、statusCode/status 分离 |
+| `LocaleHolderTest` | 14 | ThreadLocal 存储、线程隔离 |
+| `JobImportExportApiTest` | 9 | REST API 接口（list、exportJob、exportFolder、exportAll、progress、updateJob） |
+
+**运行测试：**
+
+```bash
+# 运行所有测试
+mvn test -Denforcer.skip=true
+
+# 运行特定测试类
+mvn test -Denforcer.skip=true -Dtest=JobImportExportApiTest
+
+# 跳过测试构建
+mvn clean package -Denforcer.skip=true -DskipTests
+```
+
 ---
 
 ## 安装方法
