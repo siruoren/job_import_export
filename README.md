@@ -30,13 +30,19 @@
 - 页面文本、按钮、提示信息均支持双语切换
 - JavaScript 前端提示也通过 i18n 对象实现动态语言切换
 - Java 后端消息通过 `Messages` 资源文件实现国际化
+- **导入/导出结果状态完整汉化**：预演弹窗和结果弹窗中所有任务状态（如 "跳过（已存在）"、"目录已存在，跳过"）和消息内容均以后端 Locale 为准正确显示中文
+  - 异步任务通过 `LocaleHolder` 保持用户 Locale 上下文
+  - 状态通过 `statusCode`（英文枚举值）判断样式 + `status`（汉化文本）显示
+  - 支持状态码：`OK`、`EXPORTED`、`SKIPPED`、`ERROR`、`BLOCKED`、`CONFLICT`、`ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`REUSE` 等
 
 ### 导入进度条
 
 批量导入任务时，弹窗中显示动画进度条：
-- 进度条从 0% 平滑动画过渡到 90%（等待服务器响应）
-- 收到服务器 SSE 进度事件后跳转到实际进度
-- 导入完成后进度条跳转到 100%
+- 进度条根据实际导入任务数实时更新，从 0% 到 100%
+- 采用短轮询机制（每 800ms 请求一次），避免 SSE 长连接阻塞服务器线程
+- 进度条下方显示当前正在导入的任务全称路径（如 `myFolder/subFolder/myJob`）
+- 预演（dryRun）完成后显示结果预览，确认后才执行实际导入
+- 实际导入成功后显示跳转按钮，可一键跳转到导入的目标目录
 
 ### 导出时间戳
 
@@ -51,7 +57,7 @@
 - 支持 UTF-8 编码，中文目录和任务名完美支持
 - 冲突处理三模式：**跳过** / **覆盖** / **重命名**
 - Dry Run 预演模式，导入前预览结果
-- 实时进度显示（SSE 流）
+- 实时进度显示（短轮询）
 - 导入失败恢复机制（断点续传）
 - 插件依赖自动检测
 - **根目录 config.xml 处理**：
@@ -74,6 +80,7 @@
 | 冲突传播机制 | 上游冲突自动阻断后续路径创建，防止级联错误 |
 | 覆盖前备份 | 自动备份现有配置为 `config.xml.bak` |
 | 权限分级控制 | 菜单和功能按用户权限显示 |
+| 线程池限流 | 统一管理导入任务线程池，服务器繁忙时优雅拒绝任务 |
 
 ---
 
@@ -374,6 +381,9 @@ job_import_export/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── ImportExecutor.java            # 导入任务线程池管理器
+        │   ├── ImportProgress.java            # 导入进度状态
+        │   ├── ProgressManager.java           # 进度管理单例
         │   └── engine/
         │       ├── ImportEngine.java          # 统一导入入口
         │       ├── ExportEngine.java          # 导出引擎
@@ -569,7 +579,30 @@ mvn compile
 
 # 运行测试
 mvn test
+
+# 运行指定测试类
+mvn test -Dtest=StatusUtilTest
+mvn test -Dtest=ImportResultTest,ExportResultTest
 ```
+
+---
+
+## 测试覆盖
+
+### 单元测试（67 个测试用例）
+
+| 测试类 | 测试数 | 覆盖内容 |
+|--------|--------|---------|
+| `StatusUtilTest` | 21 | 状态码本地化、null/empty 处理、未知状态码 |
+| `ImportResultTest` | 18 | `setStatusEnum()` / `setStatus()` 方法、双字段一致性、构造函数 |
+| `ExportResultTest` | 14 | 构造器本地化、statusCode/status 分离、success/skipped 标记 |
+| `LocaleHolderTest` | 14 | ThreadLocal 存储、线程隔离、clear/overwrite |
+
+### 测试框架
+
+- **JUnit 5**：使用 junit-jupiter-api 和 junit-jupiter-engine 5.10.0
+- **测试命令**：`mvn test -Denforcer.skip=true`
+- **测试结果**：所有 67 个测试用例均通过
 
 ---
 

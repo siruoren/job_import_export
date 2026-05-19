@@ -133,8 +133,6 @@
                 };
 
                 async function submit(form, extra = {}) {
-                    JenkinsModal.setLoading(true);
-
                     try {
                         const fd = new FormData(form);
                         Object.entries(extra).forEach(([k, v]) => fd.set(k, v));
@@ -153,33 +151,14 @@
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setLoading(false);
-
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
+                        if (result.async &amp;&amp; result.batchId) {
+                            showProgressBar();
+                            var progressBar = document.getElementById('importProgressBar');
+                            var progressText = document.getElementById('importProgressText');
+                            listenProgress(result.batchId, progressBar, progressText, form);
+                        } else {
+                            showImportResult(result, form);
                         }
-
-                        if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0) {
-                            buttons.unshift({
-                                text: i18n.confirmImport,
-                                type: 'primary',
-                                onClick: () => confirmRealImport(form)
-                            });
-                        }
-
-                        JenkinsModal.setFooter(buttons);
 
                     } catch (e) {
                         JenkinsModal.setLoading(false);
@@ -209,26 +188,31 @@
 
                         content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + r.failCount + '&lt;/p&gt;';
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:14%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:30%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'OK':
                                 case 'SUCCESS':
                                     statusColor = '#28a745';
                                     statusIcon = '✔ ';
                                     break;
                                 case 'ERROR':
+                                case 'ERROR_INVALID_NAME':
+                                case 'ERROR_PLUGIN':
                                     statusColor = '#dc3545';
                                     statusIcon = '✘ ';
                                     break;
                                 case 'SKIP':
                                 case 'SKIP_EXISTS':
+                                case 'SKIP_EMPTY':
+                                case 'SKIP_FOLDER_MISSING':
                                     statusColor = '#ffc107';
                                     statusIcon = '⏭ ';
                                     break;
@@ -240,6 +224,7 @@
                                     break;
                                 case 'OVERWRITE':
                                 case 'OVERWRITE_JOB':
+                                case 'OVERWRITE_FOLDER':
                                     statusColor = '#fd7e14';
                                     statusIcon = '⚠ ';
                                     break;
@@ -247,18 +232,36 @@
                                     statusColor = '#6f42c1';
                                     statusIcon = '📁 ';
                                     break;
+                                case 'CREATE_JOB':
+                                    statusColor = '#28a745';
+                                    statusIcon = '📄 ';
+                                    break;
+                                case 'UPDATE_CONFIG':
+                                    statusColor = '#17a2b8';
+                                    statusIcon = '🔄 ';
+                                    break;
+                                case 'REUSE_FOLDER':
+                                case 'REUSE':
+                                    statusColor = '#6c757d';
+                                    statusIcon = '📂 ';
+                                    break;
+                                case 'BLOCKED':
+                                case 'CONFLICT':
+                                    statusColor = '#dc3545';
+                                    statusIcon = '🚫 ';
+                                    break;
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
 
                             let finalName = escapeHtml(detail.fullPath || detail.finalName);
                             if (detail.finalName !== detail.jobPath) {
                                 finalName = escapeHtml(detail.fullPath || detail.jobPath) + ' → ' + escapeHtml(detail.fullPath || detail.finalName);
                             }
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + finalName + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
                             content += '&lt;/tr&gt;';
                         });
 
@@ -335,54 +338,86 @@
                     
                     content += '&lt;p style="color:#dc3545;"&gt;&lt;strong&gt;' + i18n.failed + '：&lt;/strong&gt;' + result.failCount + '&lt;/p&gt;';
                     content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                    content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                    content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                    content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                    content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.job + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:28%;"&gt;' + i18n.finalName + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:14%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:30%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                     content += '&lt;tbody&gt;';
                     
                     result.details.forEach(detail => {
                         let statusColor = '#666';
                         let statusIcon = '';
+                        let statusCode = detail.statusCode || detail.status;
                         
-                        switch(detail.status) {
+                        switch(statusCode) {
                             case 'OK':
                             case 'SUCCESS':
                                 statusColor = '#28a745';
                                 statusIcon = '✔ ';
                                 break;
                             case 'ERROR':
+                            case 'ERROR_INVALID_NAME':
+                            case 'ERROR_PLUGIN':
                                 statusColor = '#dc3545';
                                 statusIcon = '✘ ';
                                 break;
                             case 'SKIP':
+                            case 'SKIP_EXISTS':
+                            case 'SKIP_EMPTY':
+                            case 'SKIP_FOLDER_MISSING':
                                 statusColor = '#ffc107';
                                 statusIcon = '⏭ ';
                                 break;
                             case 'RENAME':
+                            case 'RENAME_JOB':
+                            case 'RENAME_FOLDER':
                                 statusColor = '#17a2b8';
                                 statusIcon = '↻ ';
                                 break;
                             case 'OVERWRITE':
+                            case 'OVERWRITE_JOB':
+                            case 'OVERWRITE_FOLDER':
                                 statusColor = '#fd7e14';
                                 statusIcon = '⚠ ';
+                                break;
+                            case 'CREATE_FOLDER':
+                                statusColor = '#6f42c1';
+                                statusIcon = '📁 ';
+                                break;
+                            case 'CREATE_JOB':
+                                statusColor = '#28a745';
+                                statusIcon = '📄 ';
+                                break;
+                            case 'UPDATE_CONFIG':
+                                statusColor = '#17a2b8';
+                                statusIcon = '🔄 ';
+                                break;
+                            case 'REUSE_FOLDER':
+                            case 'REUSE':
+                                statusColor = '#6c757d';
+                                statusIcon = '📂 ';
+                                break;
+                            case 'BLOCKED':
+                            case 'CONFLICT':
+                                statusColor = '#dc3545';
+                                statusIcon = '🚫 ';
                                 break;
                         }
                         
                         content += '&lt;tr&gt;';
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
                         
                         let finalName = escapeHtml(detail.fullPath || detail.finalName);
                         if (detail.finalName !== detail.jobPath) {
                             finalName = escapeHtml(detail.fullPath || detail.jobPath) + ' → ' + escapeHtml(detail.fullPath || detail.finalName);
                         }
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + finalName + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + finalName + '&lt;/td&gt;';
                         
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
                         
                         let message = escapeHtml(detail.message);
                         if (detail.missingPlugins &amp;&amp; detail.missingPlugins.length &gt; 0) {
                             message += '&lt;br /&gt;&lt;span style="color:#dc3545; font-size:12px;"&gt;' + i18n.missingPlugins + ': ' + detail.missingPlugins.map(p => escapeHtml(p)).join(', ') + '&lt;/span&gt;';
                         }
-                        content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + message + '&lt;/td&gt;';
+                        content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + message + '&lt;/td&gt;';
                         content += '&lt;/tr&gt;';
                     });
                     
@@ -429,27 +464,10 @@
                 }
 
                 async function confirmRealImport(form) {
-                    JenkinsModal.setContent(
-                        '<div style="text-align:center; padding:20px;">' +
-                        '<p style="margin-bottom:16px; font-size:14px; color:#333;">' + i18n.importing + '</p>' +
-                        '<div style="width:100%; height:6px; background:#e9ecef; border-radius:3px; overflow:hidden;">' +
-                        '<div id="importProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #2196F3, #4CAF50); border-radius:3px; transition: width 0.3s ease;"></div>' +
-                        '</div>' +
-                        '<p id="importProgressText" style="margin-top:10px; font-size:12px; color:#666;"></p>' +
-                        '</div>'
-                    );
-                    JenkinsModal.setFooter([]);
-                    JenkinsModal.setLoading(false);
+                    showProgressBar();
 
                     var progressBar = document.getElementById('importProgressBar');
                     var progressText = document.getElementById('importProgressText');
-                    var progressInterval = setInterval(function() {
-                        var currentWidth = parseFloat(progressBar.style.width) || 0;
-                        if (currentWidth &lt; 90) {
-                            var increment = (90 - currentWidth) * 0.08 + 0.5;
-                            progressBar.style.width = Math.min(currentWidth + increment, 90) + '%';
-                        }
-                    }, 300);
 
                     try {
                         const fd = new FormData(form);
@@ -466,38 +484,18 @@
                             body: fd
                         });
 
-                        clearInterval(progressInterval);
-                        progressBar.style.width = '100%';
-
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
-                        }
-
-                        JenkinsModal.setFooter(buttons);
-
-                        if (result.success) {
-                            showToast('success', result.message || i18n.importSuccess);
+                        if (result.async &amp;&amp; result.batchId) {
+                            listenProgress(result.batchId, progressBar, progressText, form);
                         } else {
-                            showToast('error', result.message || i18n.importFailed);
+                            progressBar.style.width = '100%';
+                            if (progressText) progressText.textContent = '';
+                            showImportResult(result, form);
                         }
 
                     } catch (e) {
-                        clearInterval(progressInterval);
                         JenkinsModal.setLoading(false);
                         showToast('error', i18n.importError.replace('{0}', e));
                     }
@@ -523,7 +521,7 @@
                     }]);
                 }
 
-                async function submitWithoutDryRun(form) {
+                function showProgressBar() {
                     JenkinsModal.setContent(
                         '<div style="text-align:center; padding:20px;">' +
                         '<p style="margin-bottom:16px; font-size:14px; color:#333;">' + i18n.importing + '</p>' +
@@ -535,16 +533,13 @@
                     );
                     JenkinsModal.setFooter([]);
                     JenkinsModal.setLoading(false);
+                }
+
+                async function submitWithoutDryRun(form) {
+                    showProgressBar();
 
                     var progressBar = document.getElementById('importProgressBar');
                     var progressText = document.getElementById('importProgressText');
-                    var progressInterval = setInterval(function() {
-                        var currentWidth = parseFloat(progressBar.style.width) || 0;
-                        if (currentWidth &lt; 90) {
-                            var increment = (90 - currentWidth) * 0.08 + 0.5;
-                            progressBar.style.width = Math.min(currentWidth + increment, 90) + '%';
-                        }
-                    }, 300);
 
                     try {
                         const fd = new FormData(form);
@@ -555,32 +550,18 @@
                             body: fd
                         });
 
-                        clearInterval(progressInterval);
-                        progressBar.style.width = '100%';
-
                         const text = await res.text();
                         const result = JSON.parse(text);
 
-                        JenkinsModal.setContent(renderResult(result));
-
-                        const buttons = [{
-                            text: i18n.close,
-                            type: 'default',
-                            onClick: () => JenkinsModal.close()
-                        }];
-
-                        if (result.redirect) {
-                            buttons.push({
-                                text: i18n.jump,
-                                type: 'primary',
-                                onClick: () => location.href = result.redirect
-                            });
+                        if (result.async &amp;&amp; result.batchId) {
+                            listenProgress(result.batchId, progressBar, progressText, form);
+                        } else {
+                            progressBar.style.width = '100%';
+                            if (progressText) progressText.textContent = '';
+                            showImportResult(result, form);
                         }
 
-                        JenkinsModal.setFooter(buttons);
-
                     } catch (e) {
-                        clearInterval(progressInterval);
                         JenkinsModal.setLoading(false);
                         JenkinsModal.setContent('&lt;div style="color:#dc3545;"&gt;' + i18n.requestFailed.replace('{0}', e) + '&lt;/div&gt;');
                         JenkinsModal.setFooter([{
@@ -591,19 +572,85 @@
                     }
                 }
 
-                function listenProgress(batchId) {
-                    const es = new EventSource('progress?batchId=' + batchId);
+                function showImportResult(result, form) {
+                    JenkinsModal.setContent(renderResult(result));
 
-                    es.onmessage = e => {
-                        const data = JSON.parse(e.data);
-                        showToast('info', i18n.progressStatus.replace('{0}', data.overallProgress).replace('{1}', data.currentJob));
+                    const buttons = [{
+                        text: i18n.close,
+                        type: 'default',
+                        onClick: () => JenkinsModal.close()
+                    }];
 
-                        if (data.status === 'DONE') {
-                            es.close();
-                        }
-                    };
+                    if (result.redirect &amp;&amp; !result.dryRun) {
+                        buttons.push({
+                            text: i18n.jump,
+                            type: 'primary',
+                            onClick: () => location.href = result.redirect
+                        });
+                    }
 
-                    es.onerror = () => es.close();
+                    if (result.dryRun &amp;&amp; result.success &amp;&amp; result.details &amp;&amp; result.details.length &gt; 0 &amp;&amp; result.successCount &gt; 0 &amp;&amp; form) {
+                        buttons.unshift({
+                            text: i18n.confirmImport,
+                            type: 'primary',
+                            onClick: () => confirmRealImport(form)
+                        });
+                    }
+
+                    JenkinsModal.setFooter(buttons);
+
+                    if (result.success) {
+                        showToast('success', result.message || i18n.importSuccess);
+                    } else {
+                        showToast('error', result.message || i18n.importFailed);
+                    }
+                }
+
+                function listenProgress(batchId, progressBar, progressText, form) {
+                    var pollTimer = null;
+
+                    function poll() {
+                        fetch('progress?batchId=' + batchId)
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (data.status === 'NOT_FOUND') {
+                                    clearInterval(pollTimer);
+                                    return;
+                                }
+
+                                if (progressBar &amp;&amp; data.overallProgress != null) {
+                                    progressBar.style.width = data.overallProgress + '%';
+                                }
+                                if (progressText) {
+                                    progressText.textContent = i18n.progressStatus.replace('{0}', data.overallProgress).replace('{1}', data.currentJob);
+                                }
+
+                                if (data.resultReady) {
+                                    clearInterval(pollTimer);
+                                    progressBar.style.width = '100%';
+                                    if (progressText) progressText.textContent = '';
+
+                                    var result = {
+                                        success: data.status !== 'ERROR',
+                                        message: data.resultMessage,
+                                        dryRun: data.dryRun,
+                                        total: data.successCount + data.failCount + data.skipCount,
+                                        successCount: data.successCount,
+                                        failCount: data.failCount,
+                                        skipCount: data.skipCount,
+                                        redirect: data.redirect,
+                                        details: data.details
+                                    };
+                                    showImportResult(result, form);
+                                }
+                            })
+                            .catch(function() {
+                                clearInterval(pollTimer);
+                            });
+                    }
+
+                    pollTimer = setInterval(poll, 800);
+                    poll();
                 }
 
                 function renderExportResult(r) {
@@ -622,15 +669,16 @@
                         }
 
                         content += '&lt;hr style="margin:16px 0; border:none; border-top:1px solid #eee;" /&gt;';
-                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px;"&gt;';
-                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
+                        content += '&lt;table style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;"&gt;';
+                        content += '&lt;thead&gt;&lt;tr style="background:#f8f9fa;"&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:45%;"&gt;' + i18n.jobPath + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:15%;"&gt;' + i18n.status + '&lt;/th&gt;&lt;th style="padding:4px 6px; text-align:left; border-bottom:1px solid #ddd; width:40%;"&gt;' + i18n.message + '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;';
                         content += '&lt;tbody&gt;';
 
                         r.details.forEach(detail => {
                             let statusColor = '#666';
                             let statusIcon = '';
+                            let statusCode = detail.statusCode || detail.status;
 
-                            switch(detail.status) {
+                            switch(statusCode) {
                                 case 'EXPORTED':
                                     statusColor = '#28a745';
                                     statusIcon = '✔ ';
@@ -646,9 +694,9 @@
                             }
 
                             content += '&lt;tr&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold;"&gt;' + statusIcon + detail.status + '&lt;/td&gt;';
-                            content += '&lt;td style="padding:8px; border-bottom:1px solid #eee; color:#666;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.fullPath || detail.jobPath) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:' + statusColor + '; font-weight:bold; white-space:nowrap;"&gt;' + statusIcon + escapeHtml(detail.status) + '&lt;/td&gt;';
+                            content += '&lt;td style="padding:4px 6px; border-bottom:1px solid #eee; color:#666; word-break:break-all; line-height:1.4;"&gt;' + escapeHtml(detail.message) + '&lt;/td&gt;';
                             content += '&lt;/tr&gt;';
                         });
 

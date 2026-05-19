@@ -4,6 +4,7 @@ public class ExportResult {
     public String jobPath;
     public String fullPath;
     public String status;
+    public String statusCode;
     public String message;
     public boolean success;
     public boolean skipped;
@@ -11,7 +12,8 @@ public class ExportResult {
     public ExportResult(String jobPath, String fullPath, String status, String message) {
         this.jobPath = jobPath;
         this.fullPath = fullPath;
-        this.status = status;
+        this.statusCode = status;
+        this.status = StatusUtil.getLocalizedStatus(status);
         this.message = message;
         this.success = "EXPORTED".equals(status);
         this.skipped = "SKIPPED".equals(status);

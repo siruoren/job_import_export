@@ -223,8 +223,8 @@ public class ExportEngine {
         int skipped = 0;
         int errors = 0;
         for (ExportResult r : results) {
-            if ("EXPORTED".equals(r.status)) exported++;
-            else if ("SKIPPED".equals(r.status)) skipped++;
+            if ("EXPORTED".equals(r.statusCode)) exported++;
+            else if ("SKIPPED".equals(r.statusCode)) skipped++;
             else errors++;
         }
         return new ExportResult("", "", "SUMMARY",

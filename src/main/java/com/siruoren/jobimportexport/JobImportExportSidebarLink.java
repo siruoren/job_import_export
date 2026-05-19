@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import com.siruoren.jobimportexport.engine.ImportEngine;
 import com.siruoren.jobimportexport.engine.ExportEngine;
 import com.siruoren.jobimportexport.engine.model.ImportContext;
@@ -51,6 +52,7 @@ import com.siruoren.jobimportexport.engine.model.ImportResult;
 import com.siruoren.jobimportexport.engine.model.ExportResult;
 import com.siruoren.jobimportexport.engine.model.NodeType;
 import com.siruoren.jobimportexport.engine.model.Status;
+import com.siruoren.jobimportexport.engine.model.LocaleHolder;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -251,40 +253,86 @@ public class JobImportExportSidebarLink implements RootAction {
                 return;
             }
 
-            // ✔ 使用新的 ImportEngine（Tree-based 遍历，不会丢失最后任务）
-            ImportEngine importEngine = new ImportEngine();
-            ImportContext ctx = new ImportContext();
+            String batchId = java.util.UUID.randomUUID().toString().substring(0, 8);
+            ProgressManager progressManager = ProgressManager.getInstance();
+            progressManager.createProgress(batchId, 0);
 
-            ctx.dryRun = dryRun;
-            ctx.overwrite = overwrite;
-            ctx.autoRename = rename;
-            ctx.targetGroup = Jenkins.get();
+            Path tempZip = Files.createTempFile("jenkins-import-", ".zip");
+            Files.copy(fileItem.getInputStream(), tempZip, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            List<ImportResult> results;
-            try (ZipInputStream zis = new ZipInputStream(fileItem.getInputStream(), StandardCharsets.UTF_8)) {
-                results = importEngine.importZip(zis, ctx);
-            }
+            org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            Locale capturedLocale = req.getLocale();
 
-            int successCount = 0;
-            int failCount = 0;
-            int skipCount = 0;
+            ImportExecutor executor = ImportExecutor.getInstance();
+            boolean accepted = executor.submitTask(() -> {
+                org.springframework.security.core.context.SecurityContext securityContext = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+                securityContext.setAuthentication(authentication);
+                org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
+                LocaleHolder.setLocale(capturedLocale);
+                try {
+                    int successCount = 0;
+                    int failCount = 0;
+                    int skipCount = 0;
+                    List<ImportResult> results = new ArrayList<>();
+                    boolean importSuccess = false;
 
-            for (ImportResult result : results) {
-                if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
-                        || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
-                    successCount++;
-                } else if (result.statusEnum == Status.ERROR) {
-                    failCount++;
-                } else {
-                    skipCount++;
+                    try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(tempZip), StandardCharsets.UTF_8)) {
+                        ImportEngine importEngine = new ImportEngine();
+                        ImportContext ctx = new ImportContext();
+                        ctx.dryRun = dryRun;
+                        ctx.overwrite = overwrite;
+                        ctx.autoRename = rename;
+                        ctx.targetGroup = Jenkins.get();
+
+                        results = importEngine.importZipWithProgress(zis, ctx, (result, currentIndex, totalCount) -> {
+                            if (totalCount > 0) {
+                                progressManager.createProgress(batchId, totalCount);
+                            }
+                            progressManager.updateProgress(batchId, result.fullPath != null ? result.fullPath : result.finalName, currentIndex, result.status, result.message);
+                        });
+
+                        for (ImportResult result : results) {
+                            if (result.statusEnum == Status.CREATE_FOLDER || result.statusEnum == Status.CREATE_JOB
+                                    || result.statusEnum == Status.OVERWRITE_FOLDER || result.statusEnum == Status.OVERWRITE_JOB || result.statusEnum == Status.RENAME_FOLDER || result.statusEnum == Status.RENAME_JOB || result.statusEnum == Status.UPDATE_CONFIG) {
+                                successCount++;
+                            } else if (result.statusEnum == Status.ERROR) {
+                                failCount++;
+                            } else {
+                                skipCount++;
+                            }
+                        }
+                        importSuccess = true;
+                    } catch (Exception e) {
+                        progressManager.setErrorResult(batchId, e.getMessage(), successCount, failCount, skipCount, results, dryRun, null);
+                    } finally {
+                        try { Files.deleteIfExists(tempZip); } catch (Exception ignored) {}
+                    }
+
+                    if (importSuccess) {
+                        if (!dryRun) {
+                            try { Jenkins.get().reload(); } catch (Exception ignored) {}
+                        }
+
+                        String message = dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete();
+                        progressManager.setResult(batchId, message, successCount, failCount, skipCount, results, dryRun, null);
+                    }
+                } finally {
+                    LocaleHolder.clear();
+                    executor.taskCompleted();
+                    org.springframework.security.core.context.SecurityContextHolder.clearContext();
                 }
+            });
+
+            if (!accepted) {
+                rsp.setCharacterEncoding("UTF-8");
+                rsp.setContentType("application/json;charset=UTF-8");
+                rsp.getWriter().write("{\"success\":false,\"message\":\"" + Messages.JobImportExportAction_serverBusy() + "\"}");
+                return;
             }
 
-            if (!dryRun) {
-                Jenkins.get().reload();
-            }
-
-            writeBatchJson(rsp, true, dryRun ? Messages.JobImportExportAction_previewComplete() : Messages.JobImportExportAction_batchImportComplete(), successCount, failCount, skipCount, results, dryRun);
+            rsp.setCharacterEncoding("UTF-8");
+            rsp.setContentType("application/json;charset=UTF-8");
+            rsp.getWriter().write("{\"success\":true,\"batchId\":\"" + batchId + "\",\"async\":true}");
 
         } catch (Exception e) {
             if (!rsp.isCommitted()) {
@@ -331,7 +379,8 @@ public class JobImportExportSidebarLink implements RootAction {
             int failCount,
             int skipCount,
             List<ImportResult> results,
-            boolean dryRun) throws IOException {
+            boolean dryRun,
+            String batchId) throws IOException {
 
         rsp.setCharacterEncoding("UTF-8");
         rsp.setContentType("application/json;charset=UTF-8");
@@ -350,7 +399,9 @@ public class JobImportExportSidebarLink implements RootAction {
                    .append("\",\"fullPath\":\"")
                    .append(escapeJson(result.fullPath != null ? result.fullPath : result.finalName))
                    .append("\",\"status\":\"")
-                   .append(result.status)
+                   .append(escapeJson(result.status))
+                   .append("\",\"statusCode\":\"")
+                   .append(escapeJson(result.statusEnum != null ? result.statusEnum.name() : ""))
                    .append("\",\"message\":\"")
                    .append(escapeJson(result.message))
                    .append("\"");
@@ -382,6 +433,7 @@ public class JobImportExportSidebarLink implements RootAction {
                 + "\"successCount\":" + successCount + ","
                 + "\"failCount\":" + failCount + ","
                 + "\"skipCount\":" + skipCount + ","
+                + "\"batchId\":\"" + escapeJson(batchId != null ? batchId : "") + "\","
                 + "\"details\":" + details.toString()
                 + "}";
 
@@ -412,7 +464,9 @@ public class JobImportExportSidebarLink implements RootAction {
                        .append("\",\"fullPath\":\"")
                        .append(escapeJson(result.fullPath))
                        .append("\",\"status\":\"")
-                       .append(result.status)
+                       .append(escapeJson(result.status))
+                       .append("\",\"statusCode\":\"")
+                       .append(escapeJson(result.statusCode))
                        .append("\",\"message\":\"")
                        .append(escapeJson(result.message))
                        .append("\"}");
@@ -425,8 +479,8 @@ public class JobImportExportSidebarLink implements RootAction {
         int errors = 0;
         if (results != null) {
             for (ExportResult r : results) {
-                if ("EXPORTED".equals(r.status)) exported++;
-                else if ("SKIPPED".equals(r.status)) skipped++;
+                if ("EXPORTED".equals(r.statusCode)) exported++;
+                else if ("SKIPPED".equals(r.statusCode)) skipped++;
                 else errors++;
             }
         }
@@ -682,7 +736,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (ctx.blocked || ctx.isPathBlocked(currentPath)) {
             ImportResult r = new ImportResult(parts[index]);
-            r.status = "BLOCKED";
+            r.setStatusEnum(Status.BLOCKED);
             r.message = Messages.JobImportExportSidebarLink_parentBlocked(ctx.blockedReason);
             results.add(r);
             return;
@@ -704,7 +758,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -716,7 +770,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -728,7 +782,7 @@ public class JobImportExportSidebarLink implements RootAction {
             ctx.blockedPaths.add(fullPath);
 
             ImportResult r = new ImportResult(name);
-            r.status = "CONFLICT";
+            r.setStatusEnum(Status.CONFLICT);
             r.message = ctx.blockedReason;
             results.add(r);
             return;
@@ -736,7 +790,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         if (isLast && item != null) {
             ImportResult r = new ImportResult(name);
-            r.status = "SKIP_EXISTS";
+            r.setStatusEnum(Status.SKIP_EXISTS);
             r.message = Messages.JobImportExportSidebarLink_jobExists();
             results.add(r);
             return;
@@ -748,7 +802,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     if (!(base instanceof ModifiableTopLevelItemGroup)) {
                         ctx.block(Messages.JobImportExportSidebarLink_cannotCreateDirHere(name));
                         ImportResult r = new ImportResult(name);
-                        r.status = "ERROR";
+                        r.setStatusEnum(Status.ERROR);
                         r.message = ctx.blockedReason;
                         results.add(r);
                         return;
@@ -781,7 +835,7 @@ public class JobImportExportSidebarLink implements RootAction {
         if (isLast && !dryRun) {
             if (!(base instanceof ModifiableTopLevelItemGroup)) {
                 ImportResult r = new ImportResult(name);
-                r.status = "ERROR";
+                r.setStatusEnum(Status.ERROR);
                 r.message = Messages.JobImportExportSidebarLink_cannotCreateJobHere(name);
                 results.add(r);
                 return;
@@ -795,7 +849,7 @@ public class JobImportExportSidebarLink implements RootAction {
         }
 
         ImportResult r = new ImportResult(name);
-        r.status = "OK";
+        r.setStatusEnum(Status.OK);
         r.success = true;
         results.add(r);
     }
@@ -1185,7 +1239,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
         try {
             if (ctx != null && ctx.blocked) {
-                result.status = "BLOCKED";
+                result.setStatus("BLOCKED");
                 result.message = Messages.JobImportExportSidebarLink_upstreamBlocked();
                 result.blockedBy = ctx.blockedReason;
                 result.reason = "parent folder mismatch";
@@ -1195,7 +1249,7 @@ public class JobImportExportSidebarLink implements RootAction {
             jobName = sanitizeJobName(jobName);
 
             if (jobName == null) {
-                result.status = "ERROR_INVALID_NAME";
+                result.setStatus("ERROR_INVALID_NAME");
                 result.message = Messages.JobImportExportSidebarLink_jobNameEmpty();
                 return result;
             }
@@ -1203,7 +1257,7 @@ public class JobImportExportSidebarLink implements RootAction {
             try {
                 validateJobName(jobName);
             } catch (Exception e) {
-                result.status = "ERROR_INVALID_NAME";
+                result.setStatus("ERROR_INVALID_NAME");
                 result.message = Messages.JobImportExportSidebarLink_jobNameInvalid(e.getMessage());
                 return result;
             }
@@ -1214,13 +1268,13 @@ public class JobImportExportSidebarLink implements RootAction {
             result.missingPlugins = missingPlugins;
 
             if (!missingPlugins.isEmpty()) {
-                result.status = "ERROR_PLUGIN";
+                result.setStatus("ERROR_PLUGIN");
                 result.message = Messages.JobImportExportSidebarLink_missingPluginDeps(String.join(", ", missingPlugins));
                 return result;
             }
 
             if (!isCreatableGroup(itemGroup)) {
-                result.status = "ERROR";
+                result.setStatus("ERROR");
                 result.message = Messages.JobImportExportSidebarLink_dirNotSupportCreateJob();
                 return result;
             }
@@ -1238,10 +1292,10 @@ public class JobImportExportSidebarLink implements RootAction {
             if (existingItem != null) {
                 if (overwrite) {
                     if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
-                        result.status = "REUSE";
+                        result.setStatus("REUSE");
                         result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     } else {
-                        result.status = "OVERWRITE";
+                        result.setStatus("OVERWRITE");
                         result.message = Messages.JobImportExportSidebarLink_willOverwriteExisting();
                     }
                 } else if (rename) {
@@ -1254,7 +1308,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     String effectiveFolderPath = renameCtx != null ? renameCtx.applyRename(folderPath) : folderPath;
                     result.finalName = effectiveFolderPath.isEmpty() ? newName : effectiveFolderPath + "/" + newName;
                     result.renamed = true;
-                    result.status = "RENAME";
+                    result.setStatus("RENAME");
                     result.message = Messages.JobImportExportSidebarLink_jobExistsWillRename(result.finalName);
 
                     if (renameCtx != null) {
@@ -1264,12 +1318,12 @@ public class JobImportExportSidebarLink implements RootAction {
                     }
                 } else {
                     result.skipped = true;
-                    result.status = "SKIP_EXISTS";
+                    result.setStatus("SKIP_EXISTS");
                     result.message = Messages.JobImportExportSidebarLink_jobExistsSkipped();
                     return result;
                 }
             } else {
-                result.status = "OK";
+                result.setStatus("OK");
                 result.message = Messages.JobImportExportSidebarLink_canImport();
             }
 
@@ -1289,7 +1343,7 @@ public class JobImportExportSidebarLink implements RootAction {
                             vfs.createFolder(effectiveFolderPath);
                         }
                     } catch (IOException e) {
-                        result.status = "SKIP_FOLDER_MISSING";
+                        result.setStatus("SKIP_FOLDER_MISSING");
                         result.message = Messages.JobImportExportSidebarLink_createDirFailed(effectiveFolderPath, e.getMessage());
                         result.skipped = true;
                         return result;
@@ -1307,7 +1361,7 @@ public class JobImportExportSidebarLink implements RootAction {
 
                 if (existingItem instanceof ItemGroup && (xmlBytes == null || xmlBytes.length == 0)) {
                     result.success = true;
-                    result.status = "REUSE";
+                    result.setStatus("REUSE");
                     result.message = Messages.JobImportExportSidebarLink_dirExistsReuse();
                     return result;
                 }
@@ -1316,7 +1370,7 @@ public class JobImportExportSidebarLink implements RootAction {
                     AbstractItem abstractItem = (AbstractItem) existingItem;
 
                     if (isSpecialFolder(abstractItem)) {
-                        result.status = "ERROR";
+                        result.setStatus("ERROR");
                         result.message = Messages.JobImportExportSidebarLink_cannotOverwriteDynamicDir();
                         return result;
                     }
@@ -1327,7 +1381,7 @@ public class JobImportExportSidebarLink implements RootAction {
                                 abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                                 abstractItem.save();
                             }
-                            result.status = "OVERWRITE";
+                            result.setStatus("OVERWRITE");
                             result.success = true;
                             result.message = Messages.JobImportExportSidebarLink_dirConfigOverwritten();
                             return result;
@@ -1339,14 +1393,14 @@ public class JobImportExportSidebarLink implements RootAction {
                             abstractItem.updateByXml(new javax.xml.transform.stream.StreamSource(in));
                             abstractItem.save();
                         }
-                        result.status = "OVERWRITE";
+                        result.setStatus("OVERWRITE");
                         result.success = true;
                         result.message = Messages.JobImportExportSidebarLink_jobConfigOverwritten();
                         return result;
                     }
                 } else if (existingItem instanceof ItemGroup) {
                     if (isFolderConfig(xmlBytes)) {
-                        result.status = "ERROR";
+                        result.setStatus("ERROR");
                         result.message = Messages.JobImportExportSidebarLink_dirTypeNotSupported();
                         return result;
                     } else {
@@ -1366,7 +1420,7 @@ public class JobImportExportSidebarLink implements RootAction {
             result.success = true;
 
         } catch (Exception e) {
-            result.status = "ERROR";
+            result.setStatus("ERROR");
             result.message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
         }
 
@@ -1426,14 +1480,14 @@ public class JobImportExportSidebarLink implements RootAction {
                 }
             } catch (Exception e) {
                 ImportResult errorResult = new ImportResult(checkpoint.getJobName());
-                errorResult.status = "ERROR";
+                errorResult.setStatus("ERROR");
                 errorResult.message = e.getMessage();
                 results.add(errorResult);
                 failCount++;
             }
         }
 
-        writeBatchJson(rsp, successCount > 0, Messages.JobImportExportSidebarLink_resumeImportComplete(), successCount, failCount, 0, results, false);
+        writeBatchJson(rsp, successCount > 0, Messages.JobImportExportSidebarLink_resumeImportComplete(), successCount, failCount, 0, results, false, null);
     }
 
     public void doInstallPlugin(StaplerRequest req, StaplerResponse rsp) throws IOException {
@@ -1458,11 +1512,12 @@ public class JobImportExportSidebarLink implements RootAction {
 
     public void doProgress(StaplerRequest req, StaplerResponse rsp) throws IOException {
         req.setCharacterEncoding("UTF-8");
-        rsp.setContentType("text/event-stream");
+        rsp.setContentType("application/json;charset=UTF-8");
         rsp.setCharacterEncoding("UTF-8");
 
         String batchId = req.getParameter("batchId");
         if (batchId == null || batchId.isEmpty()) {
+            rsp.getWriter().write("{\"status\":\"NOT_FOUND\"}");
             return;
         }
 
@@ -1470,44 +1525,48 @@ public class JobImportExportSidebarLink implements RootAction {
         ImportProgress progress = progressManager.getProgress(batchId);
 
         if (progress == null) {
+            rsp.getWriter().write("{\"status\":\"NOT_FOUND\"}");
             return;
         }
 
-        try (java.io.PrintWriter writer = rsp.getWriter()) {
-            int lastProgress = -1;
-            int timeout = 30000; // 30 seconds timeout
-            long startTime = System.currentTimeMillis();
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"batchId\":\"").append(escapeJson(progress.getBatchId())).append("\",");
+        json.append("\"currentJob\":\"").append(escapeJson(progress.getCurrentJob() != null ? progress.getCurrentJob() : "")).append("\",");
+        json.append("\"currentJobIndex\":").append(progress.getCurrentJobIndex()).append(",");
+        json.append("\"totalJobs\":").append(progress.getTotalJobs()).append(",");
+        json.append("\"overallProgress\":").append(progress.getOverallProgress()).append(",");
+        json.append("\"status\":\"").append(escapeJson(progress.getStatus())).append("\",");
+        json.append("\"message\":\"").append(escapeJson(progress.getMessage() != null ? progress.getMessage() : "")).append("\"");
 
-            while (System.currentTimeMillis() - startTime < timeout) {
-                if (progress.getOverallProgress() != lastProgress) {
-                    lastProgress = progress.getOverallProgress();
-                    
-                    String eventData = String.format(
-                        "{\"batchId\":\"%s\",\"currentJob\":\"%s\",\"currentJobIndex\":%d,\"totalJobs\":%d,\"overallProgress\":%d,\"status\":\"%s\",\"message\":\"%s\"}",
-                        escapeJson(progress.getBatchId()),
-                        escapeJson(progress.getCurrentJob() != null ? progress.getCurrentJob() : ""),
-                        progress.getCurrentJobIndex(),
-                        progress.getTotalJobs(),
-                        progress.getOverallProgress(),
-                        escapeJson(progress.getStatus()),
-                        escapeJson(progress.getMessage() != null ? progress.getMessage() : "")
-                    );
-                    
-                    writer.write("data: " + eventData + "\n\n");
-                    writer.flush();
-                }
-
-                if ("DONE".equals(progress.getStatus()) || "ERROR".equals(progress.getStatus())) {
-                    break;
-                }
-
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    break;
-                }
+        if (progress.isResultReady()) {
+            json.append(",\"resultReady\":true");
+            json.append(",\"resultMessage\":\"").append(escapeJson(progress.getResultMessage() != null ? progress.getResultMessage() : "")).append("\"");
+            json.append(",\"successCount\":").append(progress.getSuccessCount());
+            json.append(",\"failCount\":").append(progress.getFailCount());
+            json.append(",\"skipCount\":").append(progress.getSkipCount());
+            json.append(",\"dryRun\":").append(progress.isDryRun());
+            json.append(",\"redirect\":\"").append(escapeJson(progress.getRedirect() != null ? progress.getRedirect() : "")).append("\"");
+            json.append(",\"details\":[");
+            List<ImportResult> details = progress.getDetails();
+            for (int i = 0; i < details.size(); i++) {
+                ImportResult r = details.get(i);
+                if (i > 0) json.append(",");
+                json.append("{");
+                json.append("\"jobPath\":\"").append(escapeJson(r.displayPath != null ? r.displayPath : r.jobName)).append("\",");
+                json.append("\"finalName\":\"").append(escapeJson(r.finalName)).append("\",");
+                json.append("\"fullPath\":\"").append(escapeJson(r.fullPath != null ? r.fullPath : r.finalName)).append("\",");
+                json.append("\"status\":\"").append(escapeJson(r.status)).append("\",");
+                json.append("\"statusCode\":\"").append(escapeJson(r.statusEnum != null ? r.statusEnum.name() : "")).append("\",");
+                json.append("\"message\":\"").append(escapeJson(r.message)).append("\"");
+                json.append("}");
             }
+            json.append("]");
         }
+
+        json.append("}");
+
+        rsp.getWriter().write(json.toString());
     }
 
     private void backupConfig(Item item) throws IOException {

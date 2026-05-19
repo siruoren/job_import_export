@@ -1,20 +1,30 @@
 package com.siruoren.jobimportexport;
 
-import java.io.Serializable;
+import com.siruoren.jobimportexport.engine.model.ImportResult;
 
-/**
- * Import progress information for SSE streaming
- */
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
 public class ImportProgress implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private String batchId;
-    private String currentJob;
-    private int currentJobIndex;
-    private int totalJobs;
-    private int overallProgress;
-    private String status; // STARTED, PARSING, CHECKING, CREATING, DONE, ERROR
-    private String message;
+    private volatile String batchId;
+    private volatile String currentJob;
+    private volatile int currentJobIndex;
+    private volatile int totalJobs;
+    private volatile int overallProgress;
+    private volatile String status;
+    private volatile String message;
+
+    private volatile String resultMessage;
+    private volatile int successCount;
+    private volatile int failCount;
+    private volatile int skipCount;
+    private volatile List<ImportResult> details = new ArrayList<>();
+    private volatile boolean dryRun;
+    private volatile String redirect;
+    private volatile boolean resultReady = false;
 
     public ImportProgress(String batchId, int totalJobs) {
         this.batchId = batchId;
@@ -24,79 +34,71 @@ public class ImportProgress implements Serializable {
         this.status = "STARTED";
     }
 
-    public void updateJob(String jobName, int index, String status, String message) {
+    public synchronized void updateJob(String jobName, int index, String status, String message) {
         this.currentJob = jobName;
         this.currentJobIndex = index;
         this.status = status;
         this.message = message;
-        this.overallProgress = (int) ((index * 100.0) / totalJobs);
+        this.overallProgress = totalJobs > 0 ? (int) ((index * 100.0) / totalJobs) : 0;
     }
 
-    public void complete() {
+    public synchronized void complete() {
         this.status = "DONE";
         this.overallProgress = 100;
         this.message = Messages.ImportProgress_importComplete();
     }
 
-    public void error(String errorMessage) {
+    public synchronized void error(String errorMessage) {
         this.status = "ERROR";
         this.message = errorMessage;
     }
 
-    // Getters and Setters
-    public String getBatchId() {
-        return batchId;
+    public synchronized void setResult(String message, int successCount, int failCount, int skipCount, List<ImportResult> details, boolean dryRun, String redirect) {
+        this.status = "DONE";
+        this.overallProgress = 100;
+        this.resultMessage = message;
+        this.successCount = successCount;
+        this.failCount = failCount;
+        this.skipCount = skipCount;
+        this.details = details != null ? details : new ArrayList<>();
+        this.dryRun = dryRun;
+        this.redirect = redirect;
+        this.resultReady = true;
     }
 
-    public void setBatchId(String batchId) {
-        this.batchId = batchId;
+    public synchronized void setErrorResult(String errorMessage, int successCount, int failCount, int skipCount, List<ImportResult> details, boolean dryRun, String redirect) {
+        this.status = "ERROR";
+        this.overallProgress = 100;
+        this.resultMessage = errorMessage;
+        this.successCount = successCount;
+        this.failCount = failCount;
+        this.skipCount = skipCount;
+        this.details = details != null ? details : new ArrayList<>();
+        this.dryRun = dryRun;
+        this.redirect = redirect;
+        this.resultReady = true;
     }
 
-    public String getCurrentJob() {
-        return currentJob;
-    }
-
-    public void setCurrentJob(String currentJob) {
-        this.currentJob = currentJob;
-    }
-
-    public int getCurrentJobIndex() {
-        return currentJobIndex;
-    }
-
-    public void setCurrentJobIndex(int currentJobIndex) {
-        this.currentJobIndex = currentJobIndex;
-    }
-
-    public int getTotalJobs() {
-        return totalJobs;
-    }
-
-    public void setTotalJobs(int totalJobs) {
-        this.totalJobs = totalJobs;
-    }
-
-    public int getOverallProgress() {
-        return overallProgress;
-    }
-
-    public void setOverallProgress(int overallProgress) {
-        this.overallProgress = overallProgress;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
+    public String getBatchId() { return batchId; }
+    public void setBatchId(String batchId) { this.batchId = batchId; }
+    public String getCurrentJob() { return currentJob; }
+    public void setCurrentJob(String currentJob) { this.currentJob = currentJob; }
+    public int getCurrentJobIndex() { return currentJobIndex; }
+    public void setCurrentJobIndex(int currentJobIndex) { this.currentJobIndex = currentJobIndex; }
+    public int getTotalJobs() { return totalJobs; }
+    public void setTotalJobs(int totalJobs) { this.totalJobs = totalJobs; }
+    public int getOverallProgress() { return overallProgress; }
+    public void setOverallProgress(int overallProgress) { this.overallProgress = overallProgress; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getResultMessage() { return resultMessage; }
+    public int getSuccessCount() { return successCount; }
+    public int getFailCount() { return failCount; }
+    public int getSkipCount() { return skipCount; }
+    public List<ImportResult> getDetails() { return details; }
+    public boolean isDryRun() { return dryRun; }
+    public String getRedirect() { return redirect; }
+    public boolean isResultReady() { return resultReady; }
 }

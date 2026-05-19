@@ -22,6 +22,27 @@ public class ImportResult {
     public String reason;
     public boolean isFolder;
     public boolean isJob;
+    
+    public void setStatusEnum(Status statusEnum) {
+        this.statusEnum = statusEnum;
+        if (statusEnum != null) {
+            this.status = StatusUtil.getLocalizedStatus(statusEnum);
+        }
+    }
+    
+    public void setStatus(String statusCode) {
+        this.status = StatusUtil.getLocalizedStatus(statusCode);
+        try {
+            this.statusEnum = Status.valueOf(statusCode);
+        } catch (Exception e) {
+            this.statusEnum = null;
+        }
+    }
+    
+    public void setStatusEnumAndMessage(Status statusEnum, String message) {
+        setStatusEnum(statusEnum);
+        this.message = message;
+    }
 
     public ImportResult(String jobName) {
         this.jobName = jobName;

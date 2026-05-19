@@ -5,6 +5,67 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [2.0.1] - 2026-05-16
+
+### 新增功能
+
+- **进度显示全称路径**：进度条中显示任务的全称路径（如 `myFolder/subFolder/myJob`），而非相对路径（如 `subFolder/myJob`）
+
+### 修复
+
+- **异步任务 Locale 丢失导致状态/消息未汉化**：异步导入任务在后台线程执行时，`Messages.XXX()` 调用无法获取用户 Locale，导致所有状态文本和消息都返回英文（如 "Skip (Exists)"、"Directory job already exists, skipped"）
+  - 新增 `LocaleHolder` 工具类，安装自定义 `LocaleProvider`，通过 `ThreadLocal` 在异步线程中保存用户 Locale
+  - 修改 `JobImportExportAction.doBatchImport` 和 `JobImportExportSidebarLink` 异步任务入口，捕获 `req.getLocale()` 并在子线程中通过 `LocaleHolder.setLocale()` 恢复
+  - 统一所有 `ImportResult.status` 赋值方式，通过 `setStatusEnum()` / `setStatus()` 方法自动调用 `StatusUtil.getLocalizedStatus()` 汉化
+  - 移除所有直接 `result.status = "XXX"` 赋值（共 45 处）
+  - `ExportResult` 构造函数中自动通过 `StatusUtil.getLocalizedStatus()` 汉化 status 字段
+  - JSON 响应新增 `statusCode` 字段，前端使用 `statusCode` 判断状态样式，`status` 字段直接显示汉化文本
+- **导出结果本地化**：修复 `ExportResult` 状态未汉化问题，导出弹窗中 "EXPORTED" / "SKIPPED" 等状态正确显示为中文
+- **扩展状态码支持**：新增 `BLOCKED`、`CONFLICT`、`OK`、`EXPORTED`、`SKIPPED`、`ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`REUSE`、`SKIP_FOLDER_MISSING` 等状态码的本地化支持
+
+### UI 优化
+
+- **结果弹窗表格自适应**：
+  - 减小单元格 padding：`8px` → `4px 6px`
+  - 添加 `table-layout:fixed` 固定列宽
+  - 设置列宽比例（任务 28% / 最终名称 28% / 状态 14% / 消息 30%）
+  - 长路径自动换行：`word-break:break-all`
+  - 紧凑行高：`line-height:1.4`
+  - 状态列 `white-space:nowrap` 防止状态图标和文字被拆行
+- **前端 switch 状态码映射补全**：补充 `ERROR_INVALID_NAME`、`ERROR_PLUGIN`、`SKIP_EMPTY`、`SKIP_FOLDER_MISSING`、`OVERWRITE_FOLDER`、`CREATE_JOB`、`UPDATE_CONFIG`、`REUSE`、`BLOCKED`、`CONFLICT` 等状态码的颜色/图标映射
+
+### 性能优化
+
+- **线程池限流机制**：新增 `ImportExecutor` 类，统一管理导入任务线程池
+  - 核心线程数：`max(2, CPU核心数)`
+  - 最大线程数：`CPU核心数 * 2`
+  - 队列容量：100
+  - 服务器繁忙时优雅拒绝任务，返回友好提示
+- **轮询间隔优化**：将前端轮询间隔从 500ms 调整为 800ms，减少服务器请求压力，同时用户体验几乎不受影响
+- **内存泄漏防护**：在 `ProgressManager` 中添加自动清理机制，当结果准备好 10 分钟后自动删除该进度记录，防止长时间运行后内存泄漏
+
+### 测试覆盖
+
+- **新增单元测试**：共 67 个测试用例，覆盖本地化核心功能
+  - `StatusUtilTest`：21 个测试，覆盖状态码本地化、null/empty 处理、未知状态码
+  - `ImportResultTest`：18 个测试，覆盖 `setStatusEnum()` / `setStatus()` 方法、双字段一致性
+  - `ExportResultTest`：14 个测试，覆盖构造器本地化、statusCode/status 分离
+  - `LocaleHolderTest`：14 个测试，覆盖 ThreadLocal 存储、线程隔离
+- **测试框架**：使用 JUnit 5（junit-jupiter-api/junit-jupiter-engine 5.10.0）
+
+### 修复
+
+- **进度条不动（致命错误）**：
+  - 修复 `ExecutionEngine.addResult()` 方法内部递归调用自己导致 `StackOverflowError`，后台线程崩溃后进度永远不会更新
+  - 修复 `JobImportExportAction/index.jelly` 中 SSE URL 路径重复问题（`${it.getUrlName()}/progress` 在已包含 `urlName` 的页面路径下导致 404）
+  - 修复 `ImportProgress` 所有字段缺少 `volatile`，导致跨线程写入后读线程看不到新值
+  - 修复 `doProgress` SSE 端点用 while 循环阻塞 Jetty 请求线程 120 秒，多页面同时导入时线程池耗尽
+  - 将 SSE 长连接改为短轮询 JSON 接口，前端用 `setInterval` 每 800ms 轮询，每次请求立即返回不阻塞线程
+- **No permission to create job**：修复后台线程中 `Authentication` 上下文丢失问题，在 `new Thread()` 启动前保存当前用户认证，线程内恢复，线程结束时清理
+- **预演阶段卡住**：修复 `completeProgress()` 和 `setResult()` 之间的竞态条件——`completeProgress` 先设置 `status="DONE"`，前端轮询命中 `status==DONE` 但 `resultReady==false`，执行提前停止轮询；将 `status`、`overallProgress`、`resultReady` 合并到 `setResult()` 的同一个 `synchronized` 方法中原子设置
+- **预演阶段显示跳转按钮**：修复预演（dryRun）完成后也显示跳转按钮的问题，增加 `!result.dryRun` 条件
+- **跳转链接包含多余路径**：修复 `redirectUrl` 使用相对路径导致前端 `location.href` 解析错误的问题，改为使用 `Jenkins.get().getRootUrl() + url` 绝对路径；redirect 指向导入目标 `target` 而非 `item`
+
 ## [2.0.0] - 2026-05-16
 
 ### 新增功能

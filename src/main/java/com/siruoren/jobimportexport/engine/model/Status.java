@@ -11,5 +11,10 @@ public enum Status {
     RENAME_JOB,
     RENAME_FOLDER,
     UPDATE_CONFIG,
-    ERROR
+    ERROR,
+    BLOCKED,
+    CONFLICT,
+    OK,
+    EXPORTED,
+    SKIPPED
 }
