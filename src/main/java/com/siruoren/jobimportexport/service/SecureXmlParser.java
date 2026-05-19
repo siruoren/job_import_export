@@ -39,6 +39,8 @@ public class SecureXmlParser {
             "http://xml.org/sax/features/external-general-entities";
     private static final String FEATURE_EXTERNAL_PARAMETER =
             "http://xml.org/sax/features/external-parameter-entities";
+    private static final String FEATURE_SECURE_PROCESSING =
+            "http://javax.xml.XMLConstants/feature/secure-processing";
 
     private static final List<String> WEBHOOK_ELEMENT_PATTERNS = Arrays.asList(
             "GithubProjectProperty",
@@ -211,8 +213,63 @@ public class SecureXmlParser {
         root.appendChild(disabled);
     }
 
+    /**
+     * 使用安全 XML 解析器判断 Job 类型名称。
+     * 替代原先的字符串匹配方式，避免未经过安全解析器的风险。
+     *
+     * @param xmlBytes Job 配置 XML 字节数组
+     * @return Job 类型名称（如 "Freestyle"、"Pipeline" 等），无法识别时返回 null
+     */
+    public static String getJobTypeFromXmlSafe(byte[] xmlBytes) {
+        try {
+            byte[] cleaned = stripControlChars(xmlBytes);
+            Document doc = newSafeBuilder().parse(new ByteArrayInputStream(cleaned));
+            String rootElement = doc.getDocumentElement().getNodeName();
+
+            switch (rootElement) {
+                case "project":
+                    return "Freestyle";
+                case "flow-definition":
+                    return "Pipeline";
+                case "maven2-moduleset":
+                    return "Maven";
+                case "matrix-project":
+                    return "Matrix";
+                default:
+                    return rootElement;
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to determine job type from XML", e);
+            return null;
+        }
+    }
+
+    /**
+     * 使用安全 XML 解析器判断 XML 是否为 Folder 配置。
+     * 替代原先的字符串 contains 匹配方式。
+     *
+     * @param xmlBytes XML 字节数组
+     * @return 如果 XML 根元素为 Folder 类型返回 true，否则返回 false
+     */
+    public static boolean isFolderConfigXml(byte[] xmlBytes) {
+        try {
+            byte[] cleaned = stripControlChars(xmlBytes);
+            Document doc = newSafeBuilder().parse(new ByteArrayInputStream(cleaned));
+            String rootElement = doc.getDocumentElement().getNodeName();
+            return "com.cloudbees.hudson.plugins.folder.Folder".equals(rootElement);
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to determine if XML is folder config", e);
+            return false;
+        }
+    }
+
     private static byte[] documentToBytes(Document doc) throws Exception {
         TransformerFactory tf = TransformerFactory.newInstance();
+        try {
+            tf.setFeature(FEATURE_SECURE_PROCESSING, true);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Failed to set FEATURE_SECURE_PROCESSING on TransformerFactory", e);
+        }
         Transformer transformer = tf.newTransformer();
         transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
         transformer.setOutputProperty(OutputKeys.INDENT, "no");

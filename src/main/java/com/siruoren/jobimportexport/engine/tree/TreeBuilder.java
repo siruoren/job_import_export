@@ -9,10 +9,14 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class TreeBuilder {
+
+    private static final Logger LOGGER = Logger.getLogger(TreeBuilder.class.getName());
 
     public TreeNode buildTree(List<String> zipEntries) {
         TreeNode root = new TreeNode();
@@ -169,17 +173,21 @@ public class TreeBuilder {
         return root;
     }
 
-    private byte[] readAllBytes(InputStream in) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = in.read(buffer)) != -1) {
-                out.write(buffer, 0, len);
-            }
-            return out.toByteArray();
-        } catch (IOException e) {
-            return new byte[0];
+    /**
+     * 从输入流中读取所有字节。
+     * 如果读取失败，抛出 IOException 而非静默返回空数组。
+     *
+     * @param in 输入流
+     * @return 读取的字节数组
+     * @throws IOException 如果读取失败
+     */
+    private byte[] readAllBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = in.read(buffer)) != -1) {
+            out.write(buffer, 0, len);
         }
+        return out.toByteArray();
     }
 }

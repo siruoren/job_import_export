@@ -16,84 +16,91 @@ import jenkins.model.ModifiableTopLevelItemGroup;
 import javax.xml.transform.stream.StreamSource;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * 导入执行引擎（协调者）。
+ * 负责协调 FolderCreator、JobCreator、PermissionChecker 等组件完成导入流程。
+ * 本类不再直接包含业务逻辑，仅负责流程编排。
+ */
 public class ExecutionEngine {
 
-    private final TypeResolver typeResolver = new TypeResolver();
+    private static final Logger LOGGER = Logger.getLogger(ExecutionEngine.class.getName());
+
+    /** 根节点名称常量，避免硬编码 */
+    private static final String ROOT_NODE_NAME = "/";
+
     private final RenameDAGResolver renameResolver = new RenameDAGResolver();
+    private final FolderCreator folderCreator = new FolderCreator(renameResolver);
+    private final JobCreator jobCreator = new JobCreator(renameResolver, folderCreator);
+    private final ResultCollector resultCollector = new ResultCollector();
 
-    private List<ImportResult> results = new ArrayList<>();
-    
-    private List<String> folderPathsToCreate = new ArrayList<>();
-    private Map<String, TreeNode> jobNodesToCreate = new LinkedHashMap<>();
-    private Map<String, TreeNode> folderWithConfigToCreate = new LinkedHashMap<>();
-
-    public interface ProgressCallback {
-        void onResult(ImportResult result, int currentIndex, int totalCount);
+    public void setProgressCallback(ResultCollector.ProgressCallback callback) {
+        this.resultCollector.setProgressCallback(callback);
     }
 
-    private ProgressCallback progressCallback;
-    private int estimatedTotal = 0;
-
-    public void setProgressCallback(ProgressCallback callback) {
-        this.progressCallback = callback;
-    }
-
-    private void addResult(ImportResult result) {
-        results.add(result);
-        if (progressCallback != null) {
-            progressCallback.onResult(result, results.size(), estimatedTotal);
-        }
-    }
-
+    /**
+     * 执行导入流程。
+     *
+     * 阶段0：收集路径与重命名映射
+     * 阶段1：创建所有 Folder
+     * 阶段2：创建所有 Job
+     * 阶段3：处理根目录 config.xml
+     *
+     * @param root 树根节点
+     * @param ctx  导入上下文
+     * @return 导入结果列表
+     */
     public List<ImportResult> execute(TreeNode root, ImportContext ctx) {
-        results.clear();
-        folderPathsToCreate.clear();
-        jobNodesToCreate.clear();
-        folderWithConfigToCreate.clear();
+        resultCollector.clear();
 
-        prepareRootConfigFromMatchingFolder(root, ctx);
+        // 阶段0：收集路径
+        ImportPlan plan = collectImportPlan(root, ctx);
 
-        collectPaths(root, "", ctx);
+        // 设置结果收集器的 jobPaths（供 PermissionChecker 使用）
+        resultCollector.setJobPaths(new ArrayList<>(plan.jobNodesToCreate.keySet()));
+        resultCollector.setEstimatedTotal(
+                plan.folderPathsToCreate.size() + plan.jobNodesToCreate.size()
+                + (root.rootConfigXml != null && root.rootConfigXml.length > 0
+                        && ctx.applyRootConfigToCurrentFolder ? 1 : 0));
 
-        estimatedTotal = folderPathsToCreate.size() + jobNodesToCreate.size();
-        if (root.rootConfigXml != null && root.rootConfigXml.length > 0 && ctx.applyRootConfigToCurrentFolder) {
-            estimatedTotal++;
-        }
-
+        // 预扫描重命名映射
         if (ctx.autoRename) {
-            collectAllRenames(root, ctx);
+            collectAllRenames(plan, ctx);
         }
 
-        // ✔ 阶段1：先创建所有 Folder
-        createAllFolders(ctx);
+        // 阶段1：创建所有 Folder
+        folderCreator.createAllFolders(
+                plan.folderPathsToCreate, plan.folderWithConfigToCreate, resultCollector, ctx);
 
-        // ✔ 阶段2：最后统一创建 Job
-        createAllJobs(ctx);
+        // 阶段2：创建所有 Job
+        jobCreator.createAllJobs(
+                plan.jobNodesToCreate, plan.folderPathsToCreate, resultCollector, ctx);
 
-        // ✔ 阶段3：处理根目录 config.xml（更新当前目录任务配置）
+        // 阶段3：处理根目录 config.xml
         handleRootConfigXml(root, ctx);
 
         // 本地化状态显示文本
-        for (ImportResult result : results) {
-            if (result.statusEnum != null) {
-                result.status = StatusUtil.getLocalizedStatus(result.statusEnum);
-            }
-        }
+        resultCollector.localizeResults();
 
-        return results;
+        return resultCollector.getResults();
+    }
+
+    /**
+     * 阶段0：收集所有需要创建的路径（不实际创建）
+     */
+    private ImportPlan collectImportPlan(TreeNode root, ImportContext ctx) {
+        prepareRootConfigFromMatchingFolder(root, ctx);
+
+        ImportPlan plan = new ImportPlan();
+        collectPaths(root, "", ctx, plan);
+        return plan;
     }
 
     /**
      * 准备根配置：从匹配当前目录名的节点中提取 config.xml
-     * 子目录导入时，zip 中 folderName/config.xml 对应的是当前目录自身，
-     * 需要提取配置用于更新，并将子节点重挂到根节点
      */
     private void prepareRootConfigFromMatchingFolder(TreeNode root, ImportContext ctx) {
         if (!ctx.applyRootConfigToCurrentFolder || ctx.currentFolderItem == null) {
@@ -116,8 +123,58 @@ public class ExecutionEngine {
     }
 
     /**
+     * 递归收集路径
+     */
+    private void collectPaths(TreeNode node, String parent, ImportContext ctx, ImportPlan plan) {
+        String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
+
+        // 使用常量替代硬编码的 "/"
+        if (!ROOT_NODE_NAME.equals(node.name)) {
+            if (node.type == NodeType.FOLDER_WITH_CONFIG) {
+                plan.folderPathsToCreate.add(path);
+                plan.folderWithConfigToCreate.put(path, node);
+            } else if (node.hasConfigXml) {
+                plan.jobNodesToCreate.put(path, node);
+            } else {
+                plan.folderPathsToCreate.add(path);
+            }
+        }
+
+        for (TreeNode child : node.children.values()) {
+            collectPaths(child, path, ctx, plan);
+        }
+    }
+
+    /**
+     * 阶段0.5：预扫描所有冲突，收集完整的 renameMap
+     */
+    private void collectAllRenames(ImportPlan plan, ImportContext ctx) {
+        Set<String> allPaths = new HashSet<>();
+        allPaths.addAll(plan.folderPathsToCreate);
+        allPaths.addAll(plan.jobNodesToCreate.keySet());
+
+        List<String> sortedPaths = new ArrayList<>(allPaths);
+        sortedPaths.sort(this::compareByDepth);
+
+        for (String originalPath : sortedPaths) {
+            String resolvedPath = renameResolver.resolvePath(originalPath, ctx);
+
+            String fullPath = FolderCreator.getFullPath(resolvedPath, ctx);
+            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
+
+            if (existingItem != null) {
+                String parentPath = FolderCreator.getParentPath(resolvedPath);
+                String newName = jobCreator.generateUniqueName(
+                        ctx.targetGroup, parentPath,
+                        FolderCreator.getLastPathSegment(resolvedPath), ctx);
+                String newPath = parentPath.isEmpty() ? newName : parentPath + "/" + newName;
+                ctx.renameMap.put(originalPath, newPath);
+            }
+        }
+    }
+
+    /**
      * 阶段3：处理根目录 config.xml
-     * 如果 zip 根目录有 config.xml，且当前是子目录导入，则更新当前目录任务配置
      */
     private void handleRootConfigXml(TreeNode root, ImportContext ctx) {
         if (root.rootConfigXml == null || root.rootConfigXml.length == 0) {
@@ -159,969 +216,38 @@ public class ExecutionEngine {
                 result.success = true;
                 result.message = Messages.ExecutionEngine_updatedConfig();
             } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Failed to update root config for: " + folderName, e);
                 result.setStatusEnum(Status.ERROR);
                 result.success = false;
                 result.message = Messages.ExecutionEngine_updateConfigFailed(e.getMessage());
+            } catch (Error e) {
+                // 严重错误（如 OutOfMemoryError）不允许被吞掉，向上传播
+                throw e;
             }
         }
 
-        addResult(result);
+        resultCollector.addResult(result);
         ctx.rootConfigResults.add(result);
     }
 
-    /**
-     * 阶段0：收集所有需要创建的路径（不实际创建）
-     */
-    private void collectPaths(TreeNode node, String parent, ImportContext ctx) {
-        // 构建当前路径（使用原始路径，不立即 resolve）
-        String path = parent.isEmpty() ? node.name : parent + "/" + node.name;
-
-        // ROOT 跳过
-        if (!"/".equals(node.name)) {
-            // 🚨 根据节点类型处理
-            if (node.type == NodeType.FOLDER_WITH_CONFIG) {
-                // 有配置的目录：跟踪到 folderWithConfigToCreate
-                folderPathsToCreate.add(path);
-                folderWithConfigToCreate.put(path, node);
-            } else if (node.hasConfigXml) {
-                // 普通 Job：有 config.xml，作为 Job 处理
-                jobNodesToCreate.put(path, node);
-            } else {
-                // 普通 Folder：没有 config.xml，作为 Folder 处理
-                folderPathsToCreate.add(path);
-            }
-        }
-
-        // 递归收集子节点
-        for (TreeNode child : node.children.values()) {
-            collectPaths(child, path, ctx);
-        }
-    }
-
-    /**
-     * 阶段0.5：预扫描所有冲突，收集完整的 renameMap（按深度排序，确保 parent 在 child 之前）
-     * 同时处理 Folder 和 Job 的重命名
-     */
-    private void collectAllRenames(TreeNode root, ImportContext ctx) {
-        // 🚨 合并 Folder 和 Job 的路径，按深度排序（短的先处理，parent 在 child 之前）
-        Set<String> allPaths = new HashSet<>();
-        allPaths.addAll(folderPathsToCreate);
-        allPaths.addAll(jobNodesToCreate.keySet());
-        
-        List<String> sortedPaths = new ArrayList<>(allPaths);
-        sortedPaths.sort((a, b) -> {
-            int depthA = a.split("/").length;
-            int depthB = b.split("/").length;
-            if (depthA != depthB) return depthA - depthB;
-            return a.compareTo(b);
-        });
-
-        // 按顺序处理每个路径，计算最终路径
-        for (String originalPath : sortedPaths) {
-            // 应用已有的 renameMap，计算当前路径的最终位置
-            String resolvedPath = resolveWithDag(originalPath, ctx.renameMap);
-
-            String fullPath = getFullPath(resolvedPath, ctx);
-            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
-
-            if (existingItem != null) {
-                // 需要 rename
-                String parentPath = getParentPath(resolvedPath);
-                String newName = generateUniqueName(ctx.targetGroup, parentPath, getLastPathSegment(resolvedPath), ctx);
-                String newPath = parentPath.isEmpty() ? newName : parentPath + "/" + newName;
-
-                // 记录 rename DAG（原始路径 -> 最终路径）
-                ctx.renameMap.put(originalPath, newPath);
-            }
-        }
-    }
-
-    /**
-     * 使用 DAG 传播解析路径
-     */
-    private String resolveWithDag(String path, Map<String, String> renameMap) {
-        String resolved = path;
-        boolean changed = true;
-
-        while (changed) {
-            changed = false;
-
-            // 按路径长度从长到短排序，确保更长的路径优先匹配
-            List<Map.Entry<String, String>> entries = new ArrayList<>(renameMap.entrySet());
-            entries.sort((a, b) -> b.getKey().length() - a.getKey().length());
-
-            for (Map.Entry<String, String> entry : entries) {
-                String from = entry.getKey();
-                String to = entry.getValue();
-
-                // 精确匹配
-                if (resolved.equals(from)) {
-                    resolved = to;
-                    changed = true;
-                    break;
-                }
-
-                // 子路径传播：parent rename 传播到 child
-                if (resolved.startsWith(from + "/")) {
-                    resolved = to + resolved.substring(from.length());
-                    changed = true;
-                    break;
-                }
-            }
-        }
-
-        return resolved;
-    }
-
-    /**
-     * 阶段1：创建所有 Folder
-     */
-    private void createAllFolders(ImportContext ctx) {
-        // 按路径深度排序，确保父文件夹先于子文件夹创建
-        List<String> sortedPaths = new ArrayList<>(folderPathsToCreate);
-        sortedPaths.sort((a, b) -> {
-            int depthA = a.split("/").length;
-            int depthB = b.split("/").length;
-            if (depthA != depthB) return depthA - depthB;
-            return a.compareTo(b);
-        });
-
-        for (String path : sortedPaths) {
-            // ✔ 使用 Rename DAG 解析最终路径
-            String resolvedPath = renameResolver.resolvePath(path, ctx);
-            
-            // 检查是否是 FOLDER_WITH_CONFIG 类型
-            TreeNode folderNode = folderWithConfigToCreate.get(path);
-            boolean isFolderWithConfig = (folderNode != null);
-            
-            // 检查 Jenkins 中是否已存在
-            String fullPath = getFullPath(resolvedPath, ctx);
-            Item existingItem = Jenkins.get().getItemByFullName(fullPath);
-            
-            // 权限检查
-            ImportResult permissionError = checkPermissionForPath(path, resolvedPath, ctx);
-            if (permissionError != null) {
-                addResult(permissionError);
-                continue;
-            }
-            
-            if (ctx.dryRun) {
-                ctx.virtualFolders.add(fullPath);
-                
-                // dryRun 模式下，所有目录都需要记录到 results
-                ImportResult result = createFolderResult(path, resolvedPath, ctx);
-                
-                if (existingItem != null) {
-                    // Jenkins 中已存在
-                    if (isFolderWithConfig) {
-                        if (ctx.autoRename && !path.equals(resolvedPath)) {
-                            result.setStatusEnum(Status.RENAME_FOLDER);
-                            result.renamed = true;
-                            result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
-                        } else if (ctx.overwrite) {
-                            if (folderNode.configXml != null && folderNode.configXml.length > 0
-                                    && !isFolderConfigXml(folderNode.configXml)) {
-                                result.setStatusEnum(Status.ERROR);
-                                result.success = false;
-                                result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
-                                ctx.parentTypeErrors.add(resolvedPath);
-                            } else {
-                                result.setStatusEnum(Status.OVERWRITE_FOLDER);
-                                result.message = Messages.ExecutionEngine_willOverwriteDirConfig();
-                            }
-                        } else {
-                            result.setStatusEnum(Status.SKIP_EXISTS);
-                            result.skipped = true;
-                            result.message = Messages.ExecutionEngine_dirExistsSkipped();
-                        }
-                    } else {
-                        // 普通 Folder 已存在，检查类型是否匹配
-                        if (existingItem instanceof Job) {
-                            result.setStatusEnum(Status.ERROR);
-                            result.success = false;
-                            result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
-                            ctx.parentTypeErrors.add(resolvedPath);
-                        } else {
-                            result.setStatusEnum(Status.REUSE_FOLDER);
-                            result.skipped = true;
-                            result.message = Messages.ExecutionEngine_dirExistsReuse();
-                        }
-                    }
-                } else {
-                    // Jenkins 中不存在，将创建
-                    if (isFolderWithConfig) {
-                        if (ctx.autoRename && !path.equals(resolvedPath)) {
-                            result.setStatusEnum(Status.RENAME_FOLDER);
-                            result.renamed = true;
-                            result.message = Messages.ExecutionEngine_dirRenamedTo(getLastPathSegment(resolvedPath));
-                        } else {
-                            result.setStatusEnum(Status.CREATE_FOLDER);
-                            result.message = Messages.ExecutionEngine_willCreateDirJob();
-                        }
-                    } else {
-                        result.setStatusEnum(Status.CREATE_FOLDER);
-                        result.message = Messages.ExecutionEngine_willCreateDir();
-                    }
-                }
-                result.success = true;
-                addResult(result);
-                continue;
-            }
-
-            if (ctx.createdFolders.contains(fullPath)) {
-                continue;
-            }
-            
-            if (existingItem != null) {
-                if (isFolderWithConfig) {
-                    if (ctx.overwrite) {
-                        handleOverwriteFolder(existingItem, folderNode, resolvedPath, ctx);
-                    } else {
-                        ImportResult result = createFolderResult(path, resolvedPath, ctx);
-                        result.setStatusEnum(Status.SKIP_EXISTS);
-                        result.skipped = true;
-                        result.message = Messages.ExecutionEngine_dirExistsSkipped();
-                        addResult(result);
-                    }
-                } else {
-                    ImportResult result = createFolderResult(path, resolvedPath, ctx);
-                    if (existingItem instanceof Job) {
-                        result.setStatusEnum(Status.ERROR);
-                        result.success = false;
-                        result.message = Messages.ExecutionEngine_typeMismatchCannotImportAsDir();
-                        ctx.parentTypeErrors.add(resolvedPath);
-                    } else {
-                        result.setStatusEnum(Status.REUSE_FOLDER);
-                        result.skipped = true;
-                        result.message = Messages.ExecutionEngine_dirExistsReuse();
-                    }
-                    addResult(result);
-                }
-                ctx.createdFolders.add(fullPath);
-                continue;
-            }
-
-            ImportResult result = createFolderResult(path, resolvedPath, ctx);
-            try {
-                ensureFolderPath(ctx.targetGroup, resolvedPath, true, ctx);
-                ctx.createdFolders.add(fullPath);
-                
-                if (isFolderWithConfig && folderNode.configXml != null && folderNode.configXml.length > 0) {
-                    Item newItem = Jenkins.get().getItemByFullName(fullPath);
-                    if (newItem != null) {
-                        updateFolderConfig(newItem, folderNode, resolvedPath);
-                    }
-                }
-                
-                result.setStatusEnum(Status.CREATE_FOLDER);
-                result.success = true;
-                result.message = isFolderWithConfig ? Messages.ExecutionEngine_createdDirJob() : Messages.ExecutionEngine_createdDir();
-            } catch (Exception e) {
-                result.setStatusEnum(Status.ERROR);
-                result.success = false;
-                result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
-                ctx.parentTypeErrors.add(resolvedPath);
-            }
-            addResult(result);
-        }
-    }
-    
-    /**
-     * 处理目录任务的覆盖更新
-     */
-    private void handleOverwriteFolder(Item existingItem, TreeNode node, String path, ImportContext ctx) {
-        ImportResult result = createFolderResult(path, path, ctx);
-
-        if (node.configXml != null && node.configXml.length > 0) {
-            if (!isFolderConfigXml(node.configXml)) {
-                result.setStatusEnum(Status.ERROR);
-                result.success = false;
-                result.message = Messages.ExecutionEngine_typeMismatchCannotOverwrite();
-                ctx.parentTypeErrors.add(path);
-                addResult(result);
-                return;
-            }
-        }
-
-        try {
-            if (node.configXml != null && node.configXml.length > 0) {
-                updateFolderConfig(existingItem, node, path);
-                result.setStatusEnum(Status.OVERWRITE_FOLDER);
-                result.success = true;
-                result.message = Messages.ExecutionEngine_updatedDirConfig();
-            } else {
-                result.setStatusEnum(Status.REUSE_FOLDER);
-                result.skipped = true;
-                result.message = Messages.ExecutionEngine_dirExistsReuseConfig();
-            }
-        } catch (Exception e) {
-            result.setStatusEnum(Status.ERROR);
-            result.success = false;
-            result.message = Messages.ExecutionEngine_updateDirFailed(e.getMessage());
-            ctx.parentTypeErrors.add(path);
-        }
-
-        addResult(result);
-        ctx.createdFolders.add(getFullPath(path, ctx));
-    }
-    
-    /**
-     * 更新目录任务的配置
-     */
-    private void updateFolderConfig(Item item, TreeNode node, String path) throws Exception {
-        if (item instanceof AbstractItem) {
-            AbstractItem abstractItem = (AbstractItem) item;
-            try (InputStream in = new ByteArrayInputStream(node.configXml)) {
-                abstractItem.updateByXml(new StreamSource(in));
-                abstractItem.save();
-            }
-        }
-    }
-    
-    /**
-     * 创建 Folder 的 ImportResult
-     */
-    private ImportResult createFolderResult(String originalPath, String resolvedPath, ImportContext ctx) {
-        String folderPath = getParentPath(resolvedPath);
-        String folderName = getLastPathSegment(resolvedPath);
-        ImportResult result = new ImportResult(folderName, folderPath);
-        result.finalName = resolvedPath;
-        result.fullPath = getFullPath(resolvedPath, ctx);
-        // 移除所有前导斜杠，避免显示 "/test" 或 "//test"
-        result.sourcePath = originalPath.replaceFirst("^/+", "");
-        result.displayPath = result.sourcePath;
-        result.isFolder = true;
-        result.isJob = false;
-        return result;
-    }
-
-    /**
-     * 阶段2：创建所有 Job
-     */
-    private void createAllJobs(ImportContext ctx) {
-        for (Map.Entry<String, TreeNode> entry : jobNodesToCreate.entrySet()) {
-            String originalPath = entry.getKey();
-            TreeNode node = entry.getValue();
-            
-            // ✔ 使用 Rename DAG 解析最终路径
-            String resolvedPath = renameResolver.resolvePath(originalPath, ctx);
-
-            // 检查父任务是否有类型错误（优先于 shouldSkipDueToParentFolder）
-            if (ctx.hasParentTypeError(resolvedPath)) {
-                String parentErrorPath = ctx.getParentTypeErrorPath(resolvedPath);
-                ImportResult result = createResult(node, resolvedPath, ctx);
-                result.setStatusEnum(Status.ERROR);
-                result.success = false;
-                result.skipped = true;
-                result.message = Messages.ExecutionEngine_parentTypeErrorSkip(parentErrorPath);
-                addResult(result);
-                continue;
-            }
-
-            // 检查父任务是否有权限不足（优先于 shouldSkipDueToParentFolder）
-            if (ctx.hasParentPermissionError(resolvedPath)) {
-                String parentErrorPath = ctx.getParentPermissionErrorPath(resolvedPath);
-                ImportResult result = createResult(node, resolvedPath, ctx);
-                result.setStatusEnum(Status.ERROR);
-                result.success = false;
-                result.skipped = true;
-                result.message = Messages.ExecutionEngine_parentPermissionErrorSkip(parentErrorPath);
-                addResult(result);
-                continue;
-            }
-
-            // 检查父目录是否被跳过（如果父目录是 FOLDER_WITH_CONFIG 且不覆盖/不重命名）
-            String parentPath = getParentPath(resolvedPath);
-            if (shouldSkipDueToParentFolder(originalPath, resolvedPath, ctx)) {
-                // 父目录冲突且不覆盖/不重命名，跳过此任务
-                ImportResult result = createResult(node, resolvedPath, ctx);
-                result.setStatusEnum(Status.SKIP_EXISTS);
-                result.skipped = true;
-                result.message = Messages.ExecutionEngine_parentDirExistsSkipped();
-                addResult(result);
-                continue;
-            }
-
-            // 权限检查
-            ImportResult permissionError = checkPermissionForPath(originalPath, resolvedPath, ctx);
-            if (permissionError != null) {
-                addResult(permissionError);
-                continue;
-            }
-
-            ImportResult result = createResult(node, resolvedPath, ctx);
-            processJob(node, resolvedPath, result, ctx);
-            addResult(result);
-        }
-    }
-    
-    /**
-     * 检查是否应该因为父目录被跳过而跳过此任务
-     */
-    private boolean shouldSkipDueToParentFolder(String originalPath, String resolvedPath, ImportContext ctx) {
-        // 只有在不覆盖且不重命名的情况下才检查
-        if (ctx.overwrite || ctx.autoRename) {
-            return false;
-        }
-        
-        // 检查父路径
-        for (String folderPath : folderPathsToCreate) {
-            String resolvedFolderPath = renameResolver.resolvePath(folderPath, ctx);
-            
-            // 检查 resolvedPath 是否在这个目录下面
-            if (resolvedPath.startsWith(resolvedFolderPath + "/")) {
-                // dryRun 模式下，检查 virtualFolders
-                if (ctx.dryRun) {
-                    String fullFolderPath = getFullPath(resolvedFolderPath, ctx);
-                    if (ctx.virtualFolders.contains(fullFolderPath)) {
-                        // 父目录在 dryRun 模式下会被创建，子任务正常创建
-                        return false;
-                    }
-                    // 父目录不在 virtualFolders 中，说明被跳过了
-                    return true;
-                }
-                
-                // 非 dryRun 模式下，检查 Jenkins 中是否存在
-                String fullFolderPath = getFullPath(resolvedFolderPath, ctx);
-                Item existingItem = Jenkins.get().getItemByFullName(fullFolderPath);
-                if (existingItem != null) {
-                    // 检查父目录是否在本次导入中已经被创建或复用
-                    if (ctx.createdFolders.contains(fullFolderPath)) {
-                        // 父目录在本次导入中已经被创建或复用，子任务正常创建
-                        return false;
-                    }
-                    // 父目录存在但不在本次导入中，说明是已存在的目录，子任务正常创建
-                    return false;
-                }
-            }
-        }
-        
-        return false;
-    }
-
-    private ImportResult createResult(TreeNode node, String path, ImportContext ctx) {
-        String folderPath = getParentPath(path);
-        String jobName = getLastPathSegment(path);
-        ImportResult result = new ImportResult(jobName, folderPath);
-        result.finalName = path;
-        result.fullPath = getFullPath(path, ctx);
-        result.sourcePath = node.fullPath;
-        result.displayPath = node.fullPath;
-        result.isFolder = (node.type == NodeType.FOLDER);
-        result.isJob = (node.type == NodeType.JOB);
-        return result;
-    }
-
-    private void processJob(TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        String fullPath = getFullPath(path, ctx);
-        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
-
-        if (existingItem != null) {
-            if (ctx.overwrite) {
-                handleOverwrite(existingItem, node, path, result, ctx);
-            } else if (ctx.autoRename) {
-                // 检查是否已经通过 renameMap 重命名过了
-                // 如果 path 已经不同于原始路径（node.fullPath），说明 DAG 已经处理过
-                if (!path.equals(node.fullPath)) {
-                    // DAG 已处理过，直接使用已解析的路径创建任务
-                    handleAutoRenameResolved(node, path, result, ctx);
-                } else {
-                    // 路径未变，说明 DAG 阶段漏掉了（不应该发生），执行重命名
-                    handleAutoRename(node, path, result, ctx);
-                }
-            } else {
-                result.setStatusEnum(Status.SKIP_EXISTS);
-                result.skipped = true;
-                result.message = Messages.ExecutionEngine_jobExistsSkipped();
-            }
-        } else {
-            createJob(node, path, result, ctx);
-        }
-    }
-
-    private void handleOverwrite(Item existingItem, TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        if (ctx.dryRun) {
-            if (existingItem instanceof Job) {
-                String existingType = getJobTypeFromItemClass(existingItem.getClass());
-                String newType = getJobTypeFromXml(node.configXml);
-                
-                if (existingType != null && newType != null && !existingType.equals(newType)) {
-                    result.setStatusEnum(Status.ERROR);
-                    result.success = false;
-                    result.message = Messages.ExecutionEngine_jobTypeMismatchCannotOverwrite(existingType, newType);
-                    ctx.parentTypeErrors.add(path);
-                    return;
-                }
-            }
-        } else {
-            try {
-                backupConfig(existingItem);
-                if (existingItem instanceof AbstractItem) {
-                    byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(node.configXml);
-                    try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
-                        ((AbstractItem) existingItem).updateByXml(new StreamSource(in));
-                    }
-                    ((AbstractItem) existingItem).save();
-                } else {
-                    existingItem.delete();
-                    createJobDirect(path, node.configXml, ctx);
-                }
-            } catch (Exception e) {
-                result.setStatusEnum(Status.ERROR);
-                result.message = Messages.ExecutionEngine_overwriteFailed(e.getMessage());
-                return;
-            }
-        }
-        result.setStatusEnum(Status.OVERWRITE_JOB);
-        result.success = true;
-        result.message = ctx.dryRun ? Messages.ExecutionEngine_willOverwriteJobConfig() : Messages.ExecutionEngine_overwroteJobConfig();
-    }
-
-    private void handleAutoRename(TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        String parentPath = getParentPath(path);
-        String newName = generateUniqueName(ctx.targetGroup, parentPath, getLastPathSegment(path), ctx);
-        String newPath = parentPath.isEmpty() ? newName : parentPath + "/" + newName;
-
-        // 更新 renameMap，确保后续节点能正确解析
-        ctx.renameMap.put(path, newPath);
-
-        result.finalName = newPath;
-        result.renamed = true;
-        
-        if (node.hasConfigXml) {
-            result.setStatusEnum(Status.RENAME_JOB);
-            result.message = Messages.ExecutionEngine_jobRenamedTo(newName);
-
-            if (!ctx.dryRun) {
-                try {
-                    createJobDirect(newPath, node.configXml, ctx);
-                } catch (Exception e) {
-                    result.setStatusEnum(Status.ERROR);
-                    result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
-                    return;
-                }
-            }
-        } else {
-            result.setStatusEnum(Status.RENAME_FOLDER);
-            result.message = Messages.ExecutionEngine_dirRenamedTo(newName);
-
-            if (!ctx.dryRun) {
-                try {
-                    ensureFolderPath(ctx.targetGroup, newPath, true, ctx);
-                    ctx.createdFolders.add(getFullPath(newPath, ctx));
-                } catch (Exception e) {
-                    result.setStatusEnum(Status.ERROR);
-                    result.message = Messages.ExecutionEngine_createDirFailed(e.getMessage());
-                    return;
-                }
-            }
-        }
-        result.success = true;
-    }
-
-    /**
-     * 处理已通过 DAG 重命名过的任务路径
-     * 此时 path 已经是重命名后的唯一路径，直接创建任务即可
-     */
-    private void handleAutoRenameResolved(TreeNode node, String resolvedPath, ImportResult result, ImportContext ctx) {
-        String folderPath = getParentPath(resolvedPath);
-        String jobName = getLastPathSegment(resolvedPath);
-
-        result.finalName = resolvedPath;
-        result.renamed = true;
-        result.setStatusEnum(Status.RENAME_JOB);
-        result.message = Messages.ExecutionEngine_jobRenamedTo(jobName);
-
-        if (!ctx.dryRun) {
-            try {
-                createJobDirect(resolvedPath, node.configXml, ctx);
-            } catch (Exception e) {
-                result.setStatusEnum(Status.ERROR);
-                result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
-                return;
-            }
-        }
-        result.success = true;
-    }
-
-    private void createJob(TreeNode node, String path, ImportResult result, ImportContext ctx) {
-        if (!ctx.dryRun) {
-            try {
-                createJobDirect(path, node.configXml, ctx);
-            } catch (Exception e) {
-                result.setStatusEnum(Status.ERROR);
-                result.message = Messages.ExecutionEngine_createFailed(e.getMessage());
-                return;
-            }
-        }
-        result.setStatusEnum(Status.CREATE_JOB);
-        result.success = true;
-        result.message = ctx.dryRun ? Messages.ExecutionEngine_willCreateJob() : Messages.ExecutionEngine_createdJob();
-    }
-
-    private void createJobDirect(String path, byte[] configXml, ImportContext ctx) throws Exception {
-        String folderPath = getParentPath(path);
-        String jobName = getLastPathSegment(path);
-
-        ItemGroup parentGroup = ensureParentFolders(folderPath, ctx);
-        if (!(parentGroup instanceof ModifiableTopLevelItemGroup)) {
-            throw new Exception(Messages.ExecutionEngine_createFailed("Parent group does not support creating jobs"));
-        }
-
-        ModifiableTopLevelItemGroup modifiableGroup = (ModifiableTopLevelItemGroup) parentGroup;
-
-        TopLevelItemDescriptor descriptor = SecureXmlParser.determineJobDescriptor(configXml);
-        if (descriptor == null) {
-            throw new Exception(Messages.ExecutionEngine_createFailed(Messages.ExecutionEngine_unknownJobType()));
-        }
-
-        TopLevelItem item = modifiableGroup.createProject(descriptor, jobName, false);
-
-        try {
-            byte[] sanitizedXml = SecureXmlParser.sanitizeJobConfig(configXml);
-            try (InputStream in = new ByteArrayInputStream(sanitizedXml)) {
-                ((AbstractItem) item).updateByXml(new StreamSource(in));
-            }
-            ((AbstractItem) item).save();
-            ctx.createdJobs.add(getFullPath(path, ctx));
-        } catch (Exception e) {
-            try {
-                item.delete();
-            } catch (Exception deleteEx) {
-                LOGGER.log(Level.WARNING, "Failed to cleanup partially created job: {0}", deleteEx.getMessage());
-            }
-            throw e;
-        }
-    }
-
-    private static final Logger LOGGER = Logger.getLogger(ExecutionEngine.class.getName());
-
-    private ItemGroup ensureParentFolders(String folderPath, ImportContext ctx) throws Exception {
-        if (folderPath == null || folderPath.isEmpty()) {
-            return ctx.targetGroup;
-        }
-
-        String[] parts = folderPath.split("/");
-        ItemGroup current = ctx.targetGroup;
-        StringBuilder currentPath = new StringBuilder();
-
-        for (String part : parts) {
-            if (part.isEmpty()) continue;
-
-            if (currentPath.length() > 0) {
-                currentPath.append("/");
-            }
-            currentPath.append(part);
-            String fullPath = currentPath.toString();
-            String fullJenkinsPath = getFullPath(fullPath, ctx);
-
-            // 检查是否是当前会话中刚创建的目录
-            if (ctx.createdFolders.contains(fullJenkinsPath)) {
-                Item item = Jenkins.get().getItemByFullName(fullJenkinsPath);
-                if (item instanceof ItemGroup) {
-                    current = (ItemGroup) item;
-                    continue;
-                }
-            }
-
-            Item item = current.getItem(part);
-            if (item == null) {
-                if (current instanceof ModifiableTopLevelItemGroup) {
-                    try {
-                        Class.forName("com.cloudbees.hudson.plugins.folder.Folder");
-                        hudson.model.TopLevelItemDescriptor folderDescriptor = Jenkins.get().getDescriptorByType(
-                            com.cloudbees.hudson.plugins.folder.Folder.DescriptorImpl.class);
-                        hudson.model.TopLevelItem folder = ((ModifiableTopLevelItemGroup) current).createProject(folderDescriptor, part, false);
-                        current = (ItemGroup) folder;
-                        ctx.createdFolders.add(fullJenkinsPath);
-                    } catch (ClassNotFoundException e) {
-                        throw new Exception("Folder plugin not available", e);
-                    }
-                } else {
-                    throw new Exception("Folder not found: " + fullPath);
-                }
-            } else if (item instanceof ItemGroup) {
-                current = (ItemGroup) item;
-            } else {
-                throw new Exception("Path exists but is not a folder: " + fullPath);
-            }
-        }
-
-        return current;
-    }
-
-    private ItemGroup getParentItemGroup(ItemGroup base, String folderPath) {
-        if (folderPath == null || folderPath.isEmpty()) {
-            return base;
-        }
-        String[] parts = folderPath.split("/");
-        ItemGroup current = base;
-        for (String part : parts) {
-            if (part.isEmpty()) continue;
-            Item item = Jenkins.get().getItemByFullName(part);
-            if (item instanceof ItemGroup) {
-                current = (ItemGroup) item;
-            }
-        }
-        return current;
-    }
-
-    private ItemGroup ensureFolderPath(ItemGroup itemGroup, String folderPath, boolean create, ImportContext ctx) throws Exception {
-        if (folderPath == null || folderPath.isEmpty()) {
-            return itemGroup;
-        }
-        String[] parts = folderPath.split("/");
-        ItemGroup current = itemGroup;
-        StringBuilder currentPath = new StringBuilder();
-
-        for (String part : parts) {
-            if (part.isEmpty()) continue;
-            if (currentPath.length() > 0) {
-                currentPath.append("/");
-            }
-            currentPath.append(part);
-            String fullPath = currentPath.toString();
-            String fullJenkinsPath = getFullPath(fullPath, ctx);
-
-            // 检查是否是当前会话中刚创建的目录
-            Item item = null;
-            if (ctx != null && ctx.createdFolders.contains(fullJenkinsPath)) {
-                item = Jenkins.get().getItemByFullName(fullJenkinsPath);
-            }
-            
-            if (item == null) {
-                item = current.getItem(part);
-            }
-            
-            if (item == null) {
-                if (create && current instanceof ModifiableTopLevelItemGroup) {
-                    try {
-                        Class.forName("com.cloudbees.hudson.plugins.folder.Folder");
-                        hudson.model.TopLevelItemDescriptor folderDescriptor = Jenkins.get().getDescriptorByType(
-                            com.cloudbees.hudson.plugins.folder.Folder.DescriptorImpl.class);
-                        hudson.model.TopLevelItem folder = ((ModifiableTopLevelItemGroup) current).createProject(folderDescriptor, part, false);
-                        current = (ItemGroup) folder;
-                    } catch (ClassNotFoundException e) {
-                        throw new Exception("Folder plugin not available", e);
-                    }
-                } else {
-                    throw new Exception("Folder not found: " + fullPath);
-                }
-            } else if (item instanceof ItemGroup) {
-                current = (ItemGroup) item;
-            } else {
-                throw new Exception("Path exists but is not a folder: " + fullPath);
-            }
-        }
-        return current;
-    }
-
-    private String getParentPath(String path) {
-        int lastSlash = path.lastIndexOf('/');
-        if (lastSlash == -1) return "";
-        return path.substring(0, lastSlash);
-    }
-
-    private String getLastPathSegment(String path) {
-        int lastSlash = path.lastIndexOf('/');
-        if (lastSlash == -1) return path;
-        return path.substring(lastSlash + 1);
-    }
-
-    private String getJobTypeFromXml(byte[] xml) {
-        try {
-            String xmlStr = new String(xml, "UTF-8");
-            if (xmlStr.contains("<project>")) {
-                if (xmlStr.contains("<hudson.model.FreeStyleProject>") || xmlStr.contains("<project>")) {
-                    return "Freestyle";
-                } else if (xmlStr.contains("<org.jenkinsci.plugins.workflow.job.WorkflowJob>")) {
-                    return "Pipeline";
-                } else if (xmlStr.contains("<hudson.maven.MavenModuleSet>")) {
-                    return "Maven";
-                } else if (xmlStr.contains("<hudson.matrix.MatrixProject>")) {
-                    return "Matrix";
-                }
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String getJobTypeFromItemClass(Class<?> clazz) {
-        String name = clazz.getName();
-        if (name.contains("FreeStyleProject")) return "Freestyle";
-        if (name.contains("WorkflowJob")) return "Pipeline";
-        if (name.contains("MavenModuleSet")) return "Maven";
-        if (name.contains("MatrixProject")) return "Matrix";
-        return clazz.getSimpleName();
-    }
-
-    private boolean isFolderConfigXml(byte[] xml) {
-        try {
-            String xmlStr = new String(xml, "UTF-8");
-            return xmlStr.contains("com.cloudbees.hudson.plugins.folder.Folder");
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private String getFullPath(String relativePath, ImportContext ctx) {
-        if (ctx.basePath == null || ctx.basePath.isEmpty()) {
-            return relativePath;
-        }
-        return ctx.basePath + "/" + relativePath;
-    }
-
-    private String generateUniqueJobName(ItemGroup itemGroup, String folderPath, String jobName) {
-        String baseName = jobName;
-        int counter = 2;
-        String candidate;
-
-        ItemGroup parentGroup = getParentItemGroup(itemGroup, folderPath);
-        do {
-            candidate = baseName + "_" + counter;
-            counter++;
-        } while (Jenkins.get().getItemByFullName(folderPath.isEmpty() ? candidate : folderPath + "/" + candidate) != null);
-
-        return candidate;
-    }
-
-    /**
-     * 生成唯一的名称（支持 Folder 和 Job，检查当前会话中刚创建的项目）
-     */
-    private String generateUniqueName(ItemGroup itemGroup, String folderPath, String baseName, ImportContext ctx) {
-        int counter = 2;
-        String candidate;
-        String fullPath;
-        String checkPath;
-
-        do {
-            candidate = baseName + "_" + counter;
-            counter++;
-            fullPath = folderPath.isEmpty() ? candidate : folderPath + "/" + candidate;
-            checkPath = getFullPath(fullPath, ctx);
-        } while (Jenkins.get().getItemByFullName(checkPath) != null
-                 || ctx.createdFolders.contains(checkPath)
-                 || ctx.createdJobs.contains(checkPath)
-                 || ctx.virtualFolders.contains(checkPath));
-
-        return candidate;
-    }
-
-    private boolean isLeafNode(String path) {
-        for (String folderPath : folderPathsToCreate) {
-            if (folderPath.startsWith(path + "/")) {
-                return false;
-            }
-        }
-        for (String jobPath : jobNodesToCreate.keySet()) {
-            if (jobPath.startsWith(path + "/")) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private ImportResult checkPermissionForPath(String originalPath, String resolvedPath, ImportContext ctx) {
-        String fullPath = getFullPath(resolvedPath, ctx);
-        Item existingItem = Jenkins.get().getItemByFullName(fullPath);
-        boolean isLeaf = isLeafNode(originalPath);
-
-        if (existingItem != null && ctx.overwrite) {
-            if (!isLeaf) {
-                if (!existingItem.hasPermission(Item.CONFIGURE)) {
-                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
-                    errorResult.finalName = resolvedPath;
-                    errorResult.fullPath = fullPath;
-                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
-                    errorResult.displayPath = errorResult.sourcePath;
-                    errorResult.isFolder = true;
-                    errorResult.isJob = false;
-                    errorResult.setStatus("ERROR");
-                    errorResult.success = false;
-                    errorResult.message = Messages.ExecutionEngine_noPermissionUpdateDirConfig();
-                    ctx.parentPermissionErrors.add(resolvedPath);
-                    return errorResult;
-                }
-                if (!existingItem.hasPermission(Item.CREATE)) {
-                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
-                    errorResult.finalName = resolvedPath;
-                    errorResult.fullPath = fullPath;
-                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
-                    errorResult.displayPath = errorResult.sourcePath;
-                    errorResult.isFolder = true;
-                    errorResult.isJob = false;
-                    errorResult.setStatus("ERROR");
-                    errorResult.success = false;
-                    errorResult.message = Messages.ExecutionEngine_noPermissionCreateInDir();
-                    ctx.parentPermissionErrors.add(resolvedPath);
-                    return errorResult;
-                }
-            } else {
-                if (!existingItem.hasPermission(Item.CONFIGURE)) {
-                    ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
-                    errorResult.finalName = resolvedPath;
-                    errorResult.fullPath = fullPath;
-                    errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
-                    errorResult.displayPath = errorResult.sourcePath;
-                    errorResult.isFolder = false;
-                    errorResult.isJob = true;
-                    errorResult.setStatus("ERROR");
-                    errorResult.success = false;
-                    errorResult.message = Messages.ExecutionEngine_noPermissionUpdateJobConfig();
-                    return errorResult;
-                }
-            }
-        } else if (existingItem == null) {
-            ItemGroup parentGroup = getParentGroupForPath(resolvedPath, ctx);
-            if (parentGroup instanceof Item && !((Item) parentGroup).hasPermission(Item.CREATE)) {
-                ImportResult errorResult = new ImportResult(getLastPathSegment(resolvedPath), getParentPath(resolvedPath));
-                errorResult.finalName = resolvedPath;
-                errorResult.fullPath = fullPath;
-                errorResult.sourcePath = originalPath.replaceFirst("^/+", "");
-                errorResult.displayPath = errorResult.sourcePath;
-                errorResult.isFolder = !isLeaf;
-                errorResult.isJob = isLeaf;
-                errorResult.setStatus("ERROR");
-                errorResult.success = false;
-                errorResult.message = Messages.ExecutionEngine_noPermissionCreateJob();
-                if (!isLeaf) {
-                    ctx.parentPermissionErrors.add(resolvedPath);
-                }
-                return errorResult;
-            }
-        }
-
-        return null;
-    }
-
-    private ItemGroup getParentGroupForPath(String path, ImportContext ctx) {
-        String parentPath = getParentPath(path);
-        if (parentPath.isEmpty()) {
-            return ctx.targetGroup;
-        }
-        String fullParentPath = getFullPath(parentPath, ctx);
-        Item parentItem = Jenkins.get().getItemByFullName(fullParentPath);
-        if (parentItem instanceof ItemGroup) {
-            return (ItemGroup) parentItem;
-        }
-        return ctx.targetGroup;
-    }
-
-    private void backupConfig(Item item) throws Exception {
-        if (item instanceof AbstractItem) {
-            AbstractItem abstractItem = (AbstractItem) item;
-            Path configFile = Paths.get(abstractItem.getRootDir().getAbsolutePath(), "config.xml");
-            Path backupFile = Paths.get(abstractItem.getRootDir().getAbsolutePath(), "config.xml.bak");
-
-            if (Files.exists(configFile)) {
-                Files.copy(configFile, backupFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
+    private int compareByDepth(String a, String b) {
+        int depthA = a.split("/").length;
+        int depthB = b.split("/").length;
+        if (depthA != depthB) return depthA - depthB;
+        return a.compareTo(b);
     }
 
     public List<ImportResult> getResults() {
-        return results;
+        return resultCollector.getResults();
+    }
+
+    /**
+     * 导入计划数据容器，用于在收集阶段传递数据。
+     * 替代原先的实例变量，使 ExecutionEngine 成为无状态协调者。
+     */
+    static class ImportPlan {
+        final List<String> folderPathsToCreate = new ArrayList<>();
+        final Map<String, TreeNode> jobNodesToCreate = new LinkedHashMap<>();
+        final Map<String, TreeNode> folderWithConfigToCreate = new LinkedHashMap<>();
     }
 }
