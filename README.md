@@ -1119,4 +1119,4 @@ MIT License
 ## 维护者
 
 - 项目：com.siruoren:job-import-export
-- 版本：2.0.0
+- 版本：2.0.2

@@ -2,7 +2,7 @@
 
 set -e
 
-source ~/.bashrc
+source ~/.zshrc
 
 PROJECT_NAME="job-import-export"
 MVN_OPTS="-Denforcer.skip=true -DskipTests"

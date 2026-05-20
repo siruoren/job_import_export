@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [2.0.3] - 2026-05-18
+## [2.0.2] - 2026-05-17
 
 ### 新增
 
@@ -42,7 +42,7 @@
 - **API 使用说明增强**：README 中新增 Python requests 库调用示例，提供更可靠的认证和请求方式
 - **curl 注意事项说明**：curl 命令在 POST 请求中 crumb 验证存在兼容性问题，建议使用 Python requests 库
 
-## [2.0.2] - 2026-05-17
+
 
 ### 新增功能
 
