@@ -11,7 +11,9 @@
 
     <groupId>com.siruoren</groupId>
     <artifactId>job-import-export</artifactId>
+
     <version>2.0.2-SNAPSHOT</version>
+
     <packaging>hpi</packaging>
     <name>Job Import/Export Plugin</name>
     <description>Jenkins plugin for importing and exporting job configurations as XML files</description>
