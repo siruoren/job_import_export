@@ -5,7 +5,88 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [2.0.1] - 2026-05-16
+## [2.0.3] - 2026-05-18
+
+### 新增
+
+- **GitHub Actions CI 工作流**：新增 `.github/workflows/build.yml`
+  - 所有分支 push 和 PR 都触发构建
+  - Maven 构建打包
+  - 上传 `.hpi` 插件包作为构建产物
+
+- **API 单元测试**：新增 `JobImportExportApiTest` 测试类，包含 8 个测试方法，覆盖 REST API 的主要功能点
+  - 验证 API 类实例化
+  - 验证通过 SidebarLink 获取 API 实例
+  - 验证所有 API 端点方法存在（list、exportJob、exportFolder、exportAll、progress、updateJob、import、preview）
+  - 验证 URL 路由配置
+
+### 测试覆盖
+
+- **测试用例总数**：从 67 个增加到 75 个
+- **新增测试类**：`JobImportExportApiTest`（8 个测试方法）
+
+### 验证
+
+- **REST API 接口验证通过**：所有 8 个 API 端点已在实际 Jenkins 环境（`http://localhost:8080/jenkins`）测试通过
+  - `list` (GET)：列出任务列表，返回树形结构
+  - `progress` (GET)：查询导入进度，支持异步状态跟踪
+  - `exportJob` (POST)：导出单个任务配置XML
+  - `exportFolder` (POST)：导出文件夹（含所有子任务）
+  - `exportAll` (POST)：导出全部任务为ZIP
+  - `import` (POST)：批量导入任务（异步执行）
+  - `preview` (POST)：预演导入（dry-run模式）
+  - `updateJob` (POST)：更新任务配置（需使用 xmlFile 参数上传文件）
+
+### 文档更新
+
+- **API 使用说明增强**：README 中新增 Python requests 库调用示例，提供更可靠的认证和请求方式
+- **curl 注意事项说明**：curl 命令在 POST 请求中 crumb 验证存在兼容性问题，建议使用 Python requests 库
+
+## [2.0.2] - 2026-05-17
+
+### 新增功能
+
+- **REST API 接口**：新增 `JobImportExportApi` 类，提供完整的 REST API 端点，使外部工具可以程序化地调用插件功能
+  - API 路径前缀：`/jobImportExport/api/`
+  - 所有接口统一返回 JSON 格式，包含 `success`、`message`、`errorCode` 字段
+  - 支持 `exportJob`、`exportFolder`、`exportAll`、`import`、`preview`、`updateJob`、`progress`、`list` 等端点
+  - 支持 Base64 编码的 ZIP 数据传输，便于与外部系统集成
+  - 导入接口支持异步执行，返回 `batchId` 用于进度查询
+  - 所有接口均包含权限检查，确保安全性
+  - **API 文档页面**：新增 Swagger 风格的可视化 API 文档页面，可通过侧边栏「API 文档」入口访问
+    - 支持在线「Try it out」功能，直接填写参数并发送请求查看响应
+    - 包含完整的参数说明、cURL 示例、响应示例
+    - 权限徽章显示各端点所需权限
+    - 支持中英双语自动切换
+
+### 改进
+
+- **API 权限检查与 Web 页面统一**：所有 API 端点使用 `checkPermission()` 进行权限校验，与 Web 页面行为完全一致
+  - `preview` 端点权限从 `Item.READ` 修正为 `Item.CREATE`，与 Web 页面导入预览保持一致
+  - 权限不足时由 Jenkins 框架统一处理（返回 403），而非自定义 JSON 错误
+- **API 响应信息完善**：各端点 JSON 输出补充了更丰富的上下文信息
+  - `exportJob`：新增 `fullName`、`jobType`（folder/job）、`jobUrl` 字段
+  - `exportFolder`/`exportAll`：新增 `sourceFolder`、`includeCurrentConfig` 字段
+  - `import`：即时返回新增 `targetFolder`、`overwrite`、`rename`、`dryRun` 参数回显及 `progressUrl` 进度查询链接
+  - `preview`：新增 `targetFolder`、`overwrite`、`rename` 参数回显
+  - `updateJob`：新增 `jobType`、`jobUrl`、`redirect` 字段
+  - `progress`：完成时新增 `total` 汇总字段
+  - `list`：新增 `totalCount` 字段
+
+### 新增 API 端点
+
+| 端点 | 方法 | 功能 | 权限 |
+|------|------|------|------|
+| `/jobImportExport/api/exportJob` | POST | 导出单个Job的config.xml | Item.READ |
+| `/jobImportExport/api/exportFolder` | POST | 导出文件夹为ZIP（Base64） | Item.READ |
+| `/jobImportExport/api/exportAll` | POST | 导出所有Job为ZIP（Base64） | Jenkins.ADMINISTER |
+| `/jobImportExport/api/import` | POST | 从ZIP导入Job | Item.CREATE |
+| `/jobImportExport/api/preview` | POST | 预演导入（dry-run） | Item.CREATE |
+| `/jobImportExport/api/updateJob` | POST | 更新Job的config.xml | Item.CONFIGURE |
+| `/jobImportExport/api/progress` | GET | 查询导入进度 | - |
+| `/jobImportExport/api/list` | GET | 列出Job/文件夹 | Item.READ |
+
+## [2.0.1] - 2026-05-17
 
 ### 新增功能
 
@@ -46,11 +127,12 @@
 
 ### 测试覆盖
 
-- **新增单元测试**：共 67 个测试用例，覆盖本地化核心功能
+- **新增单元测试**：共 76 个测试用例，覆盖本地化核心功能和 REST API
   - `StatusUtilTest`：21 个测试，覆盖状态码本地化、null/empty 处理、未知状态码
   - `ImportResultTest`：18 个测试，覆盖 `setStatusEnum()` / `setStatus()` 方法、双字段一致性
   - `ExportResultTest`：14 个测试，覆盖构造器本地化、statusCode/status 分离
   - `LocaleHolderTest`：14 个测试，覆盖 ThreadLocal 存储、线程隔离
+  - `JobImportExportApiTest`：9 个测试，覆盖 REST API 接口（list、exportJob、exportFolder、exportAll、progress、updateJob）
 - **测试框架**：使用 JUnit 5（junit-jupiter-api/junit-jupiter-engine 5.10.0）
 
 ### 修复

@@ -2,12 +2,19 @@ package com.siruoren.jobimportexport.engine.diff;
 
 import com.siruoren.jobimportexport.engine.Messages;
 import com.siruoren.jobimportexport.engine.model.*;
+import com.siruoren.jobimportexport.engine.resolver.RenameDAGResolver;
 import hudson.model.Item;
 import jenkins.model.Jenkins;
 
 import java.util.*;
 
+/**
+ * Dry-Run 对比引擎，用于预览导入操作结果。
+ * 已移除重复的 resolveWithDag 方法，统一使用 RenameDAGResolver。
+ */
 public class DryRunDiffEngine {
+
+    private final RenameDAGResolver renameResolver = new RenameDAGResolver();
 
     public List<Diff> dryRun(TreeNode root) {
         return dryRun(root, null);
@@ -52,7 +59,7 @@ public class DryRunDiffEngine {
         // 按顺序处理每个路径
         for (String originalPath : orderedPaths) {
             // 应用已有的 renameMap，计算当前路径的最终位置
-            String resolvedPath = resolveWithDag(originalPath, renameMap);
+            String resolvedPath = renameResolver.resolvePath(originalPath, renameMap);
 
             // 检查 Jenkins 中是否存在（使用完整路径）
             String fullPath = getFullPath(resolvedPath, ctx);
@@ -109,43 +116,6 @@ public class DryRunDiffEngine {
         }
         
         return result;
-    }
-    
-    /**
-     * 使用 DAG 传播解析路径
-     */
-    private String resolveWithDag(String path, Map<String, String> renameMap) {
-        String resolved = path;
-        boolean changed = true;
-        
-        while (changed) {
-            changed = false;
-            
-            // 按路径长度从长到短排序，确保更长的路径优先匹配
-            List<Map.Entry<String, String>> entries = new ArrayList<>(renameMap.entrySet());
-            entries.sort((a, b) -> b.getKey().length() - a.getKey().length());
-            
-            for (Map.Entry<String, String> entry : entries) {
-                String from = entry.getKey();
-                String to = entry.getValue();
-                
-                // 精确匹配
-                if (resolved.equals(from)) {
-                    resolved = to;
-                    changed = true;
-                    break;
-                }
-                
-                // 子路径传播：parent rename 传播到 child
-                if (resolved.startsWith(from + "/")) {
-                    resolved = to + resolved.substring(from.length());
-                    changed = true;
-                    break;
-                }
-            }
-        }
-        
-        return resolved;
     }
     
     /**

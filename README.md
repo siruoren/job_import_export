@@ -18,6 +18,476 @@
 | 导出全部任务 | 导出 Jenkins 根目录下所有任务（仅管理员） | 左侧边栏 |
 | 批量导出任务 | 导出当前目录及所有子任务配置 | 文件夹页面 |
 
+### REST API
+
+插件提供完整的 REST API 接口，支持外部工具程序化调用导入/导出功能。
+
+**API 文档页面**：可通过 Jenkins 侧边栏「API 文档」入口访问 `http://jenkins/jobImportExport/api/`，提供 Swagger 风格的可视化 API 文档：
+- 支持在线「Try it out」功能，直接填写参数并发送请求查看响应
+- 包含完整的参数说明、cURL 示例、响应示例
+- 权限徽章显示各端点所需权限
+- 支持中英双语自动切换
+
+#### API 权限说明
+
+所有 API 端点的权限检查与 Web 页面完全一致，使用 Jenkins 标准的 `checkPermission()` 机制：
+- 权限不足时由 Jenkins 框架统一返回 403 错误
+- 所有 POST 端点均需携带 Jenkins CRUMB（CSRF 防护）
+
+#### API 端点一览
+
+| 端点 | 方法 | 功能 | 权限 |
+|------|------|------|------|
+| `exportJob` | POST | 导出单个Job的config.xml | Item.READ |
+| `exportFolder` | POST | 导出文件夹为ZIP（Base64编码） | Item.READ |
+| `exportAll` | POST | 导出所有Job为ZIP（Base64编码） | Jenkins.ADMINISTER |
+| `import` | POST | 从ZIP文件导入Job | Item.CREATE |
+| `preview` | POST | 预演导入（dry-run模式） | Item.CREATE |
+| `updateJob` | POST | 更新Job的config.xml（需用xmlFile参数） | Item.CONFIGURE |
+| `progress` | GET | 查询导入进度 | - |
+| `list` | GET | 列出Job/文件夹列表 | Item.READ |
+
+#### API 快速入门
+
+**API 文档页面**：访问 `${JENKINS_URL}/jobImportExport/api/` 即可查看可视化 API 文档，支持在线测试。只需输入用户名密码，系统自动处理认证和 CSRF crumb。
+
+#### API 调用示例
+
+> **推荐使用 Python requests 库**：curl 命令在某些环境下 POST 请求的 crumb 验证存在兼容性问题，建议使用 Python requests 库的会话方式。
+
+**1. Python requests 库（推荐）**
+
+```python
+import requests
+import json
+
+# 配置
+JENKINS_URL = "http://localhost:8080/jenkins"
+USERNAME = "admin"
+PASSWORD = "admin"
+
+# 创建会话，自动处理认证
+session = requests.Session()
+session.auth = (USERNAME, PASSWORD)
+
+def get_crumb():
+    """获取 CSRF crumb"""
+    resp = session.get(f"{JENKINS_URL}/crumbIssuer/api/json")
+    data = resp.json()
+    return data['crumb'], data['crumbRequestField']
+
+def api_call(method, endpoint, params=None, data=None, files=None):
+    """统一 API 调用方法"""
+    crumb, crumb_field = get_crumb()
+    headers = {crumb_field: crumb}
+    
+    if method == "GET":
+        resp = session.get(f"{JENKINS_URL}{endpoint}", headers=headers, params=params)
+    elif files:
+        resp = session.post(f"{JENKINS_URL}{endpoint}", headers=headers, data=data, files=files, params=params)
+    else:
+        resp = session.post(f"{JENKINS_URL}{endpoint}", headers=headers, data=data, params=params)
+    
+    return resp.json()
+
+# 列出任务列表
+result = api_call("GET", "/jobImportExport/api/list")
+print(f"任务总数: {result['totalCount']}")
+
+# 导出单个任务（返回 JSON）
+result = api_call("POST", "/jobImportExport/api/exportJob", params={"job": "my-job"})
+print(f"配置XML: {result['configXml']}")
+
+# 导出文件夹并下载 ZIP
+resp = requests.get(f"{JENKINS_URL}/jobImportExport/api/exportFolder", 
+                    auth=(USERNAME, PASSWORD), params={"folder": "my-folder", "download": "true"})
+with open("backup.zip", "wb") as f:
+    f.write(resp.content)
+
+# 导出全部任务（管理员）
+resp = requests.get(f"{JENKINS_URL}/jobImportExport/api/exportAll",
+                    auth=(USERNAME, PASSWORD), params={"download": "true"})
+with open("full-backup.zip", "wb") as f:
+    f.write(resp.content)
+
+# 预演导入（dry-run）
+with open("jobs.zip", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/preview",
+                      data={"overwrite": "false", "rename": "true"},
+                      files={"zipFile": ("jobs.zip", f, "application/zip")})
+print(f"将导入 {result['total']} 个任务")
+
+# 执行导入（异步）
+with open("jobs.zip", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/import",
+                      data={"overwrite": "false", "rename": "true"},
+                      files={"zipFile": ("jobs.zip", f, "application/zip")})
+    batch_id = result['batchId']
+    print(f"导入已提交，batchId: {batch_id}")
+
+# 查询导入进度
+import time
+while True:
+    result = api_call("GET", "/jobImportExport/api/progress", params={"batchId": batch_id})
+    print(f"进度: {result['overallProgress']}% - {result['message']}")
+    if result['status'] == "DONE":
+        break
+    time.sleep(1)
+
+# 更新任务配置（使用 xmlFile 参数）
+with open("config.xml", "rb") as f:
+    result = api_call("POST", "/jobImportExport/api/updateJob",
+                      data={"job": "my-job"},
+                      files={"xmlFile": ("config.xml", f, "application/xml")})
+print(f"更新结果: {result['message']}")
+```
+
+**2. curl 命令（备选，注意兼容性问题）**
+
+```bash
+# 设置 Jenkins 连接信息
+JENKINS_URL="http://localhost:8080/jenkins"
+USERNAME="admin"
+PASSWORD="admin"
+
+# 获取 CSRF crumb
+CRUMB=$(curl -s -u ${USERNAME}:${PASSWORD} "${JENKINS_URL}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+# 导出单个任务配置（返回 JSON）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-folder/my-job"
+
+# 导出单个任务并直接下载 XML
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportJob?job=my-job&download=true" \
+  -o job-config.xml
+
+# 导出文件夹并直接下载 ZIP
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportFolder?folder=my-folder&includeCurrentConfig=true&download=true" \
+  -o my-folder-backup.zip
+
+# 导出全部任务（管理员权限）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportAll?download=true" \
+  -o jenkins-full-backup.zip
+
+# 预演导入（不实际创建，仅检查）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_URL}/jobImportExport/api/preview"
+
+# 执行导入
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -F "zipFile=@jobs.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_URL}/jobImportExport/api/import"
+
+# 更新任务配置（必须使用 xmlFile 参数上传文件）
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  -F "job=my-job" \
+  -F "xmlFile=@config.xml" \
+  "${JENKINS_URL}/jobImportExport/api/updateJob"
+
+# 查询导入进度
+curl -u ${USERNAME}:${PASSWORD} \
+  "${JENKINS_URL}/jobImportExport/api/progress?batchId=abc12345"
+
+# 列出任务
+curl -u ${USERNAME}:${PASSWORD} \
+  "${JENKINS_URL}/jobImportExport/api/list"
+```
+
+#### 完整功能案例
+
+**案例 1：Jenkins 任务迁移**
+
+```bash
+# 从源 Jenkins 导出生产环境任务
+JENKINS_SOURCE="http://source-jenkins:8080"
+CRUMB_SOURCE=$(curl -s -u admin:token "${JENKINS_SOURCE}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_SOURCE}" \
+  "${JENKINS_SOURCE}/jobImportExport/api/exportFolder?folder=production&includeCurrentConfig=true&download=true" \
+  -o production-backup.zip
+
+# 导入到目标 Jenkins
+JENKINS_TARGET="http://target-jenkins:8080"
+CRUMB_TARGET=$(curl -s -u admin:token "${JENKINS_TARGET}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+# 先预演
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_TARGET}" \
+  -F "zipFile=@production-backup.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_TARGET}/jobImportExport/api/preview"
+
+# 确认无误后执行导入
+curl -X POST -u admin:token \
+  -H "Jenkins-Crumb: ${CRUMB_TARGET}" \
+  -F "zipFile=@production-backup.zip" \
+  -F "overwrite=false" \
+  -F "rename=true" \
+  "${JENKINS_TARGET}/jobImportExport/api/import"
+```
+
+**案例 2：定时备份 Jenkins 任务**
+
+创建 `jenkins-backup.sh` 脚本：
+
+```bash
+#!/bin/bash
+# Jenkins 定时备份脚本
+
+JENKINS_URL="http://localhost:8080/jenkins"
+USERNAME="admin"
+PASSWORD="your-api-token"
+BACKUP_DIR="/backup/jenkins"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# 创建备份目录
+mkdir -p ${BACKUP_DIR}
+
+# 获取 crumb
+CRUMB=$(curl -s -u ${USERNAME}:${PASSWORD} "${JENKINS_URL}/crumbIssuer/api/json" | python3 -c "import sys,json; print(json.load(sys.stdin)['crumb'])")
+
+# 导出全部任务
+curl -X POST -u ${USERNAME}:${PASSWORD} \
+  -H "Jenkins-Crumb: ${CRUMB}" \
+  "${JENKINS_URL}/jobImportExport/api/exportAll?download=true" \
+  -o "${BACKUP_DIR}/jenkins_backup_${DATE}.zip"
+
+# 保留最近 7 天的备份
+find ${BACKUP_DIR} -name "jenkins_backup_*.zip" -mtime +7 -delete
+
+echo "Backup completed: jenkins_backup_${DATE}.zip"
+```
+
+添加到 cron 定时任务：
+```bash
+# 每天凌晨 2 点执行备份
+0 2 * * * /path/to/jenkins-backup.sh >> /var/log/jenkins-backup.log 2>&1
+```
+
+**案例 3：批量更新任务配置**
+
+```python
+import requests
+
+session = requests.Session()
+session.auth = ("admin", "admin")
+
+def get_crumb():
+    resp = session.get("http://localhost:8080/jenkins/crumbIssuer/api/json")
+    data = resp.json()
+    return data['crumb'], data['crumbRequestField']
+
+# 1. 导出任务配置
+crumb, crumb_field = get_crumb()
+resp = session.post(
+    "http://localhost:8080/jenkins/jobImportExport/api/exportJob",
+    headers={crumb_field: crumb},
+    params={"job": "my-job"}
+)
+config_xml = resp.json()["configXml"]
+print(f"原始配置长度: {len(config_xml)}")
+
+# 2. 修改配置（示例：更新描述）
+config_xml = config_xml.replace(
+    "<description>Original</description>",
+    "<description>Updated by API at 2026-05-17</description>"
+)
+
+# 3. 更新任务配置（使用 xmlFile 参数）
+crumb, crumb_field = get_crumb()  # 重新获取 crumb
+with open("/tmp/temp-config.xml", "w") as f:
+    f.write(config_xml)
+
+with open("/tmp/temp-config.xml", "rb") as f:
+    resp = session.post(
+        "http://localhost:8080/jenkins/jobImportExport/api/updateJob",
+        headers={crumb_field: crumb},
+        data={"job": "my-job"},
+        files={"xmlFile": ("config.xml", f, "application/xml")}
+    )
+print(f"更新结果: {resp.json()}")
+```
+
+#### API 响应格式
+
+所有 API 统一返回 JSON 格式，错误响应：
+
+```json
+{
+  "success": false,
+  "message": "错误描述",
+  "errorCode": 403
+}
+```
+
+**exportJob 响应**：
+```json
+{
+  "success": true,
+  "job": "my-folder/my-job",
+  "fullName": "my-folder/my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "configXml": "<project>...</project>"
+}
+```
+
+**exportFolder / exportAll 响应**：
+```json
+{
+  "success": true,
+  "message": "导出成功",
+  "sourceFolder": "my-folder",
+  "includeCurrentConfig": false,
+  "total": 10,
+  "successCount": 8,
+  "skipCount": 2,
+  "failCount": 0,
+  "zipData": "UEsDBAoAAAAA...",
+  "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
+  "details": [
+    {
+      "jobPath": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "已导出",
+      "statusCode": "EXPORTED",
+      "message": ""
+    }
+  ]
+}
+```
+
+**import 响应**（异步，即时返回）：
+```json
+{
+  "success": true,
+  "batchId": "abc12345",
+  "async": true,
+  "message": "导入任务已提交",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "dryRun": false,
+  "progressUrl": "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+}
+```
+
+**preview 响应**：
+```json
+{
+  "success": true,
+  "dryRun": true,
+  "message": "预演完成",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "total": 5,
+  "successCount": 3,
+  "failCount": 0,
+  "skipCount": 2,
+  "details": [
+    {
+      "jobPath": "my-job",
+      "finalName": "my-job",
+      "fullPath": "my-folder/my-job",
+      "status": "将创建",
+      "statusCode": "CREATE_JOB",
+      "message": ""
+    }
+  ]
+}
+```
+
+**updateJob 响应**：
+```json
+{
+  "success": true,
+  "message": "更新成功",
+  "job": "my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-job/",
+  "redirect": "http://jenkins/job/my-job/"
+}
+```
+
+**progress 响应**（进行中）：
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 3,
+  "totalJobs": 10,
+  "overallProgress": 30,
+  "status": "RUNNING",
+  "message": "正在导入 my-folder/my-job"
+}
+```
+
+**progress 响应**（已完成）：
+```json
+{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 10,
+  "totalJobs": 10,
+  "overallProgress": 100,
+  "status": "DONE",
+  "message": "完成",
+  "resultReady": true,
+  "resultMessage": "批量导入完成",
+  "total": 10,
+  "successCount": 8,
+  "failCount": 0,
+  "skipCount": 2,
+  "dryRun": false,
+  "redirect": "http://jenkins/job/my-folder/",
+  "details": [...]
+}
+```
+
+**list 响应**：
+```json
+{
+  "success": true,
+  "folder": "my-folder",
+  "totalCount": 5,
+  "items": [
+    {
+      "name": "my-job",
+      "fullName": "my-folder/my-job",
+      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "type": "job",
+      "className": "FreeStyleProject"
+    },
+    {
+      "name": "sub-folder",
+      "fullName": "my-folder/sub-folder",
+      "url": "http://jenkins/job/my-folder/job/sub-folder/",
+      "type": "folder",
+      "className": "WorkflowMultiBranchProject",
+      "children": [...]
+    }
+  ]
+}
+```
+
 ### 国际化支持
 
 插件支持英语和中文两种语言，根据浏览器语言自动适配：
@@ -81,6 +551,31 @@
 | 覆盖前备份 | 自动备份现有配置为 `config.xml.bak` |
 | 权限分级控制 | 菜单和功能按用户权限显示 |
 | 线程池限流 | 统一管理导入任务线程池，服务器繁忙时优雅拒绝任务 |
+
+### 测试覆盖
+
+插件提供完善的单元测试覆盖，使用 JUnit 5 测试框架：
+
+| 测试类 | 测试数量 | 覆盖范围 |
+|--------|----------|----------|
+| `StatusUtilTest` | 21 | 状态码本地化、null/empty 处理、未知状态码 |
+| `ImportResultTest` | 18 | `setStatusEnum()` / `setStatus()` 方法、双字段一致性 |
+| `ExportResultTest` | 14 | 构造器本地化、statusCode/status 分离 |
+| `LocaleHolderTest` | 14 | ThreadLocal 存储、线程隔离 |
+| `JobImportExportApiTest` | 9 | REST API 接口（list、exportJob、exportFolder、exportAll、progress、updateJob） |
+
+**运行测试：**
+
+```bash
+# 运行所有测试
+mvn test -Denforcer.skip=true
+
+# 运行特定测试类
+mvn test -Denforcer.skip=true -Dtest=JobImportExportApiTest
+
+# 跳过测试构建
+mvn clean package -Denforcer.skip=true -DskipTests
+```
 
 ---
 
@@ -381,6 +876,7 @@ job_import_export/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action
         │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── JobImportExportApi.java        # REST API 接口
         │   ├── ImportExecutor.java            # 导入任务线程池管理器
         │   ├── ImportProgress.java            # 导入进度状态
         │   ├── ProgressManager.java           # 进度管理单例
@@ -447,6 +943,14 @@ job_import_export/
 | 全局批量导入 | Item.CREATE |
 | 导出全部任务 | Jenkins.ADMINISTER |
 | 批量导出任务 | Item.READ（每个任务）|
+| API: exportJob | Item.READ |
+| API: exportFolder | Item.READ |
+| API: exportAll | Jenkins.ADMINISTER |
+| API: import | Item.CREATE |
+| API: preview | Item.CREATE |
+| API: updateJob | Item.CONFIGURE |
+| API: progress | - |
+| API: list | Item.READ |
 
 ### 侧边栏权限分级
 

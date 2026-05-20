@@ -1,0 +1,682 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <l:layout title="${%page.title}">
+        <l:main-panel>
+            <style>
+                .api-doc-container { max-width: 1100px; margin: 0 auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+                .api-doc-container h1 { font-size: 24px; color: #333; margin-bottom: 8px; }
+                .api-doc-container .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+                .api-section { margin-bottom: 28px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+                .api-section-header { padding: 14px 20px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: background .2s; }
+                .api-section-header:hover { background: #f5f5f5; }
+                .api-section-header .method-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 4px; color: #fff; letter-spacing: .5px; min-width: 52px; text-align: center; }
+                .method-post { background: #49cc90; }
+                .method-get { background: #61dafb; color: #155799 !important; }
+                .api-section-header .endpoint-path { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 14px; color: #333; font-weight: 600; }
+                .api-section-header .endpoint-desc { color: #888; font-size: 13px; margin-left: auto; }
+                .api-section-body { display: none; padding: 0 20px 20px; border-top: 1px solid #eee; }
+                .api-section-body.open { display: block; }
+                .api-section.expanded .api-section-body { display: block; }
+                .api-section.expanded .api-section-header { background: #fafafa; }
+                .param-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+                .param-table th { background: #f8f9fa; padding: 8px 12px; text-align: left; border-bottom: 2px solid #dee2e6; color: #555; font-weight: 600; }
+                .param-table td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+                .param-table td:first-child { font-family: "SFMono-Regular", Consolas, monospace; font-weight: 600; color: #c7254e; }
+                .param-required { color: #dc3545; font-size: 11px; font-weight: 700; }
+                .param-optional { color: #999; font-size: 11px; }
+                .code-block { background: #282c34; color: #abb2bf; padding: 16px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12.5px; line-height: 1.6; overflow-x: auto; margin: 12px 0; white-space: pre; }
+                .code-block .kw { color: #c678dd; }
+                .code-block .str { color: #98c379; }
+                .code-block .cmt { color: #5c6370; font-style: italic; }
+                .code-block .url { color: #61afef; }
+                .code-block .flag { color: #e5c07b; }
+                .code-block .num { color: #d19a66; }
+                .response-block { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; margin: 12px 0; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12.5px; line-height: 1.6; overflow-x: auto; white-space: pre; color: #333; }
+                .permission-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+                .perm-read { background: #e3f2fd; color: #1565c0; }
+                .perm-create { background: #e8f5e9; color: #2e7d32; }
+                .perm-admin { background: #fce4ec; color: #c62828; }
+                .perm-configure { background: #fff3e0; color: #e65100; }
+                .perm-none { background: #f5f5f5; color: #999; }
+                .info-box { background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 13px; color: #1565c0; }
+                .warn-box { background: #fff8e1; border-left: 4px solid #ffc107; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 13px; color: #f57f17; }
+                .toggle-arrow { transition: transform .2s; display: inline-block; font-size: 12px; color: #999; }
+                .api-section.expanded .toggle-arrow { transform: rotate(90deg); }
+                .try-it-btn { background: #49cc90; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background .2s; }
+                .try-it-btn:hover { background: #3daa7a; }
+                .try-it-panel { display: none; margin-top: 16px; padding: 16px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; }
+                .try-it-panel.open { display: block; }
+                .try-it-panel label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 10px; }
+                .try-it-panel label:first-child { margin-top: 0; }
+                .try-it-panel input, .try-it-panel select { width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+                .try-it-panel textarea { width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; font-family: monospace; box-sizing: border-box; min-height: 80px; }
+                .try-it-result { margin-top: 12px; max-height: 300px; overflow: auto; }
+                .try-it-result pre { background: #282c34; color: #abb2bf; padding: 12px; border-radius: 4px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+            </style>
+
+            <div class="api-doc-container">
+                <h1>${%page.heading}</h1>
+                <p class="subtitle">${%page.subtitle}</p>
+
+                <div style="display: flex; gap: 12px; margin-bottom: 20px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px;">Jenkins Username</label>
+                        <input type="text" id="jenkins-username" placeholder="admin" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;" />
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px;">Jenkins Password/API Token</label>
+                        <input type="password" id="jenkins-password" placeholder="admin or api-token" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;" />
+                    </div>
+                </div>
+
+                <div class="info-box">${%info.crumb}</div>
+                <div class="warn-box">${%info.permission}</div>
+
+                <!-- exportJob -->
+                <div class="api-section" id="section-exportJob">
+                    <div class="api-section-header" onclick="toggleSection('exportJob')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportJob</span>
+                        <span class="endpoint-desc">${%exportJob.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%exportJob.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-read">Item.READ</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>job</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%exportJob.param.job}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Export job config (returns JSON)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job"</span>
+
+<span class="cmt"># Export and download XML file directly</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportJob?job=my-folder/my-job&amp;download=true"</span> \
+  -o <span class="str">"job-config.xml"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "job": "my-folder/my-job",
+  "fullName": "my-folder/my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "configXml": "&lt;project&gt;...&lt;/project&gt;"
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('exportJob')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-exportJob">
+                            <label>job</label>
+                            <input type="text" id="tryit-exportJob-job" placeholder="my-folder/my-job" />
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('exportJob')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-exportJob-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- exportFolder -->
+                <div class="api-section" id="section-exportFolder">
+                    <div class="api-section-header" onclick="toggleSection('exportFolder')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportFolder</span>
+                        <span class="endpoint-desc">${%exportFolder.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%exportFolder.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-read">Item.READ</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>folder</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%exportFolder.param.folder}</td></tr>
+                            <tr><td>includeCurrentConfig</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%exportFolder.param.includeCurrentConfig}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Export folder (returns JSON with Base64 ZIP)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true"</span>
+
+<span class="cmt"># Export folder and download ZIP directly (recommended)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportFolder?folder=my-folder&amp;includeCurrentConfig=true&amp;download=true"</span> \
+  -o <span class="str">"folder-export.zip"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "message": "Export complete: 6 succeeded, 0 skipped, 0 failed",
+  "sourceFolder": "my-folder",
+  "includeCurrentConfig": true,
+  "total": 6,
+  "successCount": 6,
+  "skipCount": 0,
+  "failCount": 0,
+  "zipData": "UEsDBAoAAAAA...",
+  "zipFileName": "my-folder_2026-05-17_12-00-00.zip",
+  "details": [
+    {
+      "jobPath": "my-folder",
+      "fullPath": "my-folder",
+      "status": "Exported",
+      "statusCode": "EXPORTED",
+      "message": "Exported current directory job configuration"
+    }
+  ]
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('exportFolder')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-exportFolder">
+                            <label>folder</label>
+                            <input type="text" id="tryit-exportFolder-folder" placeholder="my-folder" />
+                            <label>includeCurrentConfig</label>
+                            <select id="tryit-exportFolder-includeCurrentConfig">
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                            </select>
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('exportFolder')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-exportFolder-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- exportAll -->
+                <div class="api-section" id="section-exportAll">
+                    <div class="api-section-header" onclick="toggleSection('exportAll')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/exportAll</span>
+                        <span class="endpoint-desc">${%exportAll.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%exportAll.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-admin">Jenkins.ADMINISTER</span></p>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Export all jobs (returns JSON with Base64 ZIP)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportAll"</span>
+
+<span class="cmt"># Export all jobs and download ZIP directly</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/exportAll?download=true"</span> \
+  -o <span class="str">"all-jobs.zip"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "message": "Export complete: 10 succeeded, 0 skipped, 0 failed",
+  "sourceFolder": "root",
+  "includeCurrentConfig": false,
+  "total": 10,
+  "successCount": 10,
+  "skipCount": 0,
+  "failCount": 0,
+  "zipData": "UEsDBAoAAAAA...",
+  "zipFileName": "jenkins-all-jobs_2026-05-17_12-00-00.zip",
+  "details": [...]
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('exportAll')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-exportAll">
+                            <button class="try-it-btn" onclick="tryApi('exportAll')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-exportAll-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- import -->
+                <div class="api-section" id="section-import">
+                    <div class="api-section-header" onclick="toggleSection('import')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/import</span>
+                        <span class="endpoint-desc">${%import.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%import.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-create">Item.CREATE</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>zipFile</td><td>file</td><td><span class="param-required">${%label.required}</span></td><td>${%import.param.zipFile}</td></tr>
+                            <tr><td>overwrite</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.overwrite}</td></tr>
+                            <tr><td>rename</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.rename}</td></tr>
+                            <tr><td>dryRun</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.dryRun}</td></tr>
+                            <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Import jobs (basic)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
+  <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
+  <span class="flag">-F</span> <span class="str">"rename=true"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/import"</span>
+
+<span class="cmt"># Import with all options</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
+  <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
+  <span class="flag">-F</span> <span class="str">"rename=true"</span> \
+  <span class="flag">-F</span> <span class="str">"dryRun=false"</span> \
+  <span class="flag">-F</span> <span class="str">"targetFolder=my-folder"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/import"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "batchId": "abc12345",
+  "async": true,
+  "message": "Import task submitted",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "dryRun": false,
+  "progressUrl": "${rootURL}/jobImportExport/api/progress?batchId=abc12345"
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('import')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-import">
+                            <label>zipFile</label>
+                            <input type="file" id="tryit-import-zipFile" accept=".zip" />
+                            <label>overwrite</label>
+                            <select id="tryit-import-overwrite">
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                            </select>
+                            <label>rename</label>
+                            <select id="tryit-import-rename">
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                            </select>
+                            <label>dryRun</label>
+                            <select id="tryit-import-dryRun">
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                            </select>
+                            <label>targetFolder</label>
+                            <input type="text" id="tryit-import-targetFolder" placeholder="${%import.param.targetFolder}" />
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('import')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-import-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- preview -->
+                <div class="api-section" id="section-preview">
+                    <div class="api-section-header" onclick="toggleSection('preview')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/preview</span>
+                        <span class="endpoint-desc">${%preview.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%preview.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-create">Item.CREATE</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>zipFile</td><td>file</td><td><span class="param-required">${%label.required}</span></td><td>${%import.param.zipFile}</td></tr>
+                            <tr><td>overwrite</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.overwrite}</td></tr>
+                            <tr><td>rename</td><td>boolean</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.rename}</td></tr>
+                            <tr><td>targetFolder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%import.param.targetFolder}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Preview import (dry-run mode)</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-F</span> <span class="str">"zipFile=@jobs.zip"</span> \
+  <span class="flag">-F</span> <span class="str">"overwrite=false"</span> \
+  <span class="flag">-F</span> <span class="str">"rename=true"</span> \
+  <span class="flag">-F</span> <span class="str">"targetFolder=my-folder"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/preview"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "dryRun": true,
+  "message": "Preview complete",
+  "targetFolder": "my-folder",
+  "overwrite": false,
+  "rename": true,
+  "total": 5,
+  "successCount": 3,
+  "failCount": 0,
+  "skipCount": 2,
+  "details": [...]
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('preview')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-preview">
+                            <label>zipFile</label>
+                            <input type="file" id="tryit-preview-zipFile" accept=".zip" />
+                            <label>overwrite</label>
+                            <select id="tryit-preview-overwrite">
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                            </select>
+                            <label>rename</label>
+                            <select id="tryit-preview-rename">
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                            </select>
+                            <label>targetFolder</label>
+                            <input type="text" id="tryit-preview-targetFolder" placeholder="${%import.param.targetFolder}" />
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('preview')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-preview-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- updateJob -->
+                <div class="api-section" id="section-updateJob">
+                    <div class="api-section-header" onclick="toggleSection('updateJob')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/updateJob</span>
+                        <span class="endpoint-desc">${%updateJob.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%updateJob.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-configure">Item.CONFIGURE</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>job</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%updateJob.param.job}</td></tr>
+                            <tr><td>xmlFile</td><td>file</td><td><span class="param-optional">${%label.optional}</span></td><td>${%updateJob.param.xmlFile}</td></tr>
+                            <tr><td>configXml</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%updateJob.param.configXml}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="cmt"># Get Jenkins crumb (works on Linux/macOS)</span>
+<span class="kw">CRUMB</span>=$(<span class="kw">curl</span> -s -u user:apiToken \
+  <span class="url">"${rootURL}/crumbIssuer/api/json"</span> | python3 -c <span class="str">"import sys,json; print(json.load(sys.stdin)['crumb'])"</span>)
+
+<span class="cmt"># Update job by uploading XML file</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-F</span> <span class="str">"job=my-folder/my-job"</span> \
+  <span class="flag">-F</span> <span class="str">"xmlFile=@config.xml"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span>
+
+<span class="cmt"># Update job by passing XML content directly</span>
+<span class="kw">curl</span> -X POST -u user:apiToken \
+  -H <span class="str">"Jenkins-Crumb:${CRUMB}"</span> \
+  <span class="flag">-d</span> <span class="str">"job=my-folder/my-job&amp;configXml=&lt;project&gt;...&lt;/project&gt;"</span> \
+  <span class="url">"${rootURL}/jobImportExport/api/updateJob"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "message": "Update successful",
+  "job": "my-job",
+  "jobType": "job",
+  "jobUrl": "http://jenkins/job/my-job/",
+  "redirect": "http://jenkins/job/my-job/"
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('updateJob')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-updateJob">
+                            <label>job</label>
+                            <input type="text" id="tryit-updateJob-job" placeholder="my-folder/my-job" />
+                            <label>xmlFile</label>
+                            <input type="file" id="tryit-updateJob-xmlFile" accept=".xml" />
+                            <label>configXml</label>
+                            <textarea id="tryit-updateJob-configXml" placeholder="&lt;project&gt;...&lt;/project&gt;"></textarea>
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('updateJob')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-updateJob-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- progress -->
+                <div class="api-section" id="section-progress">
+                    <div class="api-section-header" onclick="toggleSection('progress')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/progress</span>
+                        <span class="endpoint-desc">${%progress.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%progress.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-none">${%label.noAuth}</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>batchId</td><td>string</td><td><span class="param-required">${%label.required}</span></td><td>${%progress.param.batchId}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="kw">curl</span> -u user:apiToken \
+  <span class="url">"${rootURL}/jobImportExport/api/progress?batchId=abc12345"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "batchId": "abc12345",
+  "currentJob": "my-folder/my-job",
+  "currentJobIndex": 3,
+  "totalJobs": 10,
+  "overallProgress": 30,
+  "status": "RUNNING",
+  "message": "Importing my-folder/my-job"
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('progress')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-progress">
+                            <label>batchId</label>
+                            <input type="text" id="tryit-progress-batchId" placeholder="abc12345" />
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('progress')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-progress-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- list -->
+                <div class="api-section" id="section-list">
+                    <div class="api-section-header" onclick="toggleSection('list')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-path">${rootURL}/jobImportExport/api/list</span>
+                        <span class="endpoint-desc">${%list.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%list.detail}</p>
+                        <p><strong>${%label.permission}：</strong><span class="permission-badge perm-read">Item.READ</span></p>
+                        <h4>${%label.params}</h4>
+                        <table class="param-table">
+                            <tr><th>${%col.param}</th><th>${%col.type}</th><th>${%col.required}</th><th>${%col.desc}</th></tr>
+                            <tr><td>folder</td><td>string</td><td><span class="param-optional">${%label.optional}</span></td><td>${%list.param.folder}</td></tr>
+                        </table>
+                        <h4>${%label.curlExample}</h4>
+                        <div class="code-block"><span class="kw">curl</span> -u user:apiToken \
+  <span class="url">"${rootURL}/jobImportExport/api/list?folder=my-folder"</span></div>
+                        <h4>${%label.response}</h4>
+                        <div class="response-block">{
+  "success": true,
+  "folder": "my-folder",
+  "totalCount": 5,
+  "items": [
+    {
+      "name": "my-job",
+      "fullName": "my-folder/my-job",
+      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "type": "job",
+      "className": "FreeStyleProject"
+    }
+  ]
+}</div>
+                        <button class="try-it-btn" onclick="toggleTryIt('list')">${%label.tryIt}</button>
+                        <div class="try-it-panel" id="tryit-list">
+                            <label>folder</label>
+                            <input type="text" id="tryit-list-folder" placeholder="my-folder" />
+                            <button class="try-it-btn" style="margin-top:12px" onclick="tryApi('list')">${%label.send}</button>
+                            <div class="try-it-result" id="tryit-list-result"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Response -->
+                <div class="api-section" id="section-error">
+                    <div class="api-section-header" onclick="toggleSection('error')">
+                        <span class="toggle-arrow">▶</span>
+                        <span class="endpoint-path" style="color:#dc3545">${%error.desc}</span>
+                    </div>
+                    <div class="api-section-body">
+                        <p>${%error.detail}</p>
+                        <div class="response-block">{
+  "success": false,
+  "message": "Error description",
+  "errorCode": 403
+}</div>
+                        <table class="param-table">
+                            <tr><th>${%col.code}</th><th>${%col.meaning}</th></tr>
+                            <tr><td>400</td><td>${%error.400}</td></tr>
+                            <tr><td>403</td><td>${%error.403}</td></tr>
+                            <tr><td>404</td><td>${%error.404}</td></tr>
+                            <tr><td>500</td><td>${%error.500}</td></tr>
+                            <tr><td>503</td><td>${%error.503}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var jenkinsRootUrl = '${rootURL}';
+                var apiBaseUrl = jenkinsRootUrl + '/jobImportExport/api';
+
+                function getAuthHeader() {
+                    var username = document.getElementById('jenkins-username').value;
+                    var password = document.getElementById('jenkins-password').value;
+                    if (username &amp;&amp; password) {
+                        var credentials = username + ':' + password;
+                        var auth = btoa(unescape(encodeURIComponent(credentials)));
+                        return 'Basic ' + auth;
+                    }
+                    return null;
+                }
+
+                function fetchWithAuth(url, options) {
+                    options = options || {};
+                    options.headers = options.headers || {};
+                    var authHeader = getAuthHeader();
+                    if (authHeader) {
+                        options.headers['Authorization'] = authHeader;
+                    }
+                    return fetch(url, options);
+                }
+
+                function toggleSection(name) {
+                    var section = document.getElementById('section-' + name);
+                    if (section) section.classList.toggle('expanded');
+                }
+
+                function toggleTryIt(name) {
+                    var panel = document.getElementById('tryit-' + name);
+                    if (panel) panel.classList.toggle('open');
+                }
+
+                function tryApi(name) {
+                    var endpoint = apiBaseUrl + '/' + name;
+                    var resultEl = document.getElementById('tryit-' + name + '-result');
+                    var isGet = (name === 'progress' || name === 'list');
+
+                    if (isGet) {
+                        var params = [];
+                        var inputs = document.querySelectorAll('#tryit-' + name + ' input[type="text"]');
+                        inputs.forEach(function(input) {
+                            if (input.value) {
+                                var paramName = input.id.replace('tryit-' + name + '-', '');
+                                params.push(paramName + '=' + encodeURIComponent(input.value));
+                            }
+                        });
+                        var url = endpoint + (params.length > 0 ? '?' + params.join('&amp;') : '');
+
+                        fetchWithAuth(url, { method: 'GET' })
+                            .then(function(r) { return r.text(); })
+                            .then(function(text) {
+                                try {
+                                    var json = JSON.parse(text);
+                                    resultEl.innerHTML = '<pre>' + JSON.stringify(json, null, 2) + '</pre>';
+                                } catch(e) {
+                                    resultEl.innerHTML = '<pre>' + text + '</pre>';
+                                }
+                            })
+                            .catch(function(e) {
+                                resultEl.innerHTML = '<pre style="color:#e06c75">Error: ' + e.message + '</pre>';
+                            });
+                    } else {
+                        var fd = new FormData();
+                        var fileInput = document.querySelector('#tryit-' + name + ' input[type="file"]');
+                        if (fileInput &amp;&amp; fileInput.files.length > 0) {
+                            fd.append(fileInput.id.replace('tryit-' + name + '-', ''), fileInput.files[0]);
+                        }
+                        var textInputs = document.querySelectorAll('#tryit-' + name + ' input[type="text"]');
+                        textInputs.forEach(function(input) {
+                            if (input.value) {
+                                var paramName = input.id.replace('tryit-' + name + '-', '');
+                                fd.append(paramName, input.value);
+                            }
+                        });
+                        var selects = document.querySelectorAll('#tryit-' + name + ' select');
+                        selects.forEach(function(sel) {
+                            var paramName = sel.id.replace('tryit-' + name + '-', '');
+                            fd.append(paramName, sel.value);
+                        });
+                        var textareas = document.querySelectorAll('#tryit-' + name + ' textarea');
+                        textareas.forEach(function(ta) {
+                            if (ta.value) {
+                                var paramName = ta.id.replace('tryit-' + name + '-', '');
+                                fd.append(paramName, ta.value);
+                            }
+                        });
+
+                        // 自动获取 crumb 并调用 API
+                        var username = document.getElementById('jenkins-username').value || 'admin';
+                        var password = document.getElementById('jenkins-password').value || 'admin';
+                        var authHeader = 'Basic ' + btoa(unescape(encodeURIComponent(username + ':' + password)));
+
+                        // 先获取 crumb（带认证）
+                        fetch(jenkinsRootUrl + '/crumbIssuer/api/json', {
+                            headers: { 'Authorization': authHeader }
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(crumbData) {
+                            var headers = { 'Authorization': authHeader };
+                            if (crumbData &amp;&amp; crumbData.crumbRequestField &amp;&amp; crumbData.crumb) {
+                                headers[crumbData.crumbRequestField] = crumbData.crumb;
+                            }
+                            // 调用实际 API
+                            return fetch(endpoint, { method: 'POST', body: fd, headers: headers });
+                        })
+                        .then(function(r) { return r.text(); })
+                        .then(function(text) {
+                            try {
+                                var json = JSON.parse(text);
+                                resultEl.innerHTML = '<pre>' + JSON.stringify(json, null, 2) + '</pre>';
+                            } catch(e) {
+                                resultEl.innerHTML = '<pre>' + text + '</pre>';
+                            }
+                        })
+                        .catch(function(e) {
+                            resultEl.innerHTML = '<pre style="color:#e06c75">Error: ' + e.message + '</pre>';
+                        });
+                    }
+                }
+            </script>
+        </l:main-panel>
+    </l:layout>
+</j:jelly>

@@ -24,7 +24,7 @@ public class ImportEngine {
         return executionEngine.execute(root, ctx);
     }
 
-    public List<ImportResult> importZipWithProgress(ZipInputStream zipInputStream, ImportContext ctx, ExecutionEngine.ProgressCallback callback) throws IOException {
+    public List<ImportResult> importZipWithProgress(ZipInputStream zipInputStream, ImportContext ctx, ResultCollector.ProgressCallback callback) throws IOException {
         TreeNode root = treeBuilder.buildTree(zipInputStream);
         executionEngine.setProgressCallback(callback);
         try {
@@ -34,7 +34,7 @@ public class ImportEngine {
         }
     }
 
-    public List<ImportResult> importZipWithProgress(List<String> zipPaths, ImportContext ctx, ExecutionEngine.ProgressCallback callback) {
+    public List<ImportResult> importZipWithProgress(List<String> zipPaths, ImportContext ctx, ResultCollector.ProgressCallback callback) {
         TreeNode root = treeBuilder.buildTree(zipPaths);
         executionEngine.setProgressCallback(callback);
         try {
