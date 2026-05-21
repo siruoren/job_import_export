@@ -309,11 +309,13 @@ private InputStream cleanXml(InputStream is) throws IOException {
 job_import_export/
 ├── pom.xml                                    # Maven 构建配置
 ├── README.md                                  # 本文档
+├── CHANGELOG.md                               # 版本变更记录
 └── src/
     └── main/
         ├── java/com/siruoren/jobimportexport/
         │   ├── JobImportExportAction.java     # 任务导入导出 Action（页面级）
-        │   └── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   ├── JobImportExportSidebarLink.java # 侧边栏全局入口
+        │   └── JobImportExportThreadPool.java # 共享线程池管理器
         └── resources/
             └── com/siruoren/jobimportexport/
                 ├── JobImportExportAction/
@@ -344,6 +346,22 @@ Jenkins 根级别的 `RootAction`，在左侧边栏提供全局入口：
 - `doImport()` — 全局导入任务，支持指定路径；成功后使用 `Jenkins.get().getRootUrl() + newItem.getUrl()` 生成安全的重定向 URL
 - `canCreateJob()` — 控制「导入任务配置」区域的显示（按 `Item.CREATE` 权限）
 - `writeJson()` — 统一 JSON 响应封装
+
+### `JobImportExportThreadPool`
+
+共享线程池管理器，用于统一管理导入/导出/更新操作的并发执行：
+- **核心线程数**：4（常驻线程，避免频繁创建销毁）
+- **最大线程数**：8（高峰期可扩容，防止无限制创建线程）
+- **队列容量**：64（有界队列，防止内存溢出）
+- **空闲回收**：60秒（超出核心数的线程空闲后自动回收）
+- **拒绝策略**：`CallerRunsPolicy`（队列满时由调用线程执行，不丢弃任务）
+- **守护线程**：true（JVM 退出时线程自动终止，不阻塞关闭）
+
+**核心优势**：
+- 避免线程无限增长导致的内存泄漏
+- 防止多个用户同时操作时的线程阻塞
+- 统一管理并发任务，提高系统稳定性
+- 两个 Action 类共享同一个线程池实例，多页面同时操作时并发受线程池管控
 
 ---
 

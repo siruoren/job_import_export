@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.jvnet.hudson.reactor.ReactorException;
+import java.util.concurrent.ExecutorService;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -52,187 +53,192 @@ public class JobImportExportSidebarLink implements RootAction {
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
-        try {
-            String jobName = req.getParameter("job");
-        if (jobName == null || jobName.isEmpty()) {
-            writeJson(rsp, false, "任务名称不能为空", null);
-            return;
-        }
+        ExecutorService executor = JobImportExportThreadPool.getExecutor();
+        executor.submit(() -> {
+            try {
+                String jobName = req.getParameter("job");
+                if (jobName == null || jobName.isEmpty()) {
+                    writeJson(rsp, false, "任务名称不能为空", null);
+                    return;
+                }
 
-        Jenkins jenkins = Jenkins.get();
-        AbstractItem item = jenkins.getItemByFullName(jobName, AbstractItem.class);
-        if (item == null) {
-            writeJson(rsp, false, "未找到任务: " + jobName, null);
-            return;
-        }
+                Jenkins jenkins = Jenkins.get();
+                AbstractItem item = jenkins.getItemByFullName(jobName, AbstractItem.class);
+                if (item == null) {
+                    writeJson(rsp, false, "未找到任务: " + jobName, null);
+                    return;
+                }
 
-        if (item instanceof AccessControlled) {
-            if (!((AccessControlled) item).hasPermission(Item.READ)) {
-                writeJson(rsp, false, "无权限：当前用户没有查看此任务配置的权限", null);
-                return;
-            }
-        }
+                if (item instanceof AccessControlled) {
+                    if (!((AccessControlled) item).hasPermission(Item.READ)) {
+                        writeJson(rsp, false, "无权限：当前用户没有查看此任务配置的权限", null);
+                        return;
+                    }
+                }
 
-        Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
-        if (!Files.exists(configFile)) {
-            writeJson(rsp, false, "配置文件不存在", null);
-            return;
-        }
+                Path configFile = Paths.get(item.getRootDir().getAbsolutePath(), "config.xml");
+                if (!Files.exists(configFile)) {
+                    writeJson(rsp, false, "配置文件不存在", null);
+                    return;
+                }
 
-        String fileName = item.getFullName()
-                .replaceAll("[\\\\/:*?\"<>|]", "_")
-                + ".xml";
+                String fileName = item.getFullName()
+                        .replaceAll("[\\\\/:*?\"<>|]", "_")
+                        + ".xml";
 
-        String encodedFileName = java.net.URLEncoder.encode(
-                fileName,
-                "UTF-8")
-                .replace("+", "%20");
+                String encodedFileName = java.net.URLEncoder.encode(
+                        fileName,
+                        "UTF-8")
+                        .replace("+", "%20");
 
-        rsp.setContentType("application/xml;charset=UTF-8");
-        rsp.setHeader("Content-Disposition", "attachment; "
-                + "filename=\""
-                + encodedFileName
-                + "\"; "
-                + "filename*=UTF-8''"
-                + encodedFileName);
+                rsp.setContentType("application/xml;charset=UTF-8");
+                rsp.setHeader("Content-Disposition", "attachment; "
+                        + "filename=\""
+                        + encodedFileName
+                        + "\"; "
+                        + "filename*=UTF-8''"
+                        + encodedFileName);
 
-            try (OutputStream out = rsp.getOutputStream()) {
-                Files.copy(configFile, out);
-            }
-        } catch (Exception e) {
-            if (!rsp.isCommitted()) {
-                try {
-                    rsp.reset();
-                    rsp.setCharacterEncoding("UTF-8");
-                    rsp.setContentType("application/json;charset=UTF-8");
-                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                    rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
-                    );
-                } catch (Exception ignored) {
+                try (OutputStream out = rsp.getOutputStream()) {
+                    Files.copy(configFile, out);
+                }
+            } catch (Exception e) {
+                if (!rsp.isCommitted()) {
+                    try {
+                        rsp.reset();
+                        rsp.setCharacterEncoding("UTF-8");
+                        rsp.setContentType("application/json;charset=UTF-8");
+                        String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                        rsp.getWriter().write(
+                            "{\"success\":false,\"message\":\"" + escapeJson("导出失败：" + msg) + "\",\"redirect\":null}"
+                        );
+                    } catch (Exception ignored) {
+                    }
                 }
             }
-        }
+        });
     }
 
     @RequirePOST
     public void doImport(StaplerRequest req, StaplerResponse rsp) {
-        try {
-            req.setCharacterEncoding("UTF-8");
-        rsp.setCharacterEncoding("UTF-8");
-
-        FileItem fileItem = req.getFileItem("xmlFile");
-        if (fileItem == null || fileItem.getSize() == 0) {
-            writeJson(rsp, false, "请选择要上传的XML文件", null);
-            return;
-        }
-
-        String jobName = req.getParameter("jobName");
-        
-        if (jobName != null) {
+        ExecutorService executor = JobImportExportThreadPool.getExecutor();
+        executor.submit(() -> {
             try {
-                byte[] bytes = jobName.getBytes("ISO-8859-1");
-                jobName = new String(bytes, "UTF-8");
-            } catch (Exception e) {
-            }
-        }
-        
-        jobName = sanitizeJobName(jobName);
+                req.setCharacterEncoding("UTF-8");
+                rsp.setCharacterEncoding("UTF-8");
 
-        if (jobName == null) {
-            writeJson(rsp, false, "任务名称不能为空", null);
-            return;
-        }
+                FileItem fileItem = req.getFileItem("xmlFile");
+                if (fileItem == null || fileItem.getSize() == 0) {
+                    writeJson(rsp, false, "请选择要上传的XML文件", null);
+                    return;
+                }
 
-        try {
-            validateJobName(jobName);
-        } catch (Exception e) {
+                String jobName = req.getParameter("jobName");
 
-            String msg = e.getMessage();
+                if (jobName != null) {
+                    try {
+                        byte[] bytes = jobName.getBytes("ISO-8859-1");
+                        jobName = new String(bytes, "UTF-8");
+                    } catch (Exception e) {
+                    }
+                }
 
-            if (msg == null || msg.trim().isEmpty()) {
-                msg = e.getClass().getSimpleName();
-            }
+                jobName = sanitizeJobName(jobName);
 
-            msg = msg.replaceAll("[\\r\\n]", " ");
+                if (jobName == null) {
+                    writeJson(rsp, false, "任务名称不能为空", null);
+                    return;
+                }
 
-            writeJson(
-                    rsp,
-                    false,
-                    "导入失败：" + msg,
-                    null
-            );
-
-            return;
-        }
-
-        Jenkins jenkins = Jenkins.get();
-
-        String parentFolder = null;
-        String actualJobName = jobName;
-
-        if (jobName.contains("/")) {
-            int idx = jobName.lastIndexOf('/');
-            parentFolder = jobName.substring(0, idx);
-            actualJobName = jobName.substring(idx + 1);
-        }
-
-        Item existingItem = jenkins.getItemByFullName(jobName);
-        if (existingItem != null) {
-            String fullPath = Jenkins.get().getRootUrl() + existingItem.getUrl() + "jobImportExport";
-            writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
-            return;
-        }
-
-        AbstractItem parent = null;
-        if (parentFolder != null) {
-            parent = jenkins.getItemByFullName(parentFolder, AbstractItem.class);
-            if (parent == null) {
-                writeJson(rsp, false, "父文件夹不存在：" + parentFolder, null);
-                return;
-            }
-        }
-
-        ItemGroup<?> target = (parent != null && parent instanceof ItemGroup) ? (ItemGroup<?>) parent : jenkins;
-        if (!(target instanceof ModifiableTopLevelItemGroup)) {
-            writeJson(rsp, false, "当前目录不支持创建任务", null);
-            return;
-        }
-
-        ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
-        if (itemGroup instanceof AccessControlled) {
-            if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
-                writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
-                return;
-            }
-        }
-
-        TopLevelItem newItem;
-        try (InputStream is = fileItem.getInputStream()) {
-            newItem = itemGroup.createProjectFromXML(actualJobName, cleanXml(is));
-        }
-
-        newItem.save();
-
-        Jenkins.get().reload();
-
-        String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
-
-            writeJson(rsp, true, "任务创建成功", redirectUrl);
-        } catch (Exception e) {
-            if (!rsp.isCommitted()) {
                 try {
-                    rsp.reset();
-                    rsp.setCharacterEncoding("UTF-8");
-                    rsp.setContentType("application/json;charset=UTF-8");
-                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                    rsp.getWriter().write(
-                        "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                    validateJobName(jobName);
+                } catch (Exception e) {
+                    String msg = e.getMessage();
+
+                    if (msg == null || msg.trim().isEmpty()) {
+                        msg = e.getClass().getSimpleName();
+                    }
+
+                    msg = msg.replaceAll("[\\r\\n]", " ");
+
+                    writeJson(
+                            rsp,
+                            false,
+                            "导入失败：" + msg,
+                            null
                     );
-                } catch (Exception ignored) {
+
+                    return;
+                }
+
+                Jenkins jenkins = Jenkins.get();
+
+                String parentFolder = null;
+                String actualJobName = jobName;
+
+                if (jobName.contains("/")) {
+                    int idx = jobName.lastIndexOf('/');
+                    parentFolder = jobName.substring(0, idx);
+                    actualJobName = jobName.substring(idx + 1);
+                }
+
+                Item existingItem = jenkins.getItemByFullName(jobName);
+                if (existingItem != null) {
+                    String fullPath = Jenkins.get().getRootUrl() + existingItem.getUrl() + "jobImportExport";
+                    writeJson(rsp, false, "任务名称已存在：" + jobName + "\n\n可选操作：\n- 重新命名 — 使用新的任务名称重新导入\n- 进入任务更新配置 — 跳转到已有任务的导入/导出页面，通过「更新配置」功能覆盖其配置", fullPath);
+                    return;
+                }
+
+                AbstractItem parent = null;
+                if (parentFolder != null) {
+                    parent = jenkins.getItemByFullName(parentFolder, AbstractItem.class);
+                    if (parent == null) {
+                        writeJson(rsp, false, "父文件夹不存在：" + parentFolder, null);
+                        return;
+                    }
+                }
+
+                ItemGroup<?> target = (parent != null && parent instanceof ItemGroup) ? (ItemGroup<?>) parent : jenkins;
+                if (!(target instanceof ModifiableTopLevelItemGroup)) {
+                    writeJson(rsp, false, "当前目录不支持创建任务", null);
+                    return;
+                }
+
+                ModifiableTopLevelItemGroup itemGroup = (ModifiableTopLevelItemGroup) target;
+                if (itemGroup instanceof AccessControlled) {
+                    if (!((AccessControlled) itemGroup).hasPermission(Item.CREATE)) {
+                        writeJson(rsp, false, "无权限：当前用户没有在该目录创建任务的权限", null);
+                        return;
+                    }
+                }
+
+                TopLevelItem newItem;
+                try (InputStream is = fileItem.getInputStream()) {
+                    newItem = itemGroup.createProjectFromXML(actualJobName, cleanXml(is));
+                }
+
+                newItem.save();
+
+                Jenkins.get().reload();
+
+                String redirectUrl = Jenkins.get().getRootUrl() + newItem.getUrl();
+
+                writeJson(rsp, true, "任务创建成功", redirectUrl);
+            } catch (Exception e) {
+                if (!rsp.isCommitted()) {
+                    try {
+                        rsp.reset();
+                        rsp.setCharacterEncoding("UTF-8");
+                        rsp.setContentType("application/json;charset=UTF-8");
+                        String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                        rsp.getWriter().write(
+                            "{\"success\":false,\"message\":\"" + escapeJson("导入失败：" + msg) + "\",\"redirect\":null}"
+                        );
+                    } catch (Exception ignored) {
+                    }
                 }
             }
-        }
+        });
     }
 
     private void writeJson(
