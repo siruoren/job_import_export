@@ -1120,3 +1120,14 @@ MIT License
 
 - 项目：com.siruoren:job-import-export
 - 版本：2.0.2
+
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=siruoren%2Fjob_import_export&type=date&logscale=&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=siruoren/job_import_export&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=siruoren/job_import_export&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=siruoren/job_import_export&type=date&legend=top-left" />
+ </picture>
+</a>
