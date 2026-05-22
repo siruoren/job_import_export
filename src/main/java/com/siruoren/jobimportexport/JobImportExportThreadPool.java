@@ -1,11 +1,15 @@
 package com.siruoren.jobimportexport;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * 共享线程池管理器，用于统一管理导入/导出/更新操作的并发执行。
@@ -38,6 +42,22 @@ public final class JobImportExportThreadPool {
 
     public static ExecutorService getExecutor() {
         return EXECUTOR;
+    }
+
+    /**
+     * 提交任务并自动传播当前线程的安全上下文到工作线程，
+     * 确保 Jenkins 权限检查（如 Item.READ、Item.CONFIGURE）在工作线程中正常工作。
+     */
+    public static Future<?> submitWithAuth(Runnable task) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return EXECUTOR.submit(() -> {
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            try {
+                task.run();
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
     }
 
     private static class JobImportExportThreadFactory implements ThreadFactory {

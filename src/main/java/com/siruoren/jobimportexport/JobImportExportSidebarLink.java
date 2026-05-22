@@ -25,6 +25,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.jvnet.hudson.reactor.ReactorException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Extension
 public class JobImportExportSidebarLink implements RootAction {
@@ -53,8 +56,7 @@ public class JobImportExportSidebarLink implements RootAction {
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
-        ExecutorService executor = JobImportExportThreadPool.getExecutor();
-        executor.submit(() -> {
+        Future<?> future = JobImportExportThreadPool.submitWithAuth(() -> {
             try {
                 String jobName = req.getParameter("job");
                 if (jobName == null || jobName.isEmpty()) {
@@ -117,12 +119,29 @@ public class JobImportExportSidebarLink implements RootAction {
                 }
             }
         });
+        try {
+            future.get(30, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导出超时，请稍后重试", null);
+                }
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导出失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @RequirePOST
     public void doImport(StaplerRequest req, StaplerResponse rsp) {
-        ExecutorService executor = JobImportExportThreadPool.getExecutor();
-        executor.submit(() -> {
+        Future<?> future = JobImportExportThreadPool.submitWithAuth(() -> {
             try {
                 req.setCharacterEncoding("UTF-8");
                 rsp.setCharacterEncoding("UTF-8");
@@ -239,6 +258,24 @@ public class JobImportExportSidebarLink implements RootAction {
                 }
             }
         });
+        try {
+            future.get(60, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导入超时，请稍后重试", null);
+                }
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导入失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void writeJson(

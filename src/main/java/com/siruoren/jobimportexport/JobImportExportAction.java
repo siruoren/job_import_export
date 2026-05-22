@@ -34,6 +34,9 @@ import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class JobImportExportAction implements Action {
 
@@ -142,8 +145,7 @@ public class JobImportExportAction implements Action {
     }
 
     public void doExport(StaplerRequest req, StaplerResponse rsp) {
-        ExecutorService executor = JobImportExportThreadPool.getExecutor();
-        executor.submit(() -> {
+        Future<?> future = JobImportExportThreadPool.submitWithAuth(() -> {
             try {
                 item.checkPermission(Item.READ);
 
@@ -188,12 +190,29 @@ public class JobImportExportAction implements Action {
                 }
             }
         });
+        try {
+            future.get(30, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导出超时，请稍后重试", null);
+                }
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导出失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @RequirePOST
     public void doUpdate(StaplerRequest req, StaplerResponse rsp) {
-        ExecutorService executor = JobImportExportThreadPool.getExecutor();
-        executor.submit(() -> {
+        Future<?> future = JobImportExportThreadPool.submitWithAuth(() -> {
             try {
                 if (item instanceof AccessControlled) {
                     if (!((AccessControlled) item).hasPermission(Item.CONFIGURE)) {
@@ -255,12 +274,29 @@ public class JobImportExportAction implements Action {
                 }
             }
         });
+        try {
+            future.get(60, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "更新超时，请稍后重试", null);
+                }
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "更新失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @RequirePOST
     public void doImport(StaplerRequest req, StaplerResponse rsp) {
-        ExecutorService executor = JobImportExportThreadPool.getExecutor();
-        executor.submit(() -> {
+        Future<?> future = JobImportExportThreadPool.submitWithAuth(() -> {
             try {
                 req.setCharacterEncoding("UTF-8");
                 rsp.setCharacterEncoding("UTF-8");
@@ -361,6 +397,24 @@ public class JobImportExportAction implements Action {
                 }
             }
         });
+        try {
+            future.get(60, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导入超时，请稍后重试", null);
+                }
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (!rsp.isCommitted()) {
+                    writeJson(rsp, false, "导入失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void writeJson(

@@ -2,17 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.2] - 2026-05-21
+## [1.0.2] - 2026-05-22
 
 ### 新增
 
 - 添加共享线程池管理类 `JobImportExportThreadPool`
 - 优化并发性能，支持多页面同时导入/导出/更新操作
+- 添加 `submitWithAuth()` 方法自动传播 Jenkins 安全上下文到工作线程
+
+### 修复
+
+- 修复线程池中权限检查失败问题（`anonymous is missing the Job/Read permission`）
+- 修复 `Future.get()` 超时处理逻辑
 
 ### 优化
 
 - `JobImportExportAction` 的 `doExport`、`doUpdate`、`doImport` 方法改为通过线程池执行
 - `JobImportExportSidebarLink` 的 `doExport`、`doImport` 方法改为通过线程池执行
+- 所有方法改用 `submitWithAuth()` 确保安全上下文正确传播
 
 ### 线程池配置
 
