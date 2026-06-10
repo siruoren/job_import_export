@@ -1,12 +1,13 @@
 #!/bin/bash
-
+cd $(dirname $0)
 set -e
 
-source ~/.zshrc
+# 从 pom.xml 提取项目本身的 artifactId 和 version（跳过 parent）
+ARTIFACT_ID=$(sed -n '/<\/parent>/,/<\/project>/p' pom.xml | grep -m1 '<artifactId>' | sed 's/.*<artifactId>\([^<]*\)<\/artifactId>.*/\1/')
+PROJECT_NAME="${ARTIFACT_ID}"
 
-PROJECT_NAME="job-import-export"
+
 MVN_OPTS="-Denforcer.skip=true -DskipTests"
-
 print_usage() {
     echo "Usage: $0 [command]"
     echo ""
@@ -35,15 +36,14 @@ build() {
 package() {
     echo "Packaging $PROJECT_NAME..."
     mvn package $MVN_OPTS ${VERBOSE:+"-X"}
-    
-    HPI_FILE=$(find target -name "${PROJECT_NAME}-*.hpi" | head -1)
+    HPI_FILE=$(find target -name "${PROJECT_NAME}*.hpi" | head -1)
     if [ -f "$HPI_FILE" ]; then
         echo ""
         echo "✅ Build successful!"
         echo "📦 Plugin file: $HPI_FILE"
         echo "📁 File size: $(du -h "$HPI_FILE" | awk '{print $1}')"
     else
-        echo "❌ Build failed - HPI file not found"
+        echo "❌ Build failed - HPI file $HPI_FILE not found"
         exit 1
     fi
 }
