@@ -109,7 +109,7 @@
   "job": "my-folder/my-job",
   "fullName": "my-folder/my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "jobUrl": "job/my-folder/job/my-job/",
   "configXml": "&lt;project&gt;...&lt;/project&gt;"
 }</div>
                         <button class="try-it-btn" onclick="toggleTryIt('exportJob')">${%label.tryIt}</button>
@@ -291,7 +291,7 @@
   "overwrite": false,
   "rename": true,
   "dryRun": false,
-  "progressUrl": "${rootURL}/jobImportExport/api/progress?batchId=abc12345"
+  "progressUrl": "jobImportExport/api/progress?batchId=abc12345"
 }</div>
                         <button class="try-it-btn" onclick="toggleTryIt('import')">${%label.tryIt}</button>
                         <div class="try-it-panel" id="tryit-import">
@@ -429,8 +429,8 @@
   "message": "Update successful",
   "job": "my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-job/",
-  "redirect": "http://jenkins/job/my-job/"
+  "jobUrl": "job/my-job/",
+  "redirect": "job/my-job/"
 }</div>
                         <button class="try-it-btn" onclick="toggleTryIt('updateJob')">${%label.tryIt}</button>
                         <div class="try-it-panel" id="tryit-updateJob">
@@ -513,7 +513,7 @@
     {
       "name": "my-job",
       "fullName": "my-folder/my-job",
-      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "url": "job/my-folder/job/my-job/",
       "type": "job",
       "className": "FreeStyleProject"
     }

@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [2.0.3] - 2026-06-10
+
+### 修复
+
+- **跳转链接多了 jenkins 路径**：修复导入/更新完成后跳转链接使用了 `Jenkins.get().getRootUrl()` 拼接绝对 URL，导致在 `java -jar jenkins.war` 方式启动的 Jenkins 上跳转路径多了 `/jenkins/` 前缀，页面 404
+  - 后端 `redirect`、`jobUrl`、`url`、`progressUrl` 字段改为返回相对路径（如 `job/my-job/`）
+  - 前端跳转时使用 `rootURL + '/' + result.redirect` 拼接，兼容所有 Jenkins 部署方式
+
+### 优化
+
+- **HPI 包体积优化**：将 `jackson-databind` 依赖的 scope 从 `compile` 改为 `provided`，使用 Jenkins 内置的 Jackson，HPI 包从 2.2M 缩减到 194K（减少约 91%）
+
 ## [2.0.2] - 2026-05-17
 
 ### 新增
