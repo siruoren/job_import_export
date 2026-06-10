@@ -536,7 +536,7 @@
                         buttons.push({
                             text: i18n.jump,
                             type: 'primary',
-                            onClick: () => location.href = result.redirect
+                            onClick: () => location.href = rootURL + '/' + result.redirect
                         });
                     }
 

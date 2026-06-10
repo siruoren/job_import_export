@@ -118,7 +118,7 @@ All APIs uniformly return JSON format. Error response:
   "job": "my-folder/my-job",
   "fullName": "my-folder/my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "jobUrl": "job/my-folder/job/my-job/",
   "configXml": "<project>...</project>"
 }
 ```
@@ -159,7 +159,7 @@ All APIs uniformly return JSON format. Error response:
   "overwrite": false,
   "rename": true,
   "dryRun": false,
-  "progressUrl": "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+  "progressUrl": "jobImportExport/api/progress?batchId=abc12345"
 }
 ```
 
@@ -196,8 +196,8 @@ All APIs uniformly return JSON format. Error response:
   "message": "Update successful",
   "job": "my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-job/",
-  "redirect": "http://jenkins/job/my-job/"
+  "jobUrl": "job/my-job/",
+  "redirect": "job/my-job/"
 }
 ```
 
@@ -231,7 +231,7 @@ All APIs uniformly return JSON format. Error response:
   "failCount": 0,
   "skipCount": 2,
   "dryRun": false,
-  "redirect": "http://jenkins/job/my-folder/",
+  "redirect": "job/my-folder/",
   "details": [...]
 }
 ```
@@ -246,14 +246,14 @@ All APIs uniformly return JSON format. Error response:
     {
       "name": "my-job",
       "fullName": "my-folder/my-job",
-      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "url": "job/my-folder/job/my-job/",
       "type": "job",
       "className": "FreeStyleProject"
     },
     {
       "name": "sub-folder",
       "fullName": "my-folder/sub-folder",
-      "url": "http://jenkins/job/my-folder/job/sub-folder/",
+      "url": "job/my-folder/job/sub-folder/",
       "type": "folder",
       "className": "WorkflowMultiBranchProject",
       "children": [...]

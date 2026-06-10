@@ -84,7 +84,7 @@ public class JobImportExportApi {
                 result.put("job", jobName);
                 result.put("fullName", item.getFullName());
                 result.put("jobType", item instanceof ItemGroup ? "folder" : "job");
-                result.put("jobUrl", Jenkins.get().getRootUrl() + item.getUrl());
+                result.put("jobUrl", item.getUrl());
                 result.put("configXml", xmlContent);
                 rsp.getWriter().write(JsonUtil.toJson(result));
             }
@@ -235,7 +235,7 @@ public class JobImportExportApi {
             Path tempZip = Files.createTempFile("jenkins-api-import-", ".zip");
             Files.copy(fileItem.getInputStream(), tempZip, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            String redirectUrl = (target instanceof Item) ? Jenkins.get().getRootUrl() + ((Item) target).getUrl() : null;
+            String redirectUrl = (target instanceof Item) ? ((Item) target).getUrl() : null;
             org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             Locale capturedLocale = req.getLocale();
 
@@ -315,7 +315,7 @@ public class JobImportExportApi {
             result.put("overwrite", overwrite);
             result.put("rename", rename);
             result.put("dryRun", dryRun);
-            result.put("progressUrl", Jenkins.get().getRootUrl() + "jobImportExport/api/progress?batchId=" + batchId);
+            result.put("progressUrl", "jobImportExport/api/progress?batchId=" + batchId);
             rsp.getWriter().write(JsonUtil.toJson(result));
 
         } catch (Exception e) {
@@ -460,8 +460,8 @@ public class JobImportExportApi {
             result.put("message", Messages.JobImportExportAction_updateSuccess());
             result.put("job", jobName);
             result.put("jobType", item instanceof ItemGroup ? "folder" : "job");
-            result.put("jobUrl", Jenkins.get().getRootUrl() + item.getUrl());
-            result.put("redirect", Jenkins.get().getRootUrl() + item.getUrl());
+            result.put("jobUrl", item.getUrl());
+            result.put("redirect", item.getUrl());
             rsp.getWriter().write(JsonUtil.toJson(result));
 
         } catch (Exception e) {
@@ -575,7 +575,7 @@ public class JobImportExportApi {
             Map<String, Object> itemMap = new LinkedHashMap<>();
             itemMap.put("name", item.getName());
             itemMap.put("fullName", item.getFullName());
-            itemMap.put("url", Jenkins.get().getRootUrl() + item.getUrl());
+            itemMap.put("url", item.getUrl());
             itemMap.put("type", item instanceof ItemGroup ? "folder" : "job");
             itemMap.put("className", item.getClass().getSimpleName());
 

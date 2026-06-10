@@ -344,7 +344,7 @@ print(f"更新结果: {resp.json()}")
   "job": "my-folder/my-job",
   "fullName": "my-folder/my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-folder/job/my-job/",
+  "jobUrl": "job/my-folder/job/my-job/",
   "configXml": "<project>...</project>"
 }
 ```
@@ -385,7 +385,7 @@ print(f"更新结果: {resp.json()}")
   "overwrite": false,
   "rename": true,
   "dryRun": false,
-  "progressUrl": "http://jenkins/jobImportExport/api/progress?batchId=abc12345"
+  "progressUrl": "jobImportExport/api/progress?batchId=abc12345"
 }
 ```
 
@@ -422,8 +422,8 @@ print(f"更新结果: {resp.json()}")
   "message": "更新成功",
   "job": "my-job",
   "jobType": "job",
-  "jobUrl": "http://jenkins/job/my-job/",
-  "redirect": "http://jenkins/job/my-job/"
+  "jobUrl": "job/my-job/",
+  "redirect": "job/my-job/"
 }
 ```
 
@@ -457,7 +457,7 @@ print(f"更新结果: {resp.json()}")
   "failCount": 0,
   "skipCount": 2,
   "dryRun": false,
-  "redirect": "http://jenkins/job/my-folder/",
+  "redirect": "job/my-folder/",
   "details": [...]
 }
 ```
@@ -472,14 +472,14 @@ print(f"更新结果: {resp.json()}")
     {
       "name": "my-job",
       "fullName": "my-folder/my-job",
-      "url": "http://jenkins/job/my-folder/job/my-job/",
+      "url": "job/my-folder/job/my-job/",
       "type": "job",
       "className": "FreeStyleProject"
     },
     {
       "name": "sub-folder",
       "fullName": "my-folder/sub-folder",
-      "url": "http://jenkins/job/my-folder/job/sub-folder/",
+      "url": "job/my-folder/job/sub-folder/",
       "type": "folder",
       "className": "WorkflowMultiBranchProject",
       "children": [...]

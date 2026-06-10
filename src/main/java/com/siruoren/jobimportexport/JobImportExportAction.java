@@ -257,7 +257,7 @@ public class JobImportExportAction implements Action {
 
             String redirectUrl = null;
             if (refreshedItem != null) {
-                redirectUrl = Jenkins.get().getRootUrl() + refreshedItem.getUrl();
+                redirectUrl = refreshedItem.getUrl();
             }
 
             writeJson(rsp, true, Messages.JobImportExportAction_updateSuccess(), redirectUrl);
@@ -317,7 +317,7 @@ public class JobImportExportAction implements Action {
             Path tempZip = Files.createTempFile("jenkins-import-", ".zip");
             Files.copy(fileItem.getInputStream(), tempZip, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            String redirectUrl = (target instanceof Item) ? Jenkins.get().getRootUrl() + ((Item) target).getUrl() : null;
+            String redirectUrl = (target instanceof Item) ? ((Item) target).getUrl() : null;
             org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             Locale capturedLocale = req.getLocale();
 
